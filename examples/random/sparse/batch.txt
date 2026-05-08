@@ -1,0 +1,7 @@
+# Generated TSP instance list
+examples/random/sparse/rnd-01-sparse-n5.txt
+examples/random/sparse/rnd-02-sparse-n7.txt
+examples/random/sparse/rnd-03-sparse-n7.txt
+examples/random/sparse/rnd-04-sparse-n6.txt
+examples/random/sparse/rnd-05-sparse-n6.txt
+examples/random/sparse/rnd-06-sparse-n7.txt

@@ -1,0 +1,20 @@
+# Example batch list
+examples/five-city.txt
+examples/random/complete/rnd-01-complete-n4.txt
+examples/random/complete/rnd-02-complete-n5.txt
+examples/random/complete/rnd-03-complete-n4.txt
+examples/random/complete/rnd-04-complete-n5.txt
+examples/random/complete/rnd-05-complete-n7.txt
+examples/random/complete/rnd-06-complete-n5.txt
+examples/random/complete/rnd-07-complete-n8.txt
+examples/random/complete/rnd-08-complete-n7.txt
+examples/random/complete/rnd-09-complete-n8.txt
+examples/random/complete/rnd-10-complete-n7.txt
+examples/random/sparse/rnd-01-sparse-n5.txt
+examples/random/sparse/rnd-02-sparse-n7.txt
+examples/random/sparse/rnd-03-sparse-n7.txt
+examples/random/sparse/rnd-04-sparse-n6.txt
+examples/random/sparse/rnd-05-sparse-n6.txt
+examples/random/sparse/rnd-06-sparse-n7.txt
+examples/converted/five-node-euc.txt
+examples/converted/five-node-explicit.txt

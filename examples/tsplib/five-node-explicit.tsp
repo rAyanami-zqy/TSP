@@ -1,0 +1,13 @@
+NAME: five-node-explicit
+TYPE: TSP
+COMMENT: Same format family as TSPLIB explicit matrices
+DIMENSION: 5
+EDGE_WEIGHT_TYPE: EXPLICIT
+EDGE_WEIGHT_FORMAT: FULL_MATRIX
+EDGE_WEIGHT_SECTION
+0  2  9 10  7
+2  0  6  4  3
+9  6  0  8  5
+10 4  8  0  6
+7  3  5  6  0
+EOF
