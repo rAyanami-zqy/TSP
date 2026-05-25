@@ -1,12 +1,17 @@
 #include "TspSolver.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cctype>
+#include <cstdint>
 #include <iomanip>
+#include <iterator>
 #include <limits>
+#include <map>
 #include <numeric>
-#include <queue>
+#include <ostream>
+#include <random>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -16,11 +21,79 @@ namespace {
 
 // 浮点数比较容差，用于处理 double 计算中的微小误差。
 constexpr double kEps = 1e-9;
+constexpr double kPi = 3.141592653589793238462643383279502884;
 
 // 统一判断边权是否可用。缺边在输入中会被解析成 infinity。
 bool isFinite(double value)
 {
     return std::isfinite(value);
+}
+
+// 将输入中的调试输出间隔规范化为至少 1，避免除以 0 导致的错误。
+std::size_t normalizedDebugInterval(const DebugOptions& debug)
+{
+    return debug.interval == 0 ? 1 : debug.interval;
+}
+
+// 如果调试输出流有效，则写一行调试信息并立即 flush，确保输出及时可见。
+void writeDebugLine(const DebugOptions& debug, const std::string& message)
+{
+    if (debug.output == nullptr) {
+        return;
+    }
+    (*debug.output) << "[tsp-debug] " << message << '\n';
+    debug.output->flush();
+}
+
+// 格式化 double 数值用于调试输出，特殊处理 infinity 以避免输出过长的数字。
+std::string formatDebugDouble(double value)
+{
+    if (!isFinite(value)) {
+        return "inf";
+    }
+    std::ostringstream out;
+    out << std::setprecision(10) << value;
+    return out.str();
+}
+
+// 去除字符串首尾的空白字符，返回新的字符串副本。输入中的 section marker 可能带有多余空格。
+std::string trimCopy(const std::string& text)
+{
+    const std::string whitespace = " \t\r\n";
+    const std::size_t begin = text.find_first_not_of(whitespace);
+    if (begin == std::string::npos) {
+        return {};
+    }
+    const std::size_t end = text.find_last_not_of(whitespace);
+    return text.substr(begin, end - begin + 1);
+}
+
+// 将字符串转换为全大写形式，返回新的字符串副本。输入中的 section marker 可能大小写不一致。
+std::string upperCopy(std::string text)
+{
+    for (char& ch : text) {
+        ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+    }
+    return text;
+}
+
+// 判断一行文本是否是输入文件中的 section marker，标记了不同类型数据的开始。输入中可能有多余空格和大小写不一致。
+bool isSectionMarker(const std::string& line)
+{
+    const std::string upper = upperCopy(trimCopy(line));
+    return upper == "NODE_COORD_SECTION"
+        || upper == "EDGE_WEIGHT_SECTION"
+        || upper == "DISPLAY_DATA_SECTION"
+        || upper == "TOUR_SECTION"
+        || upper == "DEPOT_SECTION"
+        || upper == "DEMAND_SECTION"
+        || upper == "EOF";
+}
+
+// 将 double 类型的距离值四舍五入到最近的整数，符合 TSPLIB 中某些 EDGE_WEIGHT_TYPE 的定义。
+int roundedDistance(double value)
+{
+    return static_cast<int>(std::floor(value + 0.5));
 }
 
 // 并查集用于 Kruskal 构造 MST，同时检测强制边是否已形成非法环。
@@ -32,7 +105,8 @@ public:
         // 初始时每个顶点各自属于一个集合。
         std::iota(parent_.begin(), parent_.end(), 0);
     }
-
+    
+    // 查找元素 x 所属集合的代表元（根节点），路径压缩优化。
     int find(int x)
     {
         // 路径压缩：查找根节点时顺便把路径上的节点直接挂到根上。
@@ -62,10 +136,13 @@ public:
     }
 
 private:
+    // parent_[i] 是元素 i 的父节点，根节点的 parent_[i] == i。
     std::vector<int> parent_;
+    // rank_[i] 是以 i 为根的树的秩（近似高度），用于优化 unite 操作。
     std::vector<int> rank_;
 };
 
+// 解析一个距离矩阵元素，支持数字、INF、-、X 等表示缺边的写法。
 double parseWeight(const std::string& token)
 {
     // 先转小写，兼容 INF / Infinity 等大小写写法。
@@ -88,6 +165,7 @@ double parseWeight(const std::string& token)
     return value;
 }
 
+// 近似比较两个边权是否相等，考虑到输入中的微小误差和计算中的浮点误差。
 bool sameWeight(double a, double b)
 {
     // infinity 只能和 infinity 视为相等；有限值用容差比较。
@@ -97,7 +175,132 @@ bool sameWeight(double a, double b)
     return std::fabs(a - b) <= kEps;
 }
 
+// 将 GEO 坐标格式的经纬度转换为弧度，符合 TSPLIB 中 GEO 坐标的定义。
+double geoCoordinateToRadians(double value)
+{
+    const int degrees = static_cast<int>(value);
+    const double minutes = value - static_cast<double>(degrees);
+    return kPi * (static_cast<double>(degrees) + 5.0 * minutes / 3.0) / 180.0;
+}
+
+// 根据 EDGE_WEIGHT_TYPE 定义的距离计算方法，计算两个点之间的距离。支持多种距离类型，符合 TSPLIB 中的定义。
+double coordinateDistance(const Point& a, const Point& b, const std::string& edge_weight_type)
+{
+    const double dx = a.x - b.x;
+    const double dy = a.y - b.y;
+    const double dz = a.z - b.z;
+    const std::string type = upperCopy(edge_weight_type);
+
+    if (type == "EUC_2D") {
+        return roundedDistance(std::sqrt(dx * dx + dy * dy));
+    }
+    if (type == "CEIL_2D") {
+        return std::ceil(std::sqrt(dx * dx + dy * dy));
+    }
+    if (type == "FLOOR_2D") {
+        return std::floor(std::sqrt(dx * dx + dy * dy));
+    }
+    if (type == "MAN_2D") {
+        return roundedDistance(std::fabs(dx) + std::fabs(dy));
+    }
+    if (type == "MAX_2D") {
+        return roundedDistance(std::max(std::fabs(dx), std::fabs(dy)));
+    }
+    if (type == "EUC_3D") {
+        return roundedDistance(std::sqrt(dx * dx + dy * dy + dz * dz));
+    }
+    if (type == "CEIL_3D") {
+        return std::ceil(std::sqrt(dx * dx + dy * dy + dz * dz));
+    }
+    if (type == "MAN_3D") {
+        return roundedDistance(std::fabs(dx) + std::fabs(dy) + std::fabs(dz));
+    }
+    if (type == "MAX_3D") {
+        return roundedDistance(std::max({std::fabs(dx), std::fabs(dy), std::fabs(dz)}));
+    }
+    if (type == "ATT") {
+        const double rij = std::sqrt((dx * dx + dy * dy) / 10.0);
+        const int tij = roundedDistance(rij);
+        return tij < rij ? tij + 1 : tij;
+    }
+    if (type == "GEO") {
+        const double lat_a = geoCoordinateToRadians(a.x);
+        const double lon_a = geoCoordinateToRadians(a.y);
+        const double lat_b = geoCoordinateToRadians(b.x);
+        const double lon_b = geoCoordinateToRadians(b.y);
+        const double q1 = std::cos(lon_a - lon_b);
+        const double q2 = std::cos(lat_a - lat_b);
+        const double q3 = std::cos(lat_a + lat_b);
+        const double argument = 0.5 * ((1.0 + q1) * q2 - (1.0 - q1) * q3);
+        const double clamped = std::max(-1.0, std::min(1.0, argument));
+        return static_cast<int>(6378.388 * std::acos(clamped) + 1.0);
+    }
+
+    throw std::runtime_error("unsupported coordinate EDGE_WEIGHT_TYPE: " + edge_weight_type);
+}
+
 } // namespace
+
+// TspProblem 成员函数实现。
+int TspProblem::dimension() const
+{
+    if (!matrix.empty()) {
+        return static_cast<int>(matrix.size());
+    }
+    return static_cast<int>(coordinates.size());
+}
+
+bool TspProblem::hasCoordinates() const
+{
+    return !coordinates.empty();
+}
+
+bool TspProblem::hasDenseMatrix() const
+{
+    return !matrix.empty();
+}
+
+double TspProblem::distance(int u, int v) const
+{
+    if (u == v) {
+        return 0.0;
+    }
+    if (!matrix.empty()) {
+        return matrix[static_cast<std::size_t>(u)][static_cast<std::size_t>(v)];
+    }
+    if (!coordinates.empty()) {
+        return coordinateDistance(
+            coordinates[static_cast<std::size_t>(u)],
+            coordinates[static_cast<std::size_t>(v)],
+            edge_weight_type.empty() ? "EUC_2D" : edge_weight_type);
+    }
+    throw std::runtime_error("problem has neither a matrix nor coordinates");
+}
+
+std::vector<std::vector<double>> TspProblem::toDenseMatrix(std::size_t max_dimension) const
+{
+    const int n = dimension();
+    if (n <= 0) {
+        throw std::runtime_error("TSP problem has no vertices");
+    }
+    if (max_dimension != 0 && static_cast<std::size_t>(n) > max_dimension) {
+        throw std::runtime_error("instance dimension exceeds dense exact limit");
+    }
+    if (!matrix.empty()) {
+        return matrix;
+    }
+
+    std::vector<std::vector<double>> dense(static_cast<std::size_t>(n),
+                                           std::vector<double>(static_cast<std::size_t>(n), 0.0));
+    for (int i = 0; i < n; ++i) {
+        for (int j = i + 1; j < n; ++j) {
+            const double value = distance(i, j);
+            dense[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = value;
+            dense[static_cast<std::size_t>(j)][static_cast<std::size_t>(i)] = value;
+        }
+    }
+    return dense;
+}
 
 BranchBoundSolver::BranchBoundSolver(std::vector<std::vector<double>> distance)
     : n_(static_cast<int>(distance.size())), dist_(std::move(distance))
@@ -133,22 +336,38 @@ BranchBoundSolver::BranchBoundSolver(std::vector<std::vector<double>> distance)
     }
 }
 
-SolveResult BranchBoundSolver::solve()
+void BranchBoundSolver::setDebugOutput(std::ostream& output, std::size_t progress_interval)
+{
+    debug_.output = &output;
+    debug_.interval = progress_interval == 0 ? 1 : progress_interval;
+}
+
+void BranchBoundSolver::disableDebugOutput()
+{
+    debug_ = {};
+}
+
+SolveResult BranchBoundSolver::solve(BranchStrategy strategy)
 {
     // 为了用 O(1) 标记任意无向边状态，直接使用 n*n 大小的一维数组。
     const std::size_t edge_state_size = static_cast<std::size_t>(n_) * static_cast<std::size_t>(n_);
 
     SolveResult result;
+    // 当前已知的最优可行解，初始为无穷大和空路径。
     std::vector<int> best_tour;
     double best_cost = std::numeric_limits<double>::infinity();
+    const std::size_t debug_interval = normalizedDebugInterval(debug_);
+
+    writeDebugLine(debug_, "exact solve started: vertices=" + std::to_string(n_));
 
     // 先用启发式得到一个上界。上界越小，后续 bound 剪枝越有效。
     if (findInitialTour(best_tour, best_cost)) {
         result.stats.initial_upper_bound = best_cost;
+        writeDebugLine(debug_, "initial incumbent: cost=" + formatDebugDouble(best_cost));
     } else {
         result.stats.initial_upper_bound = std::numeric_limits<double>::infinity();
+        writeDebugLine(debug_, "initial incumbent: unavailable");
     }
-
     Node root;
     // 根节点没有任何强制边或禁止边。
     root.forced.assign(edge_state_size, 0);
@@ -160,54 +379,46 @@ SolveResult BranchBoundSolver::solve()
         result.feasible = false;
         result.cost = std::numeric_limits<double>::infinity();
         result.stats.root_lower_bound = std::numeric_limits<double>::infinity();
+        writeDebugLine(debug_, "root 1-tree infeasible; exact solve stopped");
         return result;
     }
-
     result.stats.root_lower_bound = root_tree.cost;
     root.bound = root_tree.cost;
-    root.one_tree_edges = std::move(root_tree.edges);
-    root.degree = std::move(root_tree.degree);
     result.stats.nodes_created = 1;
+    {
+        std::ostringstream line;
+        line << "root: lower_bound=" << formatDebugDouble(root.bound)
+             << " search=recursive-dfs"
+             << " strategy=" << (strategy == BranchStrategy::Smart ? "smart" : "exhaustive");
+        writeDebugLine(debug_, line.str());
+    }
 
-    struct QueueItem {
-        double bound = 0.0;
-        std::size_t serial = 0;
+    struct PendingChild {
+        bool available = false;
         Node node;
+        OneTree tree;
     };
 
-    struct CompareQueueItem {
-        bool operator()(const QueueItem& lhs, const QueueItem& rhs) const
-        {
-            // priority_queue 默认取“最大”，这里反向比较以实现最小下界优先。
-            if (std::fabs(lhs.bound - rhs.bound) > kEps) {
-                return lhs.bound > rhs.bound;
-            }
-            return lhs.serial > rhs.serial;
-        }
-    };
-
-    std::priority_queue<QueueItem, std::vector<QueueItem>, CompareQueueItem> queue;
-    std::size_t serial = 0;
-    queue.push(QueueItem{root.bound, serial++, std::move(root)});
-
-    // Best-first 分支定界：每次扩展当前下界最小的节点。
-    while (!queue.empty()) {
-        Node node = std::move(queue.top().node);
-        queue.pop();
-
+    auto search = [&](auto&& self, Node node, OneTree current_tree) -> void {
+        node.bound = current_tree.cost;
         // 当前节点的下界已经不优于已知最优可行解，可以直接剪枝。
         if (shouldPrune(node.bound, best_cost)) {
             ++result.stats.nodes_pruned_by_bound;
-            continue;
+            return;
         }
 
         ++result.stats.nodes_expanded;
-
-        OneTree current_tree;
-        current_tree.feasible = true;
-        current_tree.cost = node.bound;
-        current_tree.edges = node.one_tree_edges;
-        current_tree.degree = node.degree;
+        if (debug_.output != nullptr && result.stats.nodes_expanded % debug_interval == 0) {
+            std::ostringstream line;
+            line << "progress: expanded=" << result.stats.nodes_expanded
+                 << " created=" << result.stats.nodes_created
+                 << " depth=" << node.depth
+                 << " bound=" << formatDebugDouble(node.bound)
+                 << " best=" << formatDebugDouble(best_cost)
+                 << " pruned_bound=" << result.stats.nodes_pruned_by_bound
+                 << " pruned_infeasible=" << result.stats.nodes_pruned_infeasible;
+            writeDebugLine(debug_, line.str());
+        }
 
         // 1-tree 若所有顶点度数都是 2，就已经是一条合法 TSP 回路。
         if (isTour(current_tree)) {
@@ -216,69 +427,106 @@ SolveResult BranchBoundSolver::solve()
             if (!candidate.empty() && current_tree.cost + kEps < best_cost) {
                 best_cost = current_tree.cost;
                 best_tour = std::move(candidate);
+                writeDebugLine(debug_,
+                               "new incumbent: cost=" + formatDebugDouble(best_cost)
+                                   + " source=recursive-node depth=" + std::to_string(node.depth));
             }
-            continue;
+            return;
         }
 
-        Edge branch_edge;
-        // 选择一条 1-tree 中的边 e，生成两个子问题：e 必选 / e 禁用。
-        if (!chooseBranchEdge(node, branch_edge)) {
-            continue;
-        }
+        std::vector<Edge> branch_candidates = buildBranchCandidates(node);
 
-        for (bool include_edge : {true, false}) {
-            Node child;
-            child.depth = node.depth + 1;
+        auto make_child = [&](const Edge& branch_edge, bool force_edge) {
+            PendingChild pending;
+            pending.node.depth = node.depth + 1;
             // 子节点继承父节点已有约束，再叠加本次分支产生的新约束。
-            child.forced = node.forced;
-            child.forbidden = node.forbidden;
-
+            pending.node.forced = node.forced;
+            pending.node.forbidden = node.forbidden;
             const std::size_t id = edgeId(branch_edge.u, branch_edge.v);
-            if (include_edge) {
-                // 左分支：要求解必须包含 branch_edge。
-                child.forced[id] = 1;
+            if (force_edge) {
+                // 子分支语义：当前解一定包含 branch_edge。
+                pending.node.forced[id] = 1;
             } else {
-                // 右分支：要求解不能包含 branch_edge。
-                child.forbidden[id] = 1;
+                // 子分支语义：当前解一定不包含 branch_edge。
+                pending.node.forbidden[id] = 1;
             }
 
             // 子节点重新计算受约束 1-tree；构造失败表示该分支不可行。
-            OneTree child_tree = computeOneTree(child.forced, child.forbidden);
+            OneTree child_tree = computeOneTree(pending.node.forced, pending.node.forbidden);
             if (!child_tree.feasible) {
                 ++result.stats.nodes_pruned_infeasible;
-                continue;
+                return pending;
             }
 
-            child.bound = child_tree.cost;
-            child.one_tree_edges = std::move(child_tree.edges);
-            child.degree = std::move(child_tree.degree);
+            pending.node.bound = child_tree.cost;
+            pending.tree = std::move(child_tree);
+            pending.available = true;
             ++result.stats.nodes_created;
+            return pending;
+        };
 
-            // 如果子节点的下界已经不可能改进当前最优解，立即剪掉。
-            if (shouldPrune(child.bound, best_cost)) {
-                ++result.stats.nodes_pruned_by_bound;
-                continue;
+        auto visit = [&](PendingChild& child) {
+            if (child.available) {
+                self(self, std::move(child.node), std::move(child.tree));
+            }
+        };
+
+        if (strategy == BranchStrategy::Smart) {
+            // Smart: 选一条边做 force/forbid 二分支，优先 1-tree 中最大度数顶点的边。
+            Edge branch_edge;
+            if (!chooseBranchEdge(node, current_tree, branch_candidates, branch_edge)) {
+                writeDebugLine(debug_,
+                               "dead end: no undecided branch edge at depth=" + std::to_string(node.depth));
+                return;
             }
 
-            OneTree check_tree;
-            check_tree.feasible = true;
-            check_tree.cost = child.bound;
-            check_tree.edges = child.one_tree_edges;
-            check_tree.degree = child.degree;
-            // 子节点刚算出的 1-tree 可能已经是一条更好的完整回路。
-            if (isTour(check_tree)) {
-                std::vector<int> candidate = buildTour(check_tree.edges);
-                if (!candidate.empty() && child.bound + kEps < best_cost) {
-                    best_cost = child.bound;
-                    best_tour = std::move(candidate);
+            PendingChild forced_child = make_child(branch_edge, true);
+            PendingChild forbidden_child = make_child(branch_edge, false);
+
+            // 递归 DFS 仍优先搜索下界更小的子树，以便尽早改进上界、增强后续剪枝。
+            if (forced_child.available
+                && forbidden_child.available
+                && forbidden_child.node.bound + kEps < forced_child.node.bound) {
+                visit(forbidden_child);
+                visit(forced_child);
+            } else {
+                visit(forced_child);
+                visit(forbidden_child);
+            }
+        } else {
+            // Exhaustive: 对所有未决边分别进行 force/forbid 分支。
+            if (branch_candidates.empty()) {
+                writeDebugLine(debug_,
+                               "dead end: no undecided branch edge at depth=" + std::to_string(node.depth));
+                return;
+            }
+
+            std::vector<PendingChild> children;
+            children.reserve(branch_candidates.size() * 2);
+            for (const Edge& branch_edge : branch_candidates) {
+                PendingChild forced = make_child(branch_edge, true);
+                if (forced.available) {
+                    children.push_back(std::move(forced));
                 }
-                continue;
+                PendingChild forbidden = make_child(branch_edge, false);
+                if (forbidden.available) {
+                    children.push_back(std::move(forbidden));
+                }
             }
 
-            // 既没有被剪枝，也还不是完整回路，进入优先队列等待后续扩展。
-            queue.push(QueueItem{child.bound, serial++, std::move(child)});
+            // 按下界升序排列，优先探索更有希望的分支。
+            std::sort(children.begin(), children.end(),
+                      [](const PendingChild& a, const PendingChild& b) {
+                          return a.node.bound < b.node.bound;
+                      });
+
+            for (PendingChild& child : children) {
+                visit(child);
+            }
         }
-    }
+    };
+
+    search(search, std::move(root), std::move(root_tree));
 
     // 搜索结束后，best_cost 有限且 best_tour 非空才算找到可行最优解。
     if (isFinite(best_cost) && !best_tour.empty()) {
@@ -288,6 +536,16 @@ SolveResult BranchBoundSolver::solve()
     } else {
         result.feasible = false;
         result.cost = std::numeric_limits<double>::infinity();
+    }
+    {
+        std::ostringstream line;
+        line << "exact solve finished: feasible=" << (result.feasible ? "yes" : "no")
+             << " cost=" << formatDebugDouble(result.cost)
+             << " expanded=" << result.stats.nodes_expanded
+             << " created=" << result.stats.nodes_created
+             << " pruned_bound=" << result.stats.nodes_pruned_by_bound
+             << " pruned_infeasible=" << result.stats.nodes_pruned_infeasible;
+        writeDebugLine(debug_, line.str());
     }
     return result;
 }
@@ -313,15 +571,18 @@ bool BranchBoundSolver::isForbidden(const std::vector<unsigned char>& forbidden,
     return forbidden[edgeId(u, v)] != 0;
 }
 
+// 在当前分支节点的强制边和禁止边约束下，构造受约束的 1-tree 以计算下界。构造失败表示当前分支不可行。
 BranchBoundSolver::OneTree BranchBoundSolver::computeOneTree(
     const std::vector<unsigned char>& forced,
     const std::vector<unsigned char>& forbidden) const
 {
     OneTree result;
     result.degree.assign(n_, 0);
-
+    // forced_degree 统计每个顶点在强制边中的度数，提前检查强制边是否已经让某点度数超过 2。
     std::vector<int> forced_degree(n_, 0);
+    // forced_components 统计强制边形成的连通分量，提前检查是否已经形成不包含全部顶点的子回路。
     DisjointSet forced_components(n_);
+    // component_vertices[c] 统计强制边分量 c 中的顶点数，component_edges[c] 统计其中的强制边数，用于判断是否存在真子集上边数等于点数的分量。
     std::vector<int> component_vertices(n_, 1);
     std::vector<int> component_edges(n_, 0);
 
@@ -363,6 +624,7 @@ BranchBoundSolver::OneTree BranchBoundSolver::computeOneTree(
         }
     }
 
+    // 统计每个强制边分量的顶点数和强制边数，检查是否存在真子集上边数等于点数的分量。
     std::fill(component_vertices.begin(), component_vertices.end(), 0);
     std::fill(component_edges.begin(), component_edges.end(), 0);
     // component_vertices[c] 表示强制边分量 c 中有多少个顶点。
@@ -386,6 +648,7 @@ BranchBoundSolver::OneTree BranchBoundSolver::computeOneTree(
         }
     }
 
+    // 下面开始构造受约束的 1-tree。构造失败表示在当前 forced / forbidden 约束下无法形成 1-tree，当前分支不可行。
     DisjointSet tree_components(n_);
     int mst_edges = 0;
     double cost = 0.0;
@@ -542,52 +805,114 @@ std::vector<int> BranchBoundSolver::buildTour(const std::vector<Edge>& edges) co
     return tour;
 }
 
-bool BranchBoundSolver::chooseBranchEdge(const Node& node, Edge& edge) const
+std::vector<BranchBoundSolver::Edge> BranchBoundSolver::buildBranchCandidates(const Node& node) const
 {
+    std::vector<Edge> candidates;
+    candidates.reserve(static_cast<std::size_t>(n_) * static_cast<std::size_t>(n_ - 1) / 2);
+    for (int u = 0; u < n_; ++u) {
+        for (int v = u + 1; v < n_; ++v) {
+            if (isForced(node.forced, u, v) || isForbidden(node.forbidden, u, v) || !isFinite(dist_[u][v])) {
+                continue;
+            }
+            candidates.push_back(Edge{u, v, dist_[u][v]});
+        }
+    }
+    return candidates;
+}
+
+bool BranchBoundSolver::chooseBranchEdge(
+    const Node& node,
+    const OneTree& one_tree,
+    const std::vector<Edge>& candidates,
+    Edge& edge) const
+{
+    if (candidates.empty()) {
+        return false;
+    }
+
+    std::vector<unsigned char> candidate_mask(
+        static_cast<std::size_t>(n_) * static_cast<std::size_t>(n_),
+        0);
+    for (const Edge& candidate : candidates) {
+        candidate_mask[edgeId(candidate.u, candidate.v)] = 1;
+    }
+
+    auto eligible = [&](const Edge& candidate) {
+        return !isForced(node.forced, candidate.u, candidate.v)
+            && !isForbidden(node.forbidden, candidate.u, candidate.v)
+            && isFinite(dist_[candidate.u][candidate.v])
+            && candidate_mask[edgeId(candidate.u, candidate.v)] != 0;
+    };
+
+    auto better = [](const Edge& candidate, const Edge& selected) {
+        if (candidate.w > selected.w + kEps) {
+            return true;
+        }
+        if (selected.w > candidate.w + kEps) {
+            return false;
+        }
+        if (candidate.u != selected.u) {
+            return candidate.u < selected.u;
+        }
+        return candidate.v < selected.v;
+    };
+
     int branch_vertex = -1;
-    int branch_degree = 2;
-    // 优先处理度数超过 2 的顶点；这类顶点必须删掉至少一条 incident edge。
+    int max_degree = 2;
     for (int v = 0; v < n_; ++v) {
-        if (node.degree[v] > branch_degree) {
-            branch_degree = node.degree[v];
+        if (one_tree.degree[static_cast<std::size_t>(v)] > max_degree) {
+            max_degree = one_tree.degree[static_cast<std::size_t>(v)];
             branch_vertex = v;
         }
     }
 
-    auto usable = [&](const Edge& candidate) {
-        // 已经被强制或禁止的边不再作为新的分支变量。
-        return !isForced(node.forced, candidate.u, candidate.v)
-            && !isForbidden(node.forbidden, candidate.u, candidate.v);
-    };
-
+    bool found = false;
+    Edge selected;
     if (branch_vertex >= 0) {
-        bool has_chosen = false;
-        Edge chosen;
-        for (const Edge& candidate : node.one_tree_edges) {
-            if (!usable(candidate)) {
-                continue;
-            }
+        for (const Edge& candidate : one_tree.edges) {
             if (candidate.u != branch_vertex && candidate.v != branch_vertex) {
                 continue;
             }
-            // 在该顶点 incident edges 中选较重的一条分支，通常更快排除差边。
-            if (!has_chosen || candidate.w > chosen.w) {
-                chosen = candidate;
-                has_chosen = true;
+            if (!eligible(candidate)) {
+                continue;
+            }
+            if (!found || better(candidate, selected)) {
+                selected = candidate;
+                found = true;
             }
         }
-        if (has_chosen) {
-            edge = chosen;
-            return true;
-        }
+    }
+    if (found) {
+        edge = selected;
+        return true;
     }
 
-    for (const Edge& candidate : node.one_tree_edges) {
-        // 若没有度数超过 2 的顶点，就退化为选择任意尚未定性的 1-tree 边。
-        if (usable(candidate)) {
-            edge = candidate;
-            return true;
+    for (const Edge& candidate : one_tree.edges) {
+        if (!eligible(candidate)) {
+            continue;
         }
+        if (!found || better(candidate, selected)) {
+            selected = candidate;
+            found = true;
+        }
+    }
+    if (found) {
+        edge = selected;
+        return true;
+    }
+
+    for (const Edge& candidate : candidates) {
+        if (!eligible(candidate)) {
+            continue;
+        }
+        if (!found || better(candidate, selected)) {
+            selected = candidate;
+            found = true;
+        }
+    }
+    if (found) {
+        edge = selected;
+        return true;
     }
     return false;
 }
@@ -715,6 +1040,258 @@ void BranchBoundSolver::twoOpt(std::vector<int>& tour, double& cost) const
     cost = tourCost(tour);
 }
 
+namespace {
+
+std::vector<std::string> tokenizeSectionLine(const std::string& line)
+{
+    std::istringstream in(line);
+    std::vector<std::string> tokens;
+    std::string token;
+    while (in >> token) {
+        if (upperCopy(token) == "EOF") {
+            break;
+        }
+        tokens.push_back(token);
+    }
+    return tokens;
+}
+
+std::pair<std::string, std::string> parseTsplibHeaderLine(const std::string& line)
+{
+    const std::size_t colon = line.find(':');
+    if (colon != std::string::npos) {
+        return {upperCopy(trimCopy(line.substr(0, colon))), trimCopy(line.substr(colon + 1))};
+    }
+
+    std::istringstream in(line);
+    std::string key;
+    in >> key;
+    std::string value;
+    std::getline(in, value);
+    return {upperCopy(key), trimCopy(value)};
+}
+
+
+std::vector<std::vector<double>> buildExplicitMatrix(
+    int n,
+    const std::string& format,
+    const std::vector<double>& values)
+{
+    std::vector<std::vector<double>> matrix(static_cast<std::size_t>(n),
+                                            std::vector<double>(static_cast<std::size_t>(n), 0.0));
+    const std::string upper_format = upperCopy(format.empty() ? "FULL_MATRIX" : format);
+    std::size_t cursor = 0;
+
+    auto next_value = [&]() {
+        if (cursor >= values.size()) {
+            throw std::runtime_error("EDGE_WEIGHT_SECTION has fewer values than expected");
+        }
+        return values[cursor++];
+    };
+
+    if (upper_format == "FULL_MATRIX") {
+        for (int i = 0; i < n; ++i) {
+            for (int j = 0; j < n; ++j) {
+                matrix[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = next_value();
+            }
+        }
+    } else if (upper_format == "UPPER_ROW") {
+        for (int i = 0; i < n; ++i) {
+            for (int j = i + 1; j < n; ++j) {
+                const double value = next_value();
+                matrix[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = value;
+                matrix[static_cast<std::size_t>(j)][static_cast<std::size_t>(i)] = value;
+            }
+        }
+    } else if (upper_format == "UPPER_DIAG_ROW") {
+        for (int i = 0; i < n; ++i) {
+            for (int j = i; j < n; ++j) {
+                const double value = next_value();
+                matrix[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = value;
+                matrix[static_cast<std::size_t>(j)][static_cast<std::size_t>(i)] = value;
+            }
+        }
+    } else if (upper_format == "LOWER_ROW") {
+        for (int i = 0; i < n; ++i) {
+            for (int j = 0; j < i; ++j) {
+                const double value = next_value();
+                matrix[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = value;
+                matrix[static_cast<std::size_t>(j)][static_cast<std::size_t>(i)] = value;
+            }
+        }
+    } else if (upper_format == "LOWER_DIAG_ROW") {
+        for (int i = 0; i < n; ++i) {
+            for (int j = 0; j <= i; ++j) {
+                const double value = next_value();
+                matrix[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = value;
+                matrix[static_cast<std::size_t>(j)][static_cast<std::size_t>(i)] = value;
+            }
+        }
+    } else if (upper_format == "UPPER_COL") {
+        for (int j = 0; j < n; ++j) {
+            for (int i = 0; i < j; ++i) {
+                const double value = next_value();
+                matrix[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = value;
+                matrix[static_cast<std::size_t>(j)][static_cast<std::size_t>(i)] = value;
+            }
+        }
+    } else if (upper_format == "UPPER_DIAG_COL") {
+        for (int j = 0; j < n; ++j) {
+            for (int i = 0; i <= j; ++i) {
+                const double value = next_value();
+                matrix[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = value;
+                matrix[static_cast<std::size_t>(j)][static_cast<std::size_t>(i)] = value;
+            }
+        }
+    } else if (upper_format == "LOWER_COL") {
+        for (int j = 0; j < n; ++j) {
+            for (int i = j + 1; i < n; ++i) {
+                const double value = next_value();
+                matrix[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = value;
+                matrix[static_cast<std::size_t>(j)][static_cast<std::size_t>(i)] = value;
+            }
+        }
+    } else if (upper_format == "LOWER_DIAG_COL") {
+        for (int j = 0; j < n; ++j) {
+            for (int i = j; i < n; ++i) {
+                const double value = next_value();
+                matrix[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = value;
+                matrix[static_cast<std::size_t>(j)][static_cast<std::size_t>(i)] = value;
+            }
+        }
+    } else {
+        throw std::runtime_error("unsupported EDGE_WEIGHT_FORMAT: " + format);
+    }
+
+    return matrix;
+}
+
+bool looksLikePlainMatrix(const std::string& content)
+{
+    const std::string trimmed = trimCopy(content);
+    if (trimmed.empty()) {
+        return false;
+    }
+    const char first = trimmed.front();
+    if (!std::isdigit(static_cast<unsigned char>(first)) && first != '+' && first != '-') {
+        return false;
+    }
+    const std::size_t first_line_end = trimmed.find('\n');
+    const std::string first_line = first_line_end == std::string::npos
+        ? trimmed
+        : trimmed.substr(0, first_line_end);
+    return first_line.find(':') == std::string::npos;
+}
+
+} // namespace
+
+TspProblem readTspProblem(std::istream& input)
+{
+    const std::string content((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+    if (looksLikePlainMatrix(content)) {
+        std::istringstream matrix_input(content);
+        TspProblem problem;
+        problem.name = "matrix";
+        problem.type = "TSP";
+        problem.edge_weight_type = "EXPLICIT";
+        problem.edge_weight_format = "FULL_MATRIX";
+        problem.matrix = readDistanceMatrix(matrix_input);
+        return problem;
+    }
+
+    TspProblem problem;
+    std::map<std::string, std::string> header;
+    std::vector<double> edge_values;
+    enum class Section {
+        Header,
+        NodeCoord,
+        EdgeWeight,
+        Ignored
+    };
+    Section section = Section::Header;
+
+    std::istringstream lines(content);
+    std::string line;
+    while (std::getline(lines, line)) {
+        line = trimCopy(line);
+        if (line.empty()) {
+            continue;
+        }
+
+        const std::string upper = upperCopy(line);
+        if (upper == "EOF") {
+            break;
+        }
+        if (upper == "NODE_COORD_SECTION") {
+            section = Section::NodeCoord;
+            continue;
+        }
+        if (upper == "EDGE_WEIGHT_SECTION") {
+            section = Section::EdgeWeight;
+            continue;
+        }
+        if (isSectionMarker(line)) {
+            section = Section::Ignored;
+            continue;
+        }
+
+        if (section == Section::Header) {
+            auto [key, value] = parseTsplibHeaderLine(line);
+            if (!key.empty()) {
+                header[key] = value;
+            }
+        } else if (section == Section::NodeCoord) {
+            const std::vector<std::string> tokens = tokenizeSectionLine(line);
+            if (tokens.size() < 3) {
+                continue;
+            }
+            const int id = std::stoi(tokens[0]);
+            const int n = header.count("DIMENSION") ? std::stoi(header["DIMENSION"]) : id;
+            if (static_cast<int>(problem.coordinates.size()) < n) {
+                problem.coordinates.resize(static_cast<std::size_t>(n));
+            }
+            if (id < 1 || id > n) {
+                throw std::runtime_error("NODE_COORD_SECTION contains an out-of-range node id");
+            }
+            Point point;
+            point.x = std::stod(tokens[1]);
+            point.y = std::stod(tokens[2]);
+            if (tokens.size() >= 4) {
+                point.z = std::stod(tokens[3]);
+            }
+            problem.coordinates[static_cast<std::size_t>(id - 1)] = point;
+        } else if (section == Section::EdgeWeight) {
+            const std::vector<std::string> tokens = tokenizeSectionLine(line);
+            for (const std::string& token : tokens) {
+                edge_values.push_back(parseWeight(token));
+            }
+        }
+    }
+
+    problem.name = header.count("NAME") ? header["NAME"] : "tsplib";
+    problem.type = header.count("TYPE") ? upperCopy(header["TYPE"]) : "TSP";
+    problem.edge_weight_type = header.count("EDGE_WEIGHT_TYPE")
+        ? upperCopy(header["EDGE_WEIGHT_TYPE"])
+        : (problem.coordinates.empty() ? "EXPLICIT" : "EUC_2D");
+    problem.edge_weight_format = header.count("EDGE_WEIGHT_FORMAT")
+        ? upperCopy(header["EDGE_WEIGHT_FORMAT"])
+        : (problem.edge_weight_type == "EXPLICIT" ? "FULL_MATRIX" : "");
+
+    const int dimension = header.count("DIMENSION") ? std::stoi(header["DIMENSION"]) : problem.dimension();
+    if (dimension < 3) {
+        throw std::runtime_error("TSP instance must contain at least 3 vertices");
+    }
+
+    if (problem.edge_weight_type == "EXPLICIT") {
+        problem.matrix = buildExplicitMatrix(dimension, problem.edge_weight_format, edge_values);
+        problem.coordinates.clear();
+    } else if (static_cast<int>(problem.coordinates.size()) != dimension) {
+        throw std::runtime_error("NODE_COORD_SECTION does not match DIMENSION");
+    }
+
+    return problem;
+}
+
 std::vector<std::vector<double>> readDistanceMatrix(std::istream& input)
 {
     int n = 0;
@@ -725,7 +1302,7 @@ std::vector<std::vector<double>> readDistanceMatrix(std::istream& input)
     if (n < 3) {
         throw std::runtime_error("TSP instance must contain at least 3 vertices");
     }
-
+    //nxn的的距离矩阵，初始化为0.0
     std::vector<std::vector<double>> distance(static_cast<std::size_t>(n),
                                               std::vector<double>(static_cast<std::size_t>(n), 0.0));
     for (int i = 0; i < n; ++i) {
@@ -740,6 +1317,324 @@ std::vector<std::vector<double>> readDistanceMatrix(std::istream& input)
         }
     }
     return distance;
+}
+
+namespace {
+
+double problemTourCost(const TspProblem& problem, const std::vector<int>& tour)
+{
+    const int n = problem.dimension();
+    if (static_cast<int>(tour.size()) != n) {
+        return std::numeric_limits<double>::infinity();
+    }
+
+    double cost = 0.0;
+    for (int i = 0; i < n; ++i) {
+        const double edge = problem.distance(tour[static_cast<std::size_t>(i)],
+                                             tour[static_cast<std::size_t>((i + 1) % n)]);
+        if (!isFinite(edge)) {
+            return std::numeric_limits<double>::infinity();
+        }
+        cost += edge;
+    }
+    return cost;
+}
+
+std::vector<int> sequentialTour(int n)
+{
+    std::vector<int> tour(static_cast<std::size_t>(n));
+    std::iota(tour.begin(), tour.end(), 0);
+    return tour;
+}
+
+std::vector<int> nearestNeighborTour(const TspProblem& problem, int start)
+{
+    const int n = problem.dimension();
+    std::vector<int> tour;
+    tour.reserve(static_cast<std::size_t>(n));
+    std::vector<unsigned char> used(static_cast<std::size_t>(n), 0);
+
+    int current = start;
+    tour.push_back(current);
+    used[static_cast<std::size_t>(current)] = 1;
+
+    for (int step = 1; step < n; ++step) {
+        int next = -1;
+        double best = std::numeric_limits<double>::infinity();
+        for (int v = 0; v < n; ++v) {
+            if (used[static_cast<std::size_t>(v)]) {
+                continue;
+            }
+            const double value = problem.distance(current, v);
+            if (value < best) {
+                best = value;
+                next = v;
+            }
+        }
+        if (next < 0 || !isFinite(best)) {
+            return {};
+        }
+        current = next;
+        used[static_cast<std::size_t>(current)] = 1;
+        tour.push_back(current);
+    }
+
+    if (!isFinite(problem.distance(current, start))) {
+        return {};
+    }
+    return tour;
+}
+
+std::uint64_t partBy1(std::uint32_t value)
+{
+    std::uint64_t result = value;
+    result = (result | (result << 16U)) & 0x0000FFFF0000FFFFULL;
+    result = (result | (result << 8U)) & 0x00FF00FF00FF00FFULL;
+    result = (result | (result << 4U)) & 0x0F0F0F0F0F0F0F0FULL;
+    result = (result | (result << 2U)) & 0x3333333333333333ULL;
+    result = (result | (result << 1U)) & 0x5555555555555555ULL;
+    return result;
+}
+
+std::vector<int> mortonTour(const TspProblem& problem)
+{
+    const int n = problem.dimension();
+    if (!problem.hasCoordinates()) {
+        return sequentialTour(n);
+    }
+
+    double min_x = problem.coordinates.front().x;
+    double max_x = problem.coordinates.front().x;
+    double min_y = problem.coordinates.front().y;
+    double max_y = problem.coordinates.front().y;
+    for (const Point& point : problem.coordinates) {
+        min_x = std::min(min_x, point.x);
+        max_x = std::max(max_x, point.x);
+        min_y = std::min(min_y, point.y);
+        max_y = std::max(max_y, point.y);
+    }
+    const double range_x = std::max(kEps, max_x - min_x);
+    const double range_y = std::max(kEps, max_y - min_y);
+
+    std::vector<std::pair<std::uint64_t, int>> keyed;
+    keyed.reserve(static_cast<std::size_t>(n));
+    for (int i = 0; i < n; ++i) {
+        const Point& point = problem.coordinates[static_cast<std::size_t>(i)];
+        const auto sx = static_cast<std::uint32_t>(
+            std::max(0.0, std::min(65535.0, 65535.0 * (point.x - min_x) / range_x)));
+        const auto sy = static_cast<std::uint32_t>(
+            std::max(0.0, std::min(65535.0, 65535.0 * (point.y - min_y) / range_y)));
+        const std::uint64_t key = partBy1(sx) | (partBy1(sy) << 1U);
+        keyed.push_back({key, i});
+    }
+    std::sort(keyed.begin(), keyed.end(), [](const auto& lhs, const auto& rhs) {
+        if (lhs.first != rhs.first) {
+            return lhs.first < rhs.first;
+        }
+        return lhs.second < rhs.second;
+    });
+
+    std::vector<int> tour;
+    tour.reserve(static_cast<std::size_t>(n));
+    for (const auto& item : keyed) {
+        tour.push_back(item.second);
+    }
+    return tour;
+}
+
+std::vector<int> initialHeuristicTour(const TspProblem& problem, const HeuristicOptions& options)
+{
+    const int n = problem.dimension();
+    if (static_cast<std::size_t>(n) > options.nearest_scan_limit) {
+        writeDebugLine(options.debug,
+                       "initial tour: morton order because dimension exceeds nearest-scan limit");
+        return mortonTour(problem);
+    }
+
+    std::vector<int> starts;
+    starts.push_back(0);
+    if (n > 4) {
+        starts.push_back(n / 2);
+        starts.push_back(n / 4);
+        starts.push_back((3 * n) / 4);
+    }
+
+    std::mt19937 rng(options.seed);
+    std::uniform_int_distribution<int> distribution(0, n - 1);
+    while (starts.size() < options.starts) {
+        starts.push_back(distribution(rng));
+    }
+    std::sort(starts.begin(), starts.end());
+    starts.erase(std::unique(starts.begin(), starts.end()), starts.end());
+    writeDebugLine(options.debug,
+                   "initial tour: nearest-neighbor starts=" + std::to_string(starts.size()));
+
+    double best_cost = std::numeric_limits<double>::infinity();
+    std::vector<int> best_tour;
+    const std::size_t debug_interval = normalizedDebugInterval(options.debug);
+    std::size_t starts_done = 0;
+    for (int start : starts) {
+        std::vector<int> candidate = nearestNeighborTour(problem, start);
+        ++starts_done;
+        if (candidate.empty()) {
+            if (options.debug.output != nullptr && starts_done % debug_interval == 0) {
+                writeDebugLine(options.debug,
+                               "initial tour progress: tried=" + std::to_string(starts_done)
+                                   + " best=" + formatDebugDouble(best_cost));
+            }
+            continue;
+        }
+        const double cost = problemTourCost(problem, candidate);
+        if (cost < best_cost) {
+            best_cost = cost;
+            best_tour = std::move(candidate);
+            writeDebugLine(options.debug,
+                           "initial tour improved: start=" + std::to_string(start)
+                               + " cost=" + formatDebugDouble(best_cost));
+        } else if (options.debug.output != nullptr && starts_done % debug_interval == 0) {
+            writeDebugLine(options.debug,
+                           "initial tour progress: tried=" + std::to_string(starts_done)
+                               + " best=" + formatDebugDouble(best_cost));
+        }
+    }
+    if (!best_tour.empty()) {
+        return best_tour;
+    }
+    writeDebugLine(options.debug, "initial tour: nearest-neighbor failed; using sequential order");
+    return sequentialTour(n);
+}
+
+void fullTwoOpt(const TspProblem& problem,
+                std::vector<int>& tour,
+                double& cost,
+                std::size_t passes,
+                const DebugOptions& debug)
+{
+    const int n = problem.dimension();
+    for (std::size_t pass = 0; pass < passes; ++pass) {
+        const double before = cost;
+        bool improved = false;
+        for (int i = 1; i < n - 1 && !improved; ++i) {
+            for (int k = i + 1; k < n && !improved; ++k) {
+                const int a = tour[static_cast<std::size_t>(i - 1)];
+                const int b = tour[static_cast<std::size_t>(i)];
+                const int c = tour[static_cast<std::size_t>(k)];
+                const int d = tour[static_cast<std::size_t>((k + 1) % n)];
+                const double ac = problem.distance(a, c);
+                const double bd = problem.distance(b, d);
+                if (!isFinite(ac) || !isFinite(bd)) {
+                    continue;
+                }
+                const double delta = ac + bd - problem.distance(a, b) - problem.distance(c, d);
+                if (delta < -kEps) {
+                    std::reverse(tour.begin() + i, tour.begin() + k + 1);
+                    cost += delta;
+                    improved = true;
+                }
+            }
+        }
+        std::ostringstream line;
+        line << "2-opt full pass=" << (pass + 1)
+             << " improved=" << (improved ? "yes" : "no")
+             << " cost=" << formatDebugDouble(cost)
+             << " delta=" << formatDebugDouble(cost - before);
+        writeDebugLine(debug, line.str());
+        if (!improved) {
+            break;
+        }
+    }
+    cost = problemTourCost(problem, tour);
+}
+
+void windowTwoOpt(const TspProblem& problem,
+                  std::vector<int>& tour,
+                  double& cost,
+                  std::size_t window,
+                  std::size_t passes,
+                  const DebugOptions& debug)
+{
+    const int n = problem.dimension();
+    if (window == 0) {
+        writeDebugLine(debug, "2-opt window skipped: window=0");
+        return;
+    }
+    for (std::size_t pass = 0; pass < passes; ++pass) {
+        const double before = cost;
+        bool improved = false;
+        for (int i = 1; i < n - 1; ++i) {
+            const int upper = std::min(n - 1, i + static_cast<int>(window));
+            for (int k = i + 1; k <= upper; ++k) {
+                const int a = tour[static_cast<std::size_t>(i - 1)];
+                const int b = tour[static_cast<std::size_t>(i)];
+                const int c = tour[static_cast<std::size_t>(k)];
+                const int d = tour[static_cast<std::size_t>((k + 1) % n)];
+                const double ac = problem.distance(a, c);
+                const double bd = problem.distance(b, d);
+                if (!isFinite(ac) || !isFinite(bd)) {
+                    continue;
+                }
+                const double delta = ac + bd - problem.distance(a, b) - problem.distance(c, d);
+                if (delta < -kEps) {
+                    std::reverse(tour.begin() + i, tour.begin() + k + 1);
+                    cost += delta;
+                    improved = true;
+                    break;
+                }
+            }
+        }
+        std::ostringstream line;
+        line << "2-opt window pass=" << (pass + 1)
+             << " improved=" << (improved ? "yes" : "no")
+             << " cost=" << formatDebugDouble(cost)
+             << " delta=" << formatDebugDouble(cost - before);
+        writeDebugLine(debug, line.str());
+        if (!improved) {
+            break;
+        }
+    }
+    cost = problemTourCost(problem, tour);
+}
+
+} // namespace
+
+SolveResult solveHeuristic(const TspProblem& problem, const HeuristicOptions& options)
+{
+    SolveResult result;
+    const int n = problem.dimension();
+    writeDebugLine(options.debug, "heuristic solve started: vertices=" + std::to_string(n));
+    if (n < 3) {
+        result.cost = std::numeric_limits<double>::infinity();
+        writeDebugLine(options.debug, "heuristic solve stopped: fewer than 3 vertices");
+        return result;
+    }
+
+    std::vector<int> tour = initialHeuristicTour(problem, options);
+    double cost = problemTourCost(problem, tour);
+    if (!isFinite(cost)) {
+        result.cost = std::numeric_limits<double>::infinity();
+        writeDebugLine(options.debug, "heuristic solve stopped: initial tour is infeasible");
+        return result;
+    }
+    writeDebugLine(options.debug, "heuristic initial cost=" + formatDebugDouble(cost));
+
+    if (static_cast<std::size_t>(n) <= options.full_two_opt_limit) {
+        writeDebugLine(options.debug,
+                       "2-opt mode: full passes=" + std::to_string(options.two_opt_passes));
+        fullTwoOpt(problem, tour, cost, options.two_opt_passes, options.debug);
+    } else {
+        writeDebugLine(options.debug,
+                       "2-opt mode: window size=" + std::to_string(options.two_opt_window)
+                           + " passes=" + std::to_string(options.two_opt_passes));
+        windowTwoOpt(problem, tour, cost, options.two_opt_window, options.two_opt_passes, options.debug);
+    }
+
+    result.feasible = isFinite(cost);
+    result.cost = cost;
+    result.tour = std::move(tour);
+    writeDebugLine(options.debug,
+                   "heuristic solve finished: feasible=" + std::string(result.feasible ? "yes" : "no")
+                       + " cost=" + formatDebugDouble(result.cost));
+    return result;
 }
 
 std::string formatTour(const std::vector<int>& tour)

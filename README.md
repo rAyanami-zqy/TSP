@@ -6,7 +6,9 @@
 
 - 使用分支定界搜索。
 - 以无向边作为分支变量。
-- 每个搜索节点维护两类边约束：`forced` 表示必须选，`forbidden` 表示禁止选。
+- 主求解过程使用递归 DFS，不使用优先队列。
+- 每个搜索节点只维护 `forced` 必选边和 `forbidden` 排除边。
+- 每个递归节点先收集当前尚未决定的有限边作为候选集，再优先从当前 `1-tree` 中的候选边选择分支边，生成 `force e` / `forbid e` 两个子分支。
 - 下界使用受约束 `1-tree`：在顶点 `1..n-1` 上构造 MST，再给顶点 `0` 加两条可用的最短关联边。
 - 初始上界使用最近邻启发式加 `2-opt` 改进。
 - 支持单实例求解、批处理求解、随机实例生成、独立精确校验和 TSPLIB 转换。
@@ -20,19 +22,19 @@ flowchart TD
     C --> D["findInitialTour<br/>最近邻 + 2-opt 初始上界"]
     C --> E["computeOneTree<br/>受约束 1-tree 下界"]
     E --> F["DisjointSet<br/>Kruskal / 环检测"]
-    C --> G["Priority Queue<br/>下界最小节点优先"]
+    C --> G["Recursive DFS<br/>深度优先递归搜索"]
     G --> H{"bound >= best?"}
     H -- "是" --> I["剪枝"]
     H -- "否" --> J{"1-tree 是回路?"}
     J -- "是" --> K["更新当前最优解"]
-    J -- "否" --> L["chooseBranchEdge<br/>选择分支边 e"]
-    L --> M["子节点 1<br/>force e"]
-    L --> N["子节点 2<br/>forbid e"]
+    J -- "否" --> L["buildBranchCandidates + chooseBranchEdge<br/>候选集内优先选择 1-tree 未决边 e"]
+    L --> M["递归搜索<br/>force e 子节点"]
+    L --> N["递归搜索<br/>forbid e 子节点"]
     M --> E
     N --> E
 ```
 
-`main.cpp` 只负责命令行解析、输入读取和结果输出。核心算法集中在 `BranchBoundSolver` 中，包括 1-tree 下界、分支边选择、剪枝和最优解更新。
+`main.cpp` 只负责命令行解析、输入读取和结果输出。核心算法集中在 `BranchBoundSolver` 中，包括递归分支定界、1-tree 下界、分支边选择、剪枝和最优解更新。
 
 ## 构建
 
@@ -62,6 +64,11 @@ cmake --build build
 
 缺边可以写成 `inf`、`infinity`、`-` 或 `x`。顶点编号在输出中使用从 `0` 开始的索引。
 
+程序也可以直接读取常见 TSPLIB `TSP` 文件，包括 `NODE_COORD_SECTION`
+坐标型实例和 `EDGE_WEIGHT_SECTION` 显式矩阵实例。当前 C++ 读取器支持
+`EUC_2D`、`CEIL_2D`、`FLOOR_2D`、`MAN_2D`、`MAX_2D`、`EUC_3D`、
+`CEIL_3D`、`MAN_3D`、`MAX_3D`、`ATT`、`GEO` 和常见显式矩阵格式。
+
 ## 单实例运行
 
 从文件读取：
@@ -69,6 +76,27 @@ cmake --build build
 ```bash
 ./build/tsp_bb examples/five-city.txt
 ```
+
+指定求解方式：
+
+```bash
+./build/tsp_bb --method auto data/classic/tsplib/gr17.tsp
+./build/tsp_bb --method exact --exact-max-n 29 data/classic/national/wi29.tsp
+./build/tsp_bb --method heuristic data/classic/vlsi/vlsi/xqf131.tsp
+```
+
+`auto` 是默认模式。小实例走精确分支定界；超过 `--exact-max-n` 的实例走启发式，
+避免经典大实例直接触发指数级搜索。启发式结果会输出 `Heuristic cost`，不标记为最优。
+
+查看主求解过程中的实时 debug 输出：
+
+```bash
+./build/tsp_bb --debug --debug-interval 1000 examples/five-city.txt
+```
+
+debug 信息写到标准错误，不会破坏批处理模式的 CSV 标准输出。精确求解会输出初始上界、
+根节点下界、周期性搜索节点统计和新 incumbent；启发式求解会输出初始 tour 构造与
+`2-opt` 改进阶段信息。
 
 从标准输入读取：
 
@@ -89,14 +117,44 @@ cmake --build build
 输出是 CSV，字段为：
 
 ```text
-instance,status,cost,root_lower_bound,initial_upper_bound,nodes_created,nodes_expanded,pruned_by_bound,pruned_infeasible,tour,message
+instance,status,method,dimension,cost,root_lower_bound,initial_upper_bound,nodes_created,nodes_expanded,pruned_by_bound,pruned_infeasible,tour,message
 ```
+
+`status=heuristic` 表示结果只是可行 tour，不是最优性证明。
 
 后续验证经典数据集时，可以把转换后的实例路径写入一个清单文件：
 
 ```bash
 ./build/tsp_bb --batch path/to/classic-list.txt > classic-results.csv
 ```
+
+## 经典数据集下载
+
+`tools/download_benchmarks.py` 会下载并解压常用经典数据集到本地，同时生成 batch 清单：
+
+```bash
+python3 tools/download_benchmarks.py \
+  --output data/classic \
+  --datasets tsplib,national,vlsi,dimacs \
+  --insecure
+```
+
+`--insecure` 只用于兼容部分旧学术站点的证书链问题。下载完成后会生成：
+
+- `data/classic/batch-tsplib.txt`
+- `data/classic/batch-national.txt`
+- `data/classic/batch-vlsi.txt`
+- `data/classic/batch-dimacs.txt`
+- `data/classic/batch-all.txt`
+
+示例：
+
+```bash
+./build/tsp_bb --method heuristic --batch data/classic/batch-vlsi.txt
+```
+
+当前精确分支定界仍主要适合小中规模实例；National、VLSI、DIMACS 和 TSPLIB
+中的大实例应使用启发式模式，或后续接入 LKH/Concorde 作为强基线。
 
 ## TSPLIB 转换
 
@@ -222,8 +280,7 @@ Held-Karp 是指数级算法，只适合小规模实例验证。默认只校验 
 - RAII 风格文件输入：使用 `std::ifstream` 和 `std::istream`。
 - 异常处理：使用 `std::runtime_error` 报告非法输入和不支持的矩阵。
 - STL 算法：`std::sort`、`std::reverse`、`std::all_of`、`std::iota`、`std::move`。
-- `std::priority_queue`：实现下界最小优先的 best-first 搜索。
-- 自定义比较器：控制优先队列排序规则。
+- 递归 DFS：实现分支定界主搜索过程。
 - 并查集：用于 Kruskal MST 和环检测。
 - 浮点处理：无穷大、有限性检查和误差容忍。
 - CMake：组织构建、设置头文件路径、设置 C++ 标准和警告选项。

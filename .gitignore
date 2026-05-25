@@ -1,5 +1,6 @@
 build/
 cmake-build-*/
+data/classic/
 *.o
 *.obj
 *.exe
