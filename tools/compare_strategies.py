@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Compare 3 branch strategies (Smart, Exhaustive, Simple) on all TSP instances
+Compare 3 branch strategies (Smart,Simple) on all TSP instances
 under examples/. Verifies optimality via Held-Karp DP from verify_instances.py.
 
 Output: docs/strategy-comparison-results.md
@@ -21,8 +21,8 @@ OUT_PATH = os.path.join(PROJECT_ROOT, "docs", "strategy-comparison-results.md")
 
 TIMEOUT = 3600  # 1 hour per instance-strategy
 DEBUG_INTERVAL = 10000
-STRATEGIES = ["smart", "exhaustive", "simple"]
-STRATEGY_LABELS = {"smart": "Smart", "exhaustive": "Exhaustive", "simple": "Simple"}
+STRATEGIES = ["smart", "simple"]
+STRATEGY_LABELS = {"smart": "Smart", "simple": "Simple"}
 
 INF = float("inf")
 
@@ -434,7 +434,7 @@ def main():
     print(f"Found {len(instances)} instances in examples/\n", file=sys.stderr)
 
     lines = []
-    lines.append("# TSP Branch Strategy Comparison — Smart vs Exhaustive vs Simple")
+    lines.append("# TSP Branch Strategy Comparison — Smart vs Simple")
     lines.append("")
     lines.append(f"**Instances:** {len(instances)} (from `examples/` only)  ")
     lines.append(f"**Verification:** Held-Karp Dynamic Programming  ")

@@ -390,7 +390,7 @@ SolveResult BranchBoundSolver::solve(BranchStrategy strategy)
         std::ostringstream line;
         line << "root: lower_bound=" << formatDebugDouble(root.bound)
              << " search=recursive-dfs"
-             << " strategy=" << (strategy == BranchStrategy::Smart ? "smart" : strategy == BranchStrategy::Exhaustive ? "exhaustive" : "simple");
+             << " strategy=" << (strategy == BranchStrategy::Smart ? "smart" : "simple");
         writeDebugLine(debug_, line.str());
     }
 
@@ -493,36 +493,6 @@ SolveResult BranchBoundSolver::solve(BranchStrategy strategy)
             } else {
                 visit(forced_child);
                 visit(forbidden_child);
-            }
-        } else if (strategy == BranchStrategy::Exhaustive) {
-            // Exhaustive: 对所有未决边分别进行 force/forbid 分支。
-            if (branch_candidates.empty()) {
-                writeDebugLine(debug_,
-                               "dead end: no undecided branch edge at depth=" + std::to_string(node.depth));
-                return;
-            }
-
-            std::vector<PendingChild> children;
-            children.reserve(branch_candidates.size() * 2);
-            for (const Edge& branch_edge : branch_candidates) {
-                PendingChild forced = make_child(branch_edge, true);
-                if (forced.available) {
-                    children.push_back(std::move(forced));
-                }
-                PendingChild forbidden = make_child(branch_edge, false);
-                if (forbidden.available) {
-                    children.push_back(std::move(forbidden));
-                }
-            }
-
-            // 按下界升序排列，优先探索更有希望的分支。
-            std::sort(children.begin(), children.end(),
-                      [](const PendingChild& a, const PendingChild& b) {
-                          return a.node.bound < b.node.bound;
-                      });
-
-            for (PendingChild& child : children) {
-                visit(child);
             }
         } else {
             // Simple: 任选一条未决边做 force/forbid 二分叉，无启发式选择。
