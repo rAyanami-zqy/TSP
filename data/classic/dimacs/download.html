@@ -1,0 +1,110 @@
+<!doctype html public "-//w3c//dtd html 4.0 transitional//en">
+<html>
+<head>
+   <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+   <meta name="GENERATOR" content="Mozilla/4.61 [en] (X11; U; IRIX64 6.5 IP27) [Netscape]">
+</head>
+<body>
+
+<center>
+<h2>
+Download Page</h2></center>
+<p>
+<center>(This page last updated 11 December 2008.
+For a list of possibly more recent updates to this site,
+click <a href="whatsnew.html">here</a>)</center>
+
+<p><hr><p>
+
+<center><h3>Benchmark Code and Instance Generation Codes</h3></center>
+<p> Tar and Zip files containing Makefile and C programs for the Greedy benchmark
+algorithm and for generators of three types of random instances: uniform
+points in the plan, clustered points, random distance matrices.  They also
+contain a README file that lists the commands for generating all the
+randomly generated instances in the testbed, and a program for verifying
+the length of the tour corresponding to a given permutation of the cities
+( <a href="codes.tar"><B>tarfile</B></a>,
+<a href="codes.zip"><B>zipfile</B></a> ).
+
+<p><hr><p>
+
+<center><h3>Benchmark Instances</h3></center>
+<p>  All benchmark instances are in the standard TSPLIB format as specified
+in the following documentation from the TSPLIB website
+( <a href="http://www.informatik.uni-heidelberg.de/groups/comopt/software/TSPLIB95/Doc.ps">postscript</a> ).
+The format and metric used for each instance is specified in the instance's header
+in terms explained in the TSPLIB documentation.
+The testbed uses only the following three types: two dimensional
+Euclidean metric rounded to the nearest integer (<TT>EUC_2D</TT>),
+two dimensional Euclidean metric rounded up (<TT>CEIL_2D</TT>),
+and explicit distance matrix presented in upper diagonal form
+(<TT>UPPER_DIAG_ROW</TT>).
+To visit the TSPLIB website, click 
+<a href="http://www.iwr.uni-heidelberg.de/groups/comopt/software/TSPLIB95/"> here</a>.
+
+<p>
+
+<font size=+1>Benchmark TSPLIB Instances
+( <a href="big.tar">tarfile</a>, <a href="big.zip">zipfile</a> )</font>
+<br> Tar and Zip files containing all instances from TSPLIB with 1000 or more cities as of 1 January 2000.
+
+<p>
+
+<font size=+1>Samples of Randomly Generated Instances
+( <a href="sample.tar">tarfile</a>, <a href="sample.zip">zipfile</a> )</font>
+<br> Tar file containing one 1000-city instance of each type
+(E1k.1, C1k.1, M1k.1) from the
+randomly generated instance testbed.
+Use these to verify that the instance generator codes are working correctly.
+
+<p><font size=+1>Held-Karp Lower Bounds and Optimal Tour Lengths (where known)
+(<a href="bounds">text</a>, <a href="opts.html">html</a> )</font>
+
+<br> Held-Karp lower bounds for E3M.0 and E10M.0 are estimated using the
+formula from Johnson, McGeoch, and Rothberg, ``Asymptotic experimental analysis
+for the Held-Karp traveling salesman bound,'' in <I>Proc. 7th ACM-SIAM Symp.
+on Discrete Algorithms</I>, 1996, pp. 341-350
+(<a href="papers/HKsoda.pdf">pdf, 10 pages</a>).
+The remainder were computed
+exactly using the <TT>Concorde</TT> program of Applegate, Bixby, Chvatal, and Cook
+(<a href="http://www.math.uwaterloo.ca/tsp/concorde.html">webpage</a>),
+with the result for E1M.0 computed at Rice University on a bigger machine
+by Applegate et al.
+Exact values are included in the text file; entries in the html file are
+rounded to the nearest integer.
+Optimal tour lengths for <TT>TSPLIB</TT> instances courtesy of <TT>TSPLIB</TT>
+(<a href="http://www.iwr.uni-heidelberg.de/iwr/comopt/software/TSPLIB95/">webpage</a>).
+Optimal values for the randomly generated instances
+were computed using <TT>Concorde</TT>.
+In the ``html'' summary, the ``percent excess'' is the amount by which
+the optimal tour length (when known) exceeds the Held-Karp lower bound.
+
+<p><hr><p>
+
+<center><h3>Package for Generating Figures</h3></center>
+<p>
+The postscript figures included in the book chapters based on this Challenge
+and gifs produced by the Comparison page on this website were produced
+using a set of programs that have been bundled together into a 
+downloadable package
+(<a href="norm.tar">tarfile</a>)(<a href="norm.zip">zipfile</a>).
+This package requires that <tt>gnuplot</tt> and <tt>ppmtogif</tt>
+are installed on your machine, but otherwise should be usable on most
+<tt>UNIX</tt> and <tt>LINUX</tt>.
+More details can be in this <a href="norm.readme">README</a> text file
+(also included in the package).
+
+<p><hr><p>
+<center>
+<a href="index.html">Challenge Homepage</a>
+<p>
+<a href="about.html">About the Challenge</a>
+<p>
+<a href="results.html">Challenge Results Page</a>
+<p>
+<a href="testform1.html">Instance Comparisons</a>
+<p>
+<a href="testform2.html">Algorithm Comparisons</a>
+</center>
+</body>
+</html>

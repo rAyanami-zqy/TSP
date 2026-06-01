@@ -1,0 +1,202 @@
+Software for Comparing Tour Quality and Speed of TSP Implementations.
+
+							David S. Johnson
+							Lyle A. McGeoch
+			
+							December, 2001
+
+INTRODUCTION:
+
+The programs in this directory permit you to compare your TSP
+implementations with those submitted to the TSP Implementation
+Challenge.  Full information about the Challenge is available on the
+web at
+
+	http://www.research.att.com/~dsj/chtsp
+
+The programs in this package are similar to those that can be used
+on-line on the "Comparisons" and "Results" pages of the Challenge
+website.  The advantage of using this package is that you can run the
+programs locally using results that have not yet been posted on the
+website.
+
+The remainder of this document assumes familiarity with the benchmark
+code and instance information available on the "Download" page of the
+Challenge website.
+
+
+INSTALLATION:
+
+This package is distributed as a tar file.  When you untar the
+package, source code for the comparison programs will be placed in a
+directory.  A subdirectory called "datafiles" will contain
+experimental results that were submitted to the Challenge.
+
+To install the package, simply run "make" in the main directory.  (If
+you have problems, check the Makefile to see if the various commands
+are appropriate for your system.)  Running make will compile and link
+the various programs and will place copies of them in the "datafiles"
+directory.
+
+If you every need to modify the code, you should probably run "make
+depend".  This will ensure that the Makefile reflects the right
+dependencies between different source files.
+
+
+SAVING YOUR EXPERIMENTAL RESULTS:
+
+You will probably need to place two files in the "datafiles"
+directory, one giving benchmark information for your machine, and one
+giving experimental results for your implementation.
+
+You'll need a nickname for your machine.  Examples of machines used in
+the Challenge were "alpha500" and "mac400".  Suppose you decide to
+call your machine "trs80plus".  You'd create a file called
+"s.trs80plus" containing the following lines:
+
+1000 1000 12
+3162 316 14
+10000 100 16
+31623 32 23
+100000 10 36
+316228 3 55
+1000000 1 88
+3162278 1 330
+10000000 1 1330
+
+The first entry in an instance size, the second is a number of
+iterations, and the third is your user time for executing the given
+number of iterations of the benchmark code.  You may omit lines for
+any instance sizes that are too large for you to run, but don't vary
+the number of iterations at a given size.
+
+You should store your experimental results in a file with a ".d"
+suffix.  The beginning of your file might look like the following:
+
+ALGORITHM: Quick TSP (My secret TSP alg. with polynomial worst-case time)
+MACHINE: Turbo-accelerated TRS-80 [ trs80plus ]
+RUN: 1
+SUBMITTER: Joe Smith
+E1k.0          24378716     0.08   --
+E1k.1          23962053     0.09   --
+E1k.2          23968985     0.09   --
+
+Be sure that the first four lines of your file follow the format used
+here.  ***IMPORTANT: The nickname you assigned your machine must appear
+in square brackets on the machine line.***  
+
+The remaining lines (one for each instance you tested) specify the
+instance name, tour length, execution time in user seconds, and
+(optionally) memory usage.
+
+
+PROGRAM norm1:
+
+	Usage:  norm1 filename [normMachine]
+
+This program (and all the others) should be run while you in the
+"datafiles" directory.  The filename should specify a ".d" file
+giving experimental results for some algorithm.  Norm1 produces an
+output with one line for each instance in the Challenge test bed.  The
+columns of the output give:
+
+	---Instance name.
+	---Tour length obtained experimentally.
+	---Percentage by which tour length exceeds optimal, if the
+		optimal is known.  ("?" means that the optimal isn't known.)
+	---Percentage by which tour length exceeds the Held-Karp lower
+		bound.
+	---CPU time (user seconds)
+	---Normalized CPU time
+	---Memory usage information (if given in data file)
+
+The "normMachine" argument allows the user to specify a machine for
+which normalized times are given.  The default is "alpha500", a
+500-MHz Alpha machine.  Specifying a machine such as "pent500" causes
+the the benchmark file "s.pent500" to be used for normalization.  To
+ensure meaningful results, benchmark times on the normalization
+machine should be given for all instance sizes up to 10 million
+cities.
+
+
+PROGRAM norm2:
+
+	Usage:  norm2 filename growthRate matrixBit
+
+This is a specialized program for determining the growth rate of the
+running time.  The specified growthRate can be one of 
+
+	1, N, NlogN, Nlog^2n, N^1.25, N^1.5, N^2, N^2.5, N^3
+
+The matrixBit is a 1 or 0 that specifies whether or not matrix
+instances should be included in the output.
+
+This program is intended to be a preprocessor for other display
+programs, so the output has no header line.  There are four columns of
+output:
+
+	---Instance name.	
+	---Percentage by which tour length exceeds the Held-Karp lower
+		bound.
+	---Normalized CPU time
+	---Running time, in microseconds, divided by f(n), where f(n)
+		is the growth rate function.  Note that natural logs
+		are used in the growth rate functions.
+
+To change the normalization machine, you should edit the file "report.h".
+
+
+PROGRAMS time2gif, time2ps, time2psb, tour2gif, tour2ps, tour2psb
+
+	Usage:  programname filename growthRate matrixBit > outputfile
+
+These programs use norm2 to produce plots.  The "time" programs plot
+normalizaed running times, scaled by the given growth function, while
+the "tour" programs plot percentage excess over the Held-Karp lower
+bound.  The "gif" versions produce gif files (suitable for posting on
+the web), the "ps" versions produce color postscript files, and the
+"psb" versions produce monochrome postscript files.
+
+These programs are actually shell scripts.  You must have gnuplot and
+ppmtogif installed on your system.
+
+
+PROGRAM algcomp2:
+
+	Usage:	algcomp2 filename1 filename2 matrixBit
+
+This program compares two algorithms.  The two filenames on the
+command line specify the files containing the experimental data.  The
+matrixBit is a 1 or 0 that specifies whether or not matrix instances
+should be included in the output.
+
+The output has one header line that gives the names of the algorithms
+being compared.  There are four columns of output for each instance
+that was tested by both algorithms:
+
+	---Instance name.	
+	---Number of cities in the instance.
+	---Percentage by which tour length of the first algorithm
+		exceeds the tour length of the second algorithm.
+	---Ratio of the normalized running time of the first algorithm
+		to that of the second.
+
+In an instance was not tested by both algorithms, the output line
+specifies tells which algorithm (if either) solved the instance.
+
+
+PROGRAMS times2gif, times2ps, times2psb, tours2gif, tours2ps, tours2psb
+
+	Usage:  programname filename1 filename2 matrixBit > outputfile
+
+These programs use algcomp2 to produce plots.  The "times" programs
+plot the ratio of the running times, while the "tour" programs plot
+the percentage by which the first algorithm's tour length exceeds that
+of the second.  The "gif" versions produce gif files (suitable for
+posting on the web), the "ps" versions produce color postscript files,
+and the "psb" versions produce monochrome postscript files.
+
+These programs are actually ksh scripts.  You must have ksh, awk,
+gnuplot, and ppmtogif installed on your system.
+
+

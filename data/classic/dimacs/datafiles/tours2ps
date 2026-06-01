@@ -1,0 +1,47 @@
+#!/bin/sh
+
+case $# in 
+3) ;;
+*) echo 'Usage: tours2ps filename1 filename2 matrixBit > outputfile' 1>&2;
+    exit 1;;
+esac
+
+tmpfile=/tmp/algs2gif_tmp_$$
+tmpfileE=${tmpfile}a
+tmpfileC=${tmpfile}b
+tmpfileM=${tmpfile}c
+tmpfilet=${tmpfile}d
+tmpfilew=${tmpfile}e
+tmpfilex=${tmpfile}f
+tmpfiley=${tmpfile}g
+instance1=`/bin/basename $1 .d`
+instance2=`/bin/basename $2 .d`
+
+./algcomp2 "$1" "$2" "$3" | /bin/awk '
+NF!=4{next}
+/^E/{print $0 > "'"$tmpfileE"'";next;}
+/^C/{print $0 > "'"$tmpfileC"'";next;}
+/^M/{print $0 > "'"$tmpfileM"'";next;}
+/^[a-z]/{print $0 > "'"$tmpfilet"'";next;}
+END{print "" > "'"$tmpfileE"'";
+    print "" > "'"$tmpfileC"'";
+    print "" > "'"$tmpfileM"'";
+    print "" > "'"$tmpfilet"'";}'
+
+gnuplot << _eof_ 2>/dev/null
+set term postscript eps color "Helvetica" 18
+set size 1.2,1.2
+set key below
+set title '($instance1)/($instance2)'
+set ylabel 'Percent Difference in Tour Lengths'
+set xlabel 'Number of Cities'
+set logscale x
+set xrange [800:15000000]
+set format y '%7.1f'
+set label "<0 $instance1 better    >0 $instance2 better" at screen 0.08,0.67 center rotate
+set lmargin 11
+plot '$tmpfileE' using 2:3 title 'Uniform Points' lt 1 pt 1, '$tmpfileC' using 2:3 title 'Clustered Points' lt 4 pt 2, '$tmpfilet' using 2:3 title 'TSPLIB Instances' lt 3 pt 4, '$tmpfileM' using 2:3 title 'Random Matrices' lt 7 pt 3, 0 notitle with lines lt -1 lw 0
+quit
+_eof_
+/bin/rm $tmpfileE $tmpfileC $tmpfileM $tmpfilet
+exit

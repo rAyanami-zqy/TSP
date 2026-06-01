@@ -1,0 +1,44 @@
+#!/bin/sh
+
+case $# in 
+3) ;;
+*) echo 'Usage: time2ps filename growthRate matrixBit > outputfile' 1>&2;
+    exit 1;;
+esac
+
+tmpfile=/tmp/algs2gif_tmp_$$
+tmpfileE=${tmpfile}a
+tmpfileC=${tmpfile}b
+tmpfileM=${tmpfile}c
+tmpfilet=${tmpfile}d
+tmpfilew=${tmpfile}e
+tmpfilex=${tmpfile}f
+tmpfiley=${tmpfile}g
+instance=`/bin/basename $1 .d`
+
+./norm2 "$1" "$2" "$3" | /bin/awk '
+$2==0{next}
+/^E/{print $0 > "'"$tmpfileE"'";next;}
+/^C/{print $0 > "'"$tmpfileC"'";next;}
+/^M/{print $0 > "'"$tmpfileM"'";next;}
+/^[a-z]/{print $0 > "'"$tmpfilet"'";next;}
+END{print "" > "'"$tmpfileE"'";
+    print "" > "'"$tmpfileC"'";
+    print "" > "'"$tmpfileM"'";
+    print "" > "'"$tmpfilet"'";}'
+gnuplot << _eof_
+set term postscript eps color "Helvetica" 18
+set size 1.2,1.2
+set key below
+set title "$instance : Microseconds/$2"
+set ylabel 'Normalized Running Time'
+set xlabel 'Number of Cities'
+set logscale x
+set xrange [800:15000000]
+set format y '%7.1f'
+set lmargin 11
+plot '$tmpfileE' using 2:4 title 'Uniform Points' lt 1 pt 1, '$tmpfileC' using 2:4 title 'Clustered Points' lt 4 pt 2, '$tmpfilet' using 2:4 title 'TSPLIB Instances' lt 3 pt 4, '$tmpfileM' using 2:4 title 'Random Matrices' lt 7 pt 3, 0 notitle with lines lt -1 lw 0
+quit
+_eof_
+/bin/rm $tmpfileE $tmpfileC $tmpfileM $tmpfilet
+exit
