@@ -15,6 +15,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <iostream>
 
 namespace tsp {
 namespace {
@@ -389,7 +390,7 @@ SolveResult BranchBoundSolver::solve(BranchStrategy strategy)
         std::ostringstream line;
         line << "root: lower_bound=" << formatDebugDouble(root.bound)
              << " search=recursive-dfs"
-             << " strategy=" << (strategy == BranchStrategy::Smart ? "smart" : "exhaustive");
+             << " strategy=" << (strategy == BranchStrategy::Smart ? "smart" : strategy == BranchStrategy::Exhaustive ? "exhaustive" : "simple");
         writeDebugLine(debug_, line.str());
     }
 
@@ -493,7 +494,7 @@ SolveResult BranchBoundSolver::solve(BranchStrategy strategy)
                 visit(forced_child);
                 visit(forbidden_child);
             }
-        } else {
+        } else if (strategy == BranchStrategy::Exhaustive) {
             // Exhaustive: 对所有未决边分别进行 force/forbid 分支。
             if (branch_candidates.empty()) {
                 writeDebugLine(debug_,
@@ -522,6 +523,28 @@ SolveResult BranchBoundSolver::solve(BranchStrategy strategy)
 
             for (PendingChild& child : children) {
                 visit(child);
+            }
+        } else {
+            // Simple: 任选一条未决边做 force/forbid 二分叉，无启发式选择。
+            if (branch_candidates.empty()) {
+                writeDebugLine(debug_,
+                               "dead end: no undecided branch edge at depth=" + std::to_string(node.depth));
+                return;
+            }
+
+            const Edge& branch_edge = branch_candidates.front();
+
+            PendingChild forced_child = make_child(branch_edge, true);
+            PendingChild forbidden_child = make_child(branch_edge, false);
+
+            if (forced_child.available
+                && forbidden_child.available
+                && forbidden_child.node.bound + kEps < forced_child.node.bound) {
+                visit(forbidden_child);
+                visit(forced_child);
+            } else {
+                visit(forced_child);
+                visit(forbidden_child);
             }
         }
     };
@@ -1056,13 +1079,14 @@ std::vector<std::string> tokenizeSectionLine(const std::string& line)
     return tokens;
 }
 
+// TSPLIB 的 header line 可能是 "KEY: VALUE" 格式，也可能是 "KEY VALUE" 格式。这个函数解析出 KEY 和 VALUE，并把 KEY 转成大写、VALUE 去掉首尾空白。
 std::pair<std::string, std::string> parseTsplibHeaderLine(const std::string& line)
 {
     const std::size_t colon = line.find(':');
     if (colon != std::string::npos) {
         return {upperCopy(trimCopy(line.substr(0, colon))), trimCopy(line.substr(colon + 1))};
     }
-
+    // 没有冒号时，按空白分隔 KEY 和 VALUE。
     std::istringstream in(line);
     std::string key;
     in >> key;
@@ -1166,6 +1190,7 @@ std::vector<std::vector<double>> buildExplicitMatrix(
     return matrix;
 }
 
+// 判断输入内容是否看起来像一个纯粹的距离矩阵（没有 TSPLIB 格式的 header 和 section 标记）。
 bool looksLikePlainMatrix(const std::string& content)
 {
     const std::string trimmed = trimCopy(content);
@@ -1180,6 +1205,7 @@ bool looksLikePlainMatrix(const std::string& content)
     const std::string first_line = first_line_end == std::string::npos
         ? trimmed
         : trimmed.substr(0, first_line_end);
+    
     return first_line.find(':') == std::string::npos;
 }
 
@@ -1196,6 +1222,7 @@ TspProblem readTspProblem(std::istream& input)
         problem.edge_weight_type = "EXPLICIT";
         problem.edge_weight_format = "FULL_MATRIX";
         problem.matrix = readDistanceMatrix(matrix_input);
+         std::cout <<"debug:" << problem.matrix.size() << std::endl;
         return problem;
     }
 
@@ -1213,12 +1240,14 @@ TspProblem readTspProblem(std::istream& input)
     std::istringstream lines(content);
     std::string line;
     while (std::getline(lines, line)) {
+        
         line = trimCopy(line);
         if (line.empty()) {
             continue;
         }
 
         const std::string upper = upperCopy(line);
+        std::cout <<"debug:" << upper << std::endl;
         if (upper == "EOF") {
             break;
         }
@@ -1261,6 +1290,7 @@ TspProblem readTspProblem(std::istream& input)
             }
             problem.coordinates[static_cast<std::size_t>(id - 1)] = point;
         } else if (section == Section::EdgeWeight) {
+            std::cout <<"debug:" <<"EdgeWeight" << std::endl;
             const std::vector<std::string> tokens = tokenizeSectionLine(line);
             for (const std::string& token : tokens) {
                 edge_values.push_back(parseWeight(token));
@@ -1319,6 +1349,7 @@ std::vector<std::vector<double>> readDistanceMatrix(std::istream& input)
     return distance;
 }
 
+// 计算给定 TSP 回路的总成本，若回路无效（长度不为 n 或存在缺边）则返回 infinity。
 namespace {
 
 double problemTourCost(const TspProblem& problem, const std::vector<int>& tour)
@@ -1347,6 +1378,7 @@ std::vector<int> sequentialTour(int n)
     return tour;
 }
 
+// 从指定起点出发，按照最近邻策略构造一个 TSP 回路。起点不同可能得到不同的回路，返回所有起点中成本最低的那个回路。
 std::vector<int> nearestNeighborTour(const TspProblem& problem, int start)
 {
     const int n = problem.dimension();

@@ -55,8 +55,10 @@ function search(node, current_tree):
 
     if strategy == Smart:
         searchSmart(node, current_tree, candidates)
-    else:
+    else if strategy == Exhaustive:
         searchExhaustive(node, current_tree, candidates)
+    else:
+        searchSimple(node, current_tree, candidates)
 ```
 
 ---
@@ -187,7 +189,59 @@ function searchExhaustive(node, current_tree, candidates):
 
 ---
 
-## 5. 1-tree 下界计算 `computeOneTree(forced, forbidden)`
+## 5. 分支策略三：Simple（任选单边二分叉）
+
+**核心思想**：与 Smart 同为单边 force/forbid 二分支，但**不做启发式选择**——直接从候选集中取第一条未决边作为分支边。分支树结构与 Smart 完全相同（二叉树），仅边选择策略不同。
+
+```
+function searchSimple(node, current_tree, candidates):
+    if candidates is empty:
+        return   // 死胡同：无边可分
+
+    // 任选一条未决边（取候选集第一条）
+    edge ← candidates[0]
+
+    // 构造 force 子节点（该边必选）
+    forced_child ← makeChild(node, edge, force=true)
+    // 构造 forbid 子节点（该边禁止）
+    forbidden_child ← makeChild(node, edge, force=false)
+
+    // 按下界升序递归，尽早改进上界
+    if both children available
+       and forbidden_child.bound < forced_child.bound:
+        search(forbidden_child.node, forbidden_child.tree)
+        search(forced_child.node, forced_child.tree)
+    else:
+        search(forced_child.node, forced_child.tree)
+        search(forbidden_child.node, forbidden_child.tree)
+```
+
+**与 Smart 的区别**：
+
+| 维度 | Smart | Simple |
+|------|-------|--------|
+| 边选择 | 三层启发式递进（度数 >2 顶点 → 1-tree 边 → 候选边），选权值最大 | 直接取 `candidates[0]`，无启发式 |
+| 单次分支耗时 | O(n²)（需遍历 1-tree 和候选集） | O(1)（取首元素） |
+| 搜索树结构 | 相同（二叉树） | 相同（二叉树） |
+| 完备性 | 完备 | 完备 |
+
+**分支树示意（Simple）**：
+
+```
+                    root
+                     │
+              force(e₁) / \ forbid(e₁)
+                      /   \
+                    N₁    N₂      ← 与 Smart 相同的二叉树结构
+                   / \
+            force(e₂) \ forbid(e₂)
+             /         \
+           ...         ...
+```
+
+---
+
+## 6. 1-tree 下界计算 `computeOneTree(forced, forbidden)`
 
 ```
 function computeOneTree(forced, forbidden):
@@ -262,7 +316,7 @@ function computeOneTree(forced, forbidden):
 
 ---
 
-## 6. 辅助函数
+## 7. 辅助函数
 
 ```
 function edgeId(u, v):
@@ -292,7 +346,7 @@ function buildBranchCandidates(node):
 
 ---
 
-## 7. 初始上界启发式 `findInitialTour`
+## 8. 初始上界启发式 `findInitialTour`
 
 ```
 function findInitialTour(tour, cost):
@@ -337,30 +391,30 @@ function findInitialTour(tour, cost):
 
 ---
 
-## 8. 两种策略对比总结
+## 9. 三种策略对比总结
 
-| 维度 | Smart | Exhaustive |
-|------|-------|------------|
-| 分支因子 | 2（单边二分叉） | 2 × \|candidates\|（全部展开） |
-| 搜索树宽度 | 窄 | 宽 |
-| 选择策略 | 启发式（度数最大顶点） | 无选择（穷举所有边） |
-| 排序 | 按下界大小决定搜索顺序 | 所有子节点按下界升序排列 |
-| 适用场景 | 剪枝高效时（大实例） | 搜索完整时（小规模验证） |
-| 完备性 | 完备（每条边最终会被决定） | 完备（显式枚举所有可能） |
+| 维度 | Smart | Exhaustive | Simple |
+|------|-------|------------|--------|
+| 分支因子 | 2（单边二分叉） | 2 × \|candidates\|（全部展开） | 2（单边二分叉） |
+| 搜索树宽度 | 窄 | 宽 | 窄 |
+| 选择策略 | 启发式（度数最大顶点 → 1-tree 边 → 候选边，选权值最大） | 无选择（穷举所有边） | 无启发式（取候选集首元素） |
+| 排序 | 按下界大小决定搜索顺序 | 所有子节点按下界升序排列 | 按下界大小决定搜索顺序 |
+| 适用场景 | 剪枝高效时（大实例） | 搜索完整时（小规模验证） | 最简实现 / 基线对照 |
+| 完备性 | 完备 | 完备 | 完备 |
 
 ---
 
-## 9. Smart 策略完备性证明：每条边最终会被决定
+## 10. 完备性证明（适用于 Smart 与 Simple）
 
-### 9.1 要证明什么
+### 10.1 要证明什么
 
-**命题**：对于任意 TSP 实例，Smart 分支策略在有限步内终止，且搜索过程蕴含了对所有边决策的隐式穷举——即任意一条边 $(u,v)$ 在搜索树的每一条根到叶的路径上，最终都会被确定为 forced 或 forbidden（或该路径因剪枝/search 回溯而不再展开，此时未决边不影响已找到的最优解）。
+**命题**：对于任意 TSP 实例，Smart 与 Simple 分支策略在有限步内终止，且搜索过程蕴含了对所有边决策的隐式穷举——即任意一条边 $(u,v)$ 在搜索树的每一条根到叶的路径上，最终都会被确定为 forced 或 forbidden（或该路径因剪枝/search 回溯而不再展开，此时未决边不影响已找到的最优解）。
 
 更精确的等价表述：
 
-> Smart 策略是 **完备的**（complete）：若最优解存在，算法必能找到。
+> Smart 与 Simple 策略是 **完备的**（complete）：若最优解存在，算法必能找到。
 
-### 9.2 搜索树结构
+### 10.2 搜索树结构
 
 将搜索过程视为一棵二叉树 $T$：
 
@@ -370,15 +424,15 @@ function findInitialTour(tour, cost):
 
 记根节点 $U_0 = \{\text{所有有限边}\}$，共 $M \leq \binom{n}{2}$ 条。
 
-### 9.3 引理 1：每条根到叶的路径上 undecided 边数严格递减
+### 10.3 引理 1：每条根到叶的路径上 undecided 边数严格递减
 
-在 Smart 策略中，`chooseBranchEdge` 每次从 `candidates`（即 $U$）中选出一条边 $e$，并在两个子节点中分别将其标记为 forced 或 forbidden。因此：
+在 Smart 与 Simple 策略中，每次从 `candidates`（即 $U$）中选出一条边 $e$，并在两个子节点中分别将其标记为 forced 或 forbidden。因此：
 
 $$|U_{\text{child}}| = |U_{\text{parent}}| - 1$$
 
 证毕。该边在子节点中不再属于 undecided 集合。
 
-### 9.4 引理 2：搜索树深度有界
+### 10.4 引理 2：搜索树深度有界
 
 由引理 1，沿任意一条根到叶的路径，每步严格减少一条未决边。根节点 $|U_0| = M \leq \binom{n}{2}$。因此：
 
@@ -386,7 +440,7 @@ $$\text{max\_depth} \leq M \leq \frac{n(n-1)}{2}$$
 
 不存在无限深的路径。
 
-### 9.5 引理 3：叶节点的三种终止情况
+### 10.5 引理 3：叶节点的三种终止情况
 
 搜索在以下三种情况下不再继续展开子节点：
 
@@ -398,7 +452,7 @@ $$\text{max\_depth} \leq M \leq \frac{n(n-1)}{2}$$
 
 关键洞察：**剪枝不会导致"漏解"**。被剪掉的分支中即使存在合法回路，其 cost 也 $\geq$ `best_cost`（bound 剪枝）或根本不存在合法回路（infeasible 剪枝）。而已知 `best_cost` 已被某条完整路径（所有边均已决定）上的合法回路所实现。
 
-### 9.6 引理 4：解空间的完全划分
+### 10.6 引理 4：解空间的完全划分
 
 对于任意 Hamilton 回路 $H$（$n$ 条边组成的环），考虑搜索树的根节点：
 
@@ -407,9 +461,9 @@ $$\text{max\_depth} \leq M \leq \frac{n(n-1)}{2}$$
 
 因此，**每条分支边 $e$ 将剩余解空间划分为两个不交子集**：包含 $e$ 的解和不含 $e$ 的解。任意回路 $H$ 对每条分支边的决策有且仅有一种归属。搜索树的每条根到叶路径对应一个 **部分指派**（对已决定边的 force/forbid 赋值），且所有路径的叶节点覆盖了全部可能指派。
 
-### 9.7 主定理
+### 10.7 主定理
 
-**定理**：Smart 策略必然能找到最优 TSP 回路（若存在），且在有限步内终止。
+**定理**：Smart 与 Simple 策略必然能找到最优 TSP 回路（若存在），且在有限步内终止。
 
 **证明**：
 
@@ -422,6 +476,6 @@ $$\text{max\_depth} \leq M \leq \frac{n(n-1)}{2}$$
 
 综上，算法终止时 `best_tour` 为最优解。$\square$
 
-### 9.8 直观理解
+### 10.8 直观理解
 
-将 Smart 策略想象为在 $M$ 维超立方体的顶点（每个维度对应一条边的 force/forbid）上做深度优先搜索，但用 1-tree 下界提前跳过不包含更优解的区域。每条边是一个"维度"，每步分支固定一个维度的取值——从根到最优解的路径恰好在每个维度上做了一次选择，遍历了全部 $M$ 个维度。
+将 Smart/Simple 策略想象为在 $M$ 维超立方体的顶点（每个维度对应一条边的 force/forbid）上做深度优先搜索，但用 1-tree 下界提前跳过不包含更优解的区域。每条边是一个"维度"，每步分支固定一个维度的取值——从根到最优解的路径恰好在每个维度上做了一次选择，遍历了全部 $M$ 个维度。

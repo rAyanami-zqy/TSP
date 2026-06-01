@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Find all TSP instances with < 20 vertices and run exact solver on them."""
+"""Compare 3 branch strategies (Smart, Exhaustive, Simple) on all TSP instances with < 30 vertices."""
 
 import subprocess
 import sys
 import os
 import re
+import time
 from pathlib import Path
 
 SOLVER = os.path.join(os.path.dirname(__file__), "..", "build", "tsp_bb")
@@ -12,7 +13,11 @@ SEARCH_ROOTS = [
     os.path.join(os.path.dirname(__file__), "..", "data"),
     os.path.join(os.path.dirname(__file__), "..", "examples"),
 ]
-MAX_N = 20  # strictly less than 20
+MAX_N = 30  # strictly less than 30
+TIMEOUT = 3600  # 1 hour per instance-strategy run
+DEBUG_INTERVAL = 10000
+STRATEGIES = ["smart", "exhaustive", "simple"]
+STRATEGY_LABELS = {"smart": "Smart", "exhaustive": "Exhaustive", "simple": "Simple"}
 
 
 def parse_dimension_tsp(filepath: str) -> int | None:
@@ -24,7 +29,6 @@ def parse_dimension_tsp(filepath: str) -> int | None:
                 parts = line.split(":")
                 if len(parts) == 2:
                     return int(parts[1].strip())
-                # space-separated fallback
                 parts = line.split()
                 if len(parts) >= 2:
                     return int(parts[1])
@@ -43,24 +47,8 @@ def parse_dimension_matrix(filepath: str) -> int | None:
     return None
 
 
-def looks_like_tsp(filepath: str) -> bool:
-    """Check if file looks like TSPLIB format."""
-    with open(filepath, "r") as f:
-        for line in f:
-            upper = line.strip().upper()
-            if upper.startswith("NAME") or upper.startswith("TYPE") or upper.startswith("DIMENSION"):
-                return True
-            if upper.startswith("NODE_COORD_SECTION") or upper.startswith("EDGE_WEIGHT_SECTION"):
-                return True
-            # If first non-empty line doesn't look like TSPLIB, stop
-            if upper and not upper.startswith("NAME") and not upper.startswith("COMMENT"):
-                break
-    return False
-
-
 def get_dimension(filepath: str) -> int | None:
     """Try to determine the dimension of a TSP instance."""
-    # Skip .opt.tour files, batch lists, archives, etc.
     name = os.path.basename(filepath)
     if name.endswith(".opt.tour") or name.startswith("batch"):
         return None
@@ -69,12 +57,10 @@ def get_dimension(filepath: str) -> int | None:
     if name.endswith(".gz"):
         return None
 
-    # Try TSPLIB format first
     dim = parse_dimension_tsp(filepath)
     if dim is not None:
         return dim
 
-    # Try matrix format
     dim = parse_dimension_matrix(filepath)
     if dim is not None:
         return dim
@@ -83,13 +69,12 @@ def get_dimension(filepath: str) -> int | None:
 
 
 def find_small_instances():
-    """Find all instances with dimension < 20."""
+    """Find all instances with dimension < MAX_N."""
     instances = []
     for root in SEARCH_ROOTS:
         if not os.path.isdir(root):
             continue
         for dirpath, dirnames, filenames in os.walk(root):
-            # Skip _archives
             if "_archives" in dirpath:
                 continue
             for fname in sorted(filenames):
@@ -100,11 +85,121 @@ def find_small_instances():
     return instances
 
 
-def run_solver(instance_path: str) -> tuple[str, str, int]:
-    """Run solver and return (stdout, stderr, returncode)."""
-    cmd = [SOLVER, "--method", "exact", "--branch-strategy", "exhaustive", "--exact-max-n", str(MAX_N), "--debug", instance_path]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
-    return result.stdout, result.stderr, result.returncode
+def parse_stats(stdout: str) -> dict:
+    """Extract solver statistics from stdout."""
+    stats = {
+        "cost": None,
+        "feasible": False,
+        "root_lb": None,
+        "init_ub": None,
+        "nodes_created": None,
+        "nodes_expanded": None,
+        "pruned_bound": None,
+        "pruned_infeasible": None,
+        "tour": None,
+    }
+
+    for line in stdout.splitlines():
+        if "Optimal cost:" in line:
+            m = re.search(r"Optimal cost:\s*([\d.]+)", line)
+            if m:
+                stats["cost"] = float(m.group(1))
+                stats["feasible"] = True
+        elif "Root lower bound:" in line:
+            m = re.search(r"Root lower bound:\s*([\d.]+)", line)
+            if m:
+                stats["root_lb"] = float(m.group(1))
+        elif "Initial upper bound:" in line:
+            m = re.search(r"Initial upper bound:\s*([\d.]+)", line)
+            if m:
+                stats["init_ub"] = float(m.group(1))
+        elif "Nodes created:" in line:
+            m = re.search(r"Nodes created:\s*(\d+)", line)
+            if m:
+                stats["nodes_created"] = int(m.group(1))
+        elif "Nodes expanded:" in line:
+            m = re.search(r"Nodes expanded:\s*(\d+)", line)
+            if m:
+                stats["nodes_expanded"] = int(m.group(1))
+        elif "Pruned by bound:" in line:
+            m = re.search(r"Pruned by bound:\s*(\d+)", line)
+            if m:
+                stats["pruned_bound"] = int(m.group(1))
+        elif "Pruned infeasible:" in line:
+            m = re.search(r"Pruned infeasible:\s*(\d+)", line)
+            if m:
+                stats["pruned_infeasible"] = int(m.group(1))
+        elif "Tour:" in line:
+            m = re.search(r"Tour:\s*(.*)", line)
+            if m:
+                stats["tour"] = m.group(1).strip()
+
+    return stats
+
+
+def format_val(val, fmt="{}"):
+    """Format a value for table display, showing '-' for None."""
+    if val is None:
+        return "-"
+    return fmt.format(val)
+
+
+def format_cost(val):
+    if val is None:
+        return "-"
+    return f"{val:.0f}"
+
+
+def format_time(seconds):
+    if seconds is None:
+        return "-"
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    elif seconds < 3600:
+        return f"{seconds / 60:.1f}m"
+    else:
+        return f"{seconds / 3600:.1f}h"
+
+
+def run_strategy(instance_path: str, strategy: str) -> dict:
+    """Run solver with a given branch strategy. Returns stats dict + elapsed + stderr."""
+    cmd = [
+        SOLVER,
+        "--method", "exact",
+        "--branch-strategy", strategy,
+        "--exact-max-n", str(MAX_N),
+        "--debug",
+        "--debug-interval", str(DEBUG_INTERVAL),
+        instance_path,
+    ]
+    t0 = time.perf_counter()
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT)
+        elapsed = time.perf_counter() - t0
+        stats = parse_stats(result.stdout)
+        stats["elapsed"] = elapsed
+        stats["timeout"] = False
+        stats["stderr"] = result.stderr
+        stats["rc"] = result.returncode
+    except subprocess.TimeoutExpired:
+        elapsed = TIMEOUT
+        stats = {
+            "cost": None, "feasible": False, "root_lb": None, "init_ub": None,
+            "nodes_created": None, "nodes_expanded": None,
+            "pruned_bound": None, "pruned_infeasible": None,
+            "tour": None, "elapsed": elapsed, "timeout": True, "stderr": "", "rc": -1,
+        }
+    except Exception as e:
+        elapsed = time.perf_counter() - t0
+        stats = {
+            "cost": None, "feasible": False, "root_lb": None, "init_ub": None,
+            "nodes_created": None, "nodes_expanded": None,
+            "pruned_bound": None, "pruned_infeasible": None,
+            "tour": None, "elapsed": elapsed, "timeout": False, "stderr": "", "rc": -1,
+            "error": str(e),
+        }
+
+    return stats
 
 
 def main():
@@ -116,107 +211,135 @@ def main():
     print(f"Found {len(instances)} instances with < {MAX_N} vertices.\n", file=sys.stderr)
 
     output_lines = []
-    output_lines.append("# TSP Solver Results — exhaustive Branching Strategy (Debug)")
+    output_lines.append("# TSP Branch Strategy Comparison — Smart vs Exhaustive vs Simple")
     output_lines.append("")
-    output_lines.append(f"**Total instances found:** {len(instances)}  ")
-    output_lines.append(f"**Solver:** `tsp_bb --method exact --branch-strategy exhaustive --exact-max-n {MAX_N} --debug`  ")
+    output_lines.append(f"**Total instances:** {len(instances)}  ")
+    output_lines.append(f"**Strategies:** Smart, Exhaustive, Simple  ")
     output_lines.append(f"**Max vertices:** < {MAX_N}  ")
+    output_lines.append(f"**Debug interval:** {DEBUG_INTERVAL}  ")
+    output_lines.append(f"**Timeout per run:** {TIMEOUT}s ({TIMEOUT // 3600}h)  ")
+    output_lines.append("")
+    output_lines.append("| Result | Count |")
+    output_lines.append("|--------|-------|")
+    output_lines.append(f"| Instances found | {len(instances)} |")
     output_lines.append("")
     output_lines.append("---")
     output_lines.append("")
 
-    summary_ok = 0
-    summary_fail = 0
-    summary_errors = []
+    # Summary accumulators
+    summary = {s: {"ok": 0, "timeout": 0, "error": 0, "total_time": 0.0, "total_nodes_expanded": 0, "count_nodes": 0}
+               for s in STRATEGIES}
 
     for idx, (path, dim) in enumerate(instances, 1):
         rel_path = os.path.relpath(path, os.path.join(os.path.dirname(__file__), ".."))
-        print(f"[{idx}/{len(instances)}] Running: {rel_path} (n={dim}) ...", file=sys.stderr)
+        print(f"\n[{idx}/{len(instances)}] {rel_path} (n={dim})", file=sys.stderr)
 
-        try:
-            stdout, stderr, rc = run_solver(path)
-        except subprocess.TimeoutExpired:
-            output_lines.append(f"## {idx}. `{rel_path}` (n={dim})")
-            output_lines.append("")
-            output_lines.append("**Status:** TIMEOUT (>30m)")
-            output_lines.append("")
-            summary_fail += 1
-            summary_errors.append(f"{rel_path}: TIMEOUT")
-            continue
-        except Exception as e:
-            output_lines.append(f"## {idx}. `{rel_path}` (n={dim})")
-            output_lines.append("")
-            output_lines.append(f"**Status:** ERROR — {e}")
-            output_lines.append("")
-            summary_fail += 1
-            summary_errors.append(f"{rel_path}: {e}")
-            continue
+        strategies_data = {}
 
+        for strategy in STRATEGIES:
+            label = STRATEGY_LABELS[strategy]
+            print(f"  Running {label}...", file=sys.stderr, end=" ", flush=True)
+            stats = run_strategy(path, strategy)
+            strategies_data[strategy] = stats
+
+            if stats.get("timeout"):
+                print(f"TIMEOUT", file=sys.stderr)
+                summary[strategy]["timeout"] += 1
+            elif stats.get("error"):
+                print(f"ERROR: {stats['error']}", file=sys.stderr)
+                summary[strategy]["error"] += 1
+            elif stats["feasible"]:
+                print(f"cost={stats['cost']:.0f} time={format_time(stats['elapsed'])} expanded={stats['nodes_expanded']}", file=sys.stderr)
+                summary[strategy]["ok"] += 1
+                summary[strategy]["total_time"] += stats["elapsed"]
+                if stats["nodes_expanded"] is not None:
+                    summary[strategy]["total_nodes_expanded"] += stats["nodes_expanded"]
+                    summary[strategy]["count_nodes"] += 1
+            else:
+                print(f"INFEASIBLE", file=sys.stderr)
+                summary[strategy]["ok"] += 1
+                summary[strategy]["total_time"] += stats["elapsed"]
+
+        # --- Instance header ---
         output_lines.append(f"## {idx}. `{rel_path}` (n={dim})")
         output_lines.append("")
 
-        # Parse result
-        if "Optimal cost:" in stdout or "Heuristic cost:" in stdout or "feasible" in stdout.lower():
-            # Extract key metrics
-            for line in stdout.splitlines():
-                if any(k in line for k in ["Problem:", "Dimension:", "Method:", "Root lower bound:",
-                                             "Initial upper bound:", "Nodes created:", "Nodes expanded:",
-                                             "Pruned by bound:", "Pruned infeasible:", "Optimal cost:",
-                                             "Heuristic cost:", "Tour:", "No feasible"]):
-                    output_lines.append(f"```")
-                    output_lines.append(line)
-                    output_lines.append(f"```")
-                    output_lines.append("")
-            summary_ok += 1
-        elif rc != 0:
-            output_lines.append(f"**Status:** FAILED (exit code {rc})")
-            output_lines.append("")
-            summary_fail += 1
-            summary_errors.append(f"{rel_path}: exit code {rc}")
-        else:
-            output_lines.append(f"**Status:** UNKNOWN")
-            output_lines.append("")
-            summary_fail += 1
-            summary_errors.append(f"{rel_path}: unknown result")
+        # --- Comparison table ---
+        output_lines.append("| Strategy | Cost | Time | Nodes Created | Nodes Expanded | Pruned (Bound) | Pruned (Infeasible) | Root LB | Init UB |")
+        output_lines.append("|----------|------|------|---------------|----------------|----------------|---------------------|---------|---------|")
 
-        # Debug output
-        if stderr:
-            output_lines.append("<details>")
-            output_lines.append("<summary>Debug output (stderr)</summary>")
-            output_lines.append("")
-            output_lines.append("```")
-            output_lines.append(stderr.strip())
-            output_lines.append("```")
-            output_lines.append("</details>")
-            output_lines.append("")
+        # Determine consensus cost for highlighting
+        costs = {}
+        for s in STRATEGIES:
+            st = strategies_data[s]
+            if st["feasible"] and not st.get("timeout"):
+                costs[s] = st["cost"]
 
-    # Summary
-    output_lines.insert(4, f"**Successful:** {summary_ok}  ")
-    output_lines.insert(5, f"**Failed:** {summary_fail}  ")
-    output_lines.insert(6, "")
+        for strategy in STRATEGIES:
+            tag = STRATEGY_LABELS[strategy]
+            st = strategies_data[strategy]
 
-    output_lines.append("---")
+            if st.get("timeout"):
+                output_lines.append(f"| {tag} | TIMEOUT | {format_time(st['elapsed'])} | - | - | - | - | - | - |")
+            elif st.get("error"):
+                output_lines.append(f"| {tag} | ERROR | - | - | - | - | - | - | - |")
+            else:
+                cost_str = format_cost(st["cost"])
+                time_str = format_time(st["elapsed"])
+                created = format_val(st["nodes_created"])
+                expanded = format_val(st["nodes_expanded"])
+                pruned_b = format_val(st["pruned_bound"])
+                pruned_i = format_val(st["pruned_infeasible"])
+                root_lb = format_cost(st["root_lb"])
+                init_ub = format_cost(st["init_ub"])
+                output_lines.append(
+                    f"| {tag} | {cost_str} | {time_str} | {created} | {expanded} | {pruned_b} | {pruned_i} | {root_lb} | {init_ub} |"
+                )
+
+        output_lines.append("")
+
+        # --- Debug outputs ---
+        for strategy in STRATEGIES:
+            tag = STRATEGY_LABELS[strategy]
+            st = strategies_data[strategy]
+            debug_output = st.get("stderr", "")
+            if debug_output.strip():
+                output_lines.append(f"<details>")
+                output_lines.append(f"<summary>{tag} debug output</summary>")
+                output_lines.append("")
+                output_lines.append("```")
+                output_lines.append(debug_output.strip())
+                output_lines.append("```")
+                output_lines.append("</details>")
+                output_lines.append("")
+
+        output_lines.append("---")
+        output_lines.append("")
+
+    # --- Final summary ---
     output_lines.append("")
     output_lines.append("## Summary")
     output_lines.append("")
-    output_lines.append(f"| Result | Count |")
-    output_lines.append(f"|--------|-------|")
-    output_lines.append(f"| Optimal/Has Tour | {summary_ok} |")
-    output_lines.append(f"| Failed/Timeout | {summary_fail} |")
-    output_lines.append(f"| **Total** | {len(instances)} |")
+    output_lines.append("| Strategy | Solved | Timeout | Error | Avg Time (s) | Avg Nodes Expanded | Total Nodes Expanded |")
+    output_lines.append("|----------|--------|---------|-------|--------------|-------------------|---------------------|")
+
+    for strategy in STRATEGIES:
+        tag = STRATEGY_LABELS[strategy]
+        s = summary[strategy]
+        ok = s["ok"]
+        timeout = s["timeout"]
+        error = s["error"]
+        avg_time = s["total_time"] / ok if ok > 0 else 0
+        avg_nodes = s["total_nodes_expanded"] / s["count_nodes"] if s["count_nodes"] > 0 else 0
+        total_nodes = s["total_nodes_expanded"]
+        output_lines.append(f"| {tag} | {ok} | {timeout} | {error} | {avg_time:.1f} | {avg_nodes:.0f} | {total_nodes} |")
+
     output_lines.append("")
 
-    if summary_errors:
-        output_lines.append("### Failures")
-        output_lines.append("")
-        for err in summary_errors:
-            output_lines.append(f"- `{err}`")
-        output_lines.append("")
-
-    out_path = os.path.join(os.path.dirname(__file__), "..", "docs", "exhaustive-branch-results.md")
+    out_path = os.path.join(os.path.dirname(__file__), "..", "docs", "branch-strategy-comparison.md")
     with open(out_path, "w") as f:
         f.write("\n".join(output_lines))
-    print(f"\nResults written to: {out_path}", file=sys.stderr)
+    print(f"\n\nResults written to: {out_path}", file=sys.stderr)
 
 
 if __name__ == "__main__":

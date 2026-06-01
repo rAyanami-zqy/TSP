@@ -69,10 +69,12 @@ struct HeuristicOptions {
 // 当前实现面向对称 TSP：dist[i][j] 必须等于 dist[j][i]。
 // 分支策略：
 // Smart      — 优先对 1-tree 中度数最大的顶点选边分支（单边，二分叉）。
-// Exhaustive — 从未决边中选一条（权重最大）做 force/forbid 二分支。
+// Exhaustive — 对所有未决边同时展开 force/forbid 分支。
+// Simple     — 任选一条未决边做 force/forbid 二分叉，无启发式选择。
 enum class BranchStrategy {
     Smart,
-    Exhaustive
+    Exhaustive,
+    Simple
 };
 
 class BranchBoundSolver {

@@ -304,7 +304,7 @@ void printUsage(const char* program)
               << "  " << program << " [options] --batch <list-file>\n"
               << "\nOptions:\n"
               << "  --method <auto|exact|heuristic>\n"
-              << "  --branch-strategy <smart|exhaustive>\n"
+              << "  --branch-strategy <smart|exhaustive|simple>\n"
               << "  --exact-max-n <n>\n"
               << "  --starts <n>\n"
               << "  --nearest-scan-limit <n>\n"
@@ -349,8 +349,10 @@ CliOptions parseArgs(int argc, char** argv)
                 options.branch_strategy = tsp::BranchStrategy::Smart;
             } else if (value == "exhaustive") {
                 options.branch_strategy = tsp::BranchStrategy::Exhaustive;
+            } else if (value == "simple") {
+                options.branch_strategy = tsp::BranchStrategy::Simple;
             } else {
-                throw std::runtime_error("--branch-strategy must be smart or exhaustive");
+                throw std::runtime_error("--branch-strategy must be smart, exhaustive, or simple");
             }
         } else if (arg == "--method") {
             options.method = require_value(arg);
