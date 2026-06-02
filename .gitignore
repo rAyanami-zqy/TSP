@@ -6,6 +6,5 @@ cmake-build-*/
 *.out
 *.tsp
 tsplib/
-concorde/
 __pycache__/
 *.pyc
