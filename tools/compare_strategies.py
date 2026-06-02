@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """
-Compare 3 branch strategies (Smart,Simple) on all TSP instances
-under examples/. Verifies optimality via Held-Karp DP from verify_instances.py.
+Unified TSP comparison script.
+
+Algorithms compared:
+  1. Held-Karp Dynamic Programming (ground truth, exact)
+  2. tsp_bb Smart branch strategy  (exact B&B)
+  3. tsp_bb Simple branch strategy (exact B&B)
+  4. Concorde                       (exact, state-of-the-art)
 
 Output: docs/strategy-comparison-results.md
 """
@@ -12,21 +17,31 @@ import os
 import re
 import time
 import math
+import shutil
+import tempfile
 from pathlib import Path
 
-PROJECT_ROOT = os.path.join(os.path.dirname(__file__), "..")
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 SOLVER = os.path.join(PROJECT_ROOT, "build", "tsp_bb")
+CONCORDE = os.path.join(PROJECT_ROOT, "concorde", "TSP", "concorde")
+CONVERTER = os.path.join(PROJECT_ROOT, "tools", "convert_to_tsplib.py")
 EXAMPLES_DIR = os.path.join(PROJECT_ROOT, "examples")
 OUT_PATH = os.path.join(PROJECT_ROOT, "docs", "strategy-comparison-results.md")
 
-TIMEOUT = 3600  # 1 hour per instance-strategy
+TIMEOUT = 3600  # 1 hour per instance-method
 DEBUG_INTERVAL = 10000
-STRATEGIES = ["smart", "simple"]
-STRATEGY_LABELS = {"smart": "Smart", "simple": "Simple"}
+
+# Algorithm IDs
+ALG_DP       = "DP"          # Held-Karp DP (ground truth)
+ALG_SMART    = "Smart"       # tsp_bb exact + smart branch
+ALG_SIMPLE   = "Simple"      # tsp_bb exact + simple branch
+ALG_CONCORDE = "Concorde"    # Concorde exact solver
+
+ALL_ALGORITHMS = [ALG_DP, ALG_SMART, ALG_SIMPLE, ALG_CONCORDE]
 
 INF = float("inf")
 
-# ── Held-Karp DP (adapted from verify_instances.py) ────────────────────
+# ── Held-Karp DP (ground truth) ──────────────────────────────────────
 
 def held_karp(matrix: list[list[float]]) -> tuple[float, list[int]]:
     """Return (optimal_cost, optimal_tour). Returns (INF, []) if infeasible."""
@@ -76,7 +91,6 @@ def held_karp(matrix: list[list[float]]) -> tuple[float, list[int]]:
     if best_last < 0:
         return INF, []
 
-    # Reconstruct tour
     tour = []
     mask = full_mask
     v = best_last
@@ -96,9 +110,10 @@ def find_example_instances() -> list[tuple[str, int]]:
     """Find all TSP instances under examples/. Returns [(path, dimension), ...]."""
     instances = []
     for dirpath, dirnames, filenames in os.walk(EXAMPLES_DIR):
-        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+        dirnames[:] = [d for d in dirnames if not d.startswith(".")
+                       and d not in ("tsplib",)]
         for fname in sorted(filenames):
-            if fname.startswith(".") or fname.endswith(".gz"):
+            if fname.startswith(".") or fname.endswith((".gz", ".tsp")):
                 continue
             if fname == "batch.txt":
                 continue
@@ -144,7 +159,6 @@ def load_distance_matrix(filepath: str) -> tuple[list[list[float]], int]:
     if "EDGE_WEIGHT_SECTION" in content.upper():
         return _load_tsplib_explicit(filepath)
 
-    # Plain matrix: first token = n, then n*n values
     tokens = content.split()
     n = int(tokens[0])
     matrix = [[0.0] * n for _ in range(n)]
@@ -298,10 +312,113 @@ def _load_tsplib_explicit(filepath: str) -> tuple[list[list[float]], int]:
     return matrix, dimension
 
 
-# ── Solver Wrapper ────────────────────────────────────────────────────
+# ── Format Detection ─────────────────────────────────────────────────
 
-def parse_solver_stats(stdout: str) -> dict:
-    """Extract solver statistics from human-readable output."""
+def is_tsplib_format(filepath: str) -> bool:
+    """Check if a file is in TSPLIB format (has section markers or header keywords)."""
+    with open(filepath, "r") as f:
+        content = f.read(4096)
+    upper = content.upper()
+    for marker in ("EDGE_WEIGHT_SECTION", "NODE_COORD_SECTION",
+                    "EDGE_WEIGHT_TYPE", "TYPE:", "NAME:"):
+        if marker in upper:
+            return True
+    return False
+
+
+# ── Concorde Wrapper ─────────────────────────────────────────────────
+
+def ensure_tsplib_for_concorde(instance_path: str, tmpdir: str) -> str:
+    """Convert instance to TSPLIB format if needed. Returns path Concorde can read."""
+    if is_tsplib_format(instance_path):
+        return instance_path
+
+    # Convert raw matrix to TSPLIB using the converter script
+    basename = os.path.splitext(os.path.basename(instance_path))[0]
+    out_path = os.path.join(tmpdir, basename + ".tsp")
+
+    result = subprocess.run(
+        [sys.executable, CONVERTER, instance_path, "-o", out_path],
+        capture_output=True, text=True, timeout=10
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"TSPLIB conversion failed: {result.stderr}")
+
+    return out_path
+
+
+def parse_concorde_output(stdout: str) -> dict:
+    """Extract Concorde solving statistics."""
+    stats = {
+        "cost": None, "feasible": False, "time": None,
+        "bbnodes": None, "status": "unknown",
+    }
+    for line in stdout.splitlines():
+        if "Optimal Solution:" in line:
+            m = re.search(r"Optimal Solution:\s*([\d.]+)", line)
+            if m:
+                stats["cost"] = float(m.group(1))
+                stats["feasible"] = True
+                stats["status"] = "optimal"
+        elif "Total Running Time:" in line:
+            m = re.search(r"Total Running Time:\s*([\d.]+)", line)
+            if m:
+                stats["time"] = float(m.group(1))
+        elif "Number of bbnodes:" in line:
+            m = re.search(r"Number of bbnodes:\s*(\d+)", line)
+            if m:
+                stats["bbnodes"] = int(m.group(1))
+        elif "ERROR:" in line:
+            stats["status"] = "error"
+            stats["error_msg"] = line.strip()
+    return stats
+
+
+def run_concorde(instance_path: str, seed: int = 123) -> dict:
+    """Run Concorde on an instance. Returns stats dict with elapsed time."""
+    tmpdir = tempfile.mkdtemp(prefix="concorde_tmp_")
+    try:
+        tsplib_path = ensure_tsplib_for_concorde(instance_path, tmpdir)
+
+        cmd = [
+            CONCORDE,
+            "-s", str(seed),
+            tsplib_path,
+        ]
+        t0 = time.perf_counter()
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT)
+            elapsed = time.perf_counter() - t0
+            stats = parse_concorde_output(result.stdout)
+            stats["elapsed"] = elapsed
+            stats["timeout"] = False
+            stats["error"] = None
+            stats["stderr"] = result.stderr
+        except subprocess.TimeoutExpired:
+            stats = _empty_stats_concorde()
+            stats["elapsed"] = TIMEOUT
+            stats["timeout"] = True
+        except Exception as e:
+            stats = _empty_stats_concorde()
+            stats["elapsed"] = time.perf_counter() - t0
+            stats["error"] = str(e)
+        return stats
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def _empty_stats_concorde() -> dict:
+    return {
+        "cost": None, "feasible": False, "time": None, "bbnodes": None,
+        "status": "unknown", "elapsed": 0.0, "timeout": False,
+        "error": None, "stderr": "",
+    }
+
+
+# ── tsp_bb Solver Wrapper ────────────────────────────────────────────
+
+def parse_tspbb_stats(stdout: str) -> dict:
+    """Extract solver statistics from tsp_bb human-readable output."""
     stats = {
         "cost": None, "feasible": False, "root_lb": None, "init_ub": None,
         "nodes_created": None, "nodes_expanded": None,
@@ -351,8 +468,8 @@ def parse_solver_stats(stdout: str) -> dict:
     return stats
 
 
-def run_strategy(instance_path: str, strategy: str) -> dict:
-    """Run solver with a branch strategy. Returns stats dict with elapsed time."""
+def run_tspbb(instance_path: str, strategy: str) -> dict:
+    """Run tsp_bb solver with a branch strategy. Returns stats dict with elapsed time."""
     cmd = [
         SOLVER,
         "--method", "exact",
@@ -366,23 +483,23 @@ def run_strategy(instance_path: str, strategy: str) -> dict:
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT)
         elapsed = time.perf_counter() - t0
-        stats = parse_solver_stats(result.stdout)
+        stats = parse_tspbb_stats(result.stdout)
         stats["elapsed"] = elapsed
         stats["timeout"] = False
         stats["error"] = None
         stats["stderr"] = result.stderr
     except subprocess.TimeoutExpired:
-        stats = _empty_stats()
+        stats = _empty_stats_tspbb()
         stats["elapsed"] = TIMEOUT
         stats["timeout"] = True
     except Exception as e:
-        stats = _empty_stats()
+        stats = _empty_stats_tspbb()
         stats["elapsed"] = time.perf_counter() - t0
         stats["error"] = str(e)
     return stats
 
 
-def _empty_stats() -> dict:
+def _empty_stats_tspbb() -> dict:
     return {
         "cost": None, "feasible": False, "root_lb": None, "init_ub": None,
         "nodes_created": None, "nodes_expanded": None,
@@ -403,6 +520,8 @@ def fmt_cost(val) -> str:
 def fmt_time(sec: float | None) -> str:
     if sec is None:
         return "-"
+    if sec < 0.001:
+        return "<1ms"
     if sec < 1:
         return f"{sec * 1000:.0f}ms"
     if sec < 60:
@@ -418,12 +537,29 @@ def fmt_val(val, template="{}") -> str:
     return template.format(val)
 
 
+def cost_match(alg_cost: float | None, dp_cost: float) -> str:
+    """Return emoji match indicator."""
+    if alg_cost is None:
+        return "-"
+    if dp_cost >= INF / 2:
+        return "-"
+    if abs(alg_cost - dp_cost) < 1e-6:
+        return ":white_check_mark:"
+    return ":x:"
+
+
 # ── Main ──────────────────────────────────────────────────────────────
 
 def main():
+    # Validate prerequisites
+    errors = []
     if not os.path.isfile(SOLVER):
-        print(f"Error: solver not found at {SOLVER}", file=sys.stderr)
-        print("Build first: cd build && cmake .. && make", file=sys.stderr)
+        errors.append(f"tsp_bb solver not found: {SOLVER} (run: cd build && cmake .. && make)")
+    if not os.path.isfile(CONCORDE):
+        errors.append(f"Concorde not found: {CONCORDE}")
+    if errors:
+        for e in errors:
+            print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
     instances = find_example_instances()
@@ -434,11 +570,20 @@ def main():
     print(f"Found {len(instances)} instances in examples/\n", file=sys.stderr)
 
     lines = []
-    lines.append("# TSP Branch Strategy Comparison — Smart vs Simple")
+    lines.append("# TSP Algorithm Comparison")
     lines.append("")
-    lines.append(f"**Instances:** {len(instances)} (from `examples/` only)  ")
-    lines.append(f"**Verification:** Held-Karp Dynamic Programming  ")
-    lines.append(f"**Timeout:** {TIMEOUT}s ({TIMEOUT // 3600}h) per strategy per instance  ")
+    lines.append("## Algorithms Compared")
+    lines.append("")
+    lines.append("| Algorithm | Description |")
+    lines.append("|---|---|")
+    lines.append("| **DP** | Held-Karp Dynamic Programming (exact, ground truth) |")
+    lines.append("| **Smart** | Branch & Bound with smart branching (1-tree degree + edge candidate) |")
+    lines.append("| **Simple** | Branch & Bound with simple branching (max-degree vertex) |")
+    lines.append("| **Concorde** | State-of-the-art Concorde TSP solver (exact, with QSopt LP) |")
+    lines.append("")
+    lines.append(f"**Instances:** {len(instances)} from `examples/`  ")
+    lines.append(f"**Timeout:** {TIMEOUT}s ({TIMEOUT // 3600}h) per method per instance  ")
+    lines.append(f"**Ground truth:** Held-Karp DP  ")
     lines.append("")
     lines.append("---")
     lines.append("")
@@ -451,14 +596,22 @@ def main():
 
     flush()
 
-    summary = {s: {"ok": 0, "timeout": 0, "error": 0, "wrong_cost": 0,
-                   "total_time": 0.0, "total_nodes_expanded": 0, "count_nodes": 0,
-                   "total_nodes_created": 0}
-               for s in STRATEGIES}
+    # Summary accumulators (excludes DP as it's ground truth)
+    summary = {
+        alg: {"ok": 0, "timeout": 0, "error": 0, "wrong_cost": 0,
+              "total_time": 0.0, "total_bbnodes": 0, "count_nodes": 0}
+        for alg in [ALG_SMART, ALG_SIMPLE, ALG_CONCORDE]
+    }
+
+    # Concorde seed — fixed for reproducibility
+    concorde_seed = 123
+
+    # Collect per-instance data for summary matrix
+    per_instance = []
 
     for idx, (path, dim) in enumerate(instances, 1):
         rel_path = os.path.relpath(path, PROJECT_ROOT)
-        print(f"[{idx}/{len(instances)}] {rel_path} (n={dim})", file=sys.stderr)
+        print(f"\n[{idx}/{len(instances)}] {rel_path} (n={dim})", file=sys.stderr)
 
         # ── Load matrix + DP ground truth ──
         try:
@@ -474,56 +627,95 @@ def main():
             flush()
             continue
 
-        print(f"  Held-Karp DP...", file=sys.stderr, end=" ", flush=True)
+        print(f"  DP...", file=sys.stderr, end=" ", flush=True)
         dp_t0 = time.perf_counter()
         dp_cost, dp_tour = held_karp(matrix)
         dp_elapsed = time.perf_counter() - dp_t0
-        if dp_cost >= INF / 2:
-            print(f"INFEASIBLE", file=sys.stderr)
-            dp_cost_str = "infeasible"
-        else:
+        dp_feasible = dp_cost < INF / 2
+        if dp_feasible:
             print(f"optimal={dp_cost:.0f} time={fmt_time(dp_elapsed)}", file=sys.stderr)
-            dp_cost_str = fmt_cost(dp_cost)
+        else:
+            print(f"INFEASIBLE", file=sys.stderr)
 
-        # ── Run all 3 strategies ──
-        strategies_data = {}
-        for strategy in STRATEGIES:
-            label = STRATEGY_LABELS[strategy]
-            print(f"  {label}...", file=sys.stderr, end=" ", flush=True)
-            stats = run_strategy(path, strategy)
-            strategies_data[strategy] = stats
+        # ── Run all algorithms (collect results) ──
+        results = {}
 
-            if stats["timeout"]:
-                print(f"TIMEOUT", file=sys.stderr)
-                summary[strategy]["timeout"] += 1
-            elif stats["error"]:
-                print(f"ERROR: {stats['error']}", file=sys.stderr)
-                summary[strategy]["error"] += 1
-            elif stats["feasible"]:
-                correct = True
-                if dp_cost < INF / 2 and abs(stats["cost"] - dp_cost) > 1e-6:
-                    correct = False
-                    summary[strategy]["wrong_cost"] += 1
-                    print(f"cost={stats['cost']:.0f} WRONG (dp={dp_cost:.0f})", file=sys.stderr)
-                else:
-                    tag = "OK" if dp_cost >= INF / 2 else f"OK (=DP)"
-                    print(f"cost={stats['cost']:.0f} {tag} time={fmt_time(stats['elapsed'])} expanded={stats['nodes_expanded']}", file=sys.stderr)
-                summary[strategy]["ok"] += 1
-                summary[strategy]["total_time"] += stats["elapsed"]
-                if stats["nodes_expanded"] is not None:
-                    summary[strategy]["total_nodes_expanded"] += stats["nodes_expanded"]
-                    summary[strategy]["count_nodes"] += 1
-                if stats["nodes_created"] is not None:
-                    summary[strategy]["total_nodes_created"] += stats["nodes_created"]
+        # DP (already computed)
+        results[ALG_DP] = {
+            "cost": dp_cost if dp_feasible else None,
+            "feasible": dp_feasible,
+            "elapsed": dp_elapsed,
+            "bbnodes": None,
+            "timeout": False,
+            "error": None,
+            "stderr": "",
+            "root_lb": None, "init_ub": None,
+            "nodes_created": None, "nodes_expanded": None,
+            "pruned_bound": None, "pruned_infeasible": None,
+            "tour": None, "tour_list": dp_tour if dp_feasible else None,
+        }
+
+        # Smart B&B
+        print(f"  Smart...", file=sys.stderr, end=" ", flush=True)
+        st = run_tspbb(path, "smart")
+        results[ALG_SMART] = st
+        _print_solver_status(ALG_SMART, st, dp_cost)
+
+        # Simple B&B
+        print(f"  Simple...", file=sys.stderr, end=" ", flush=True)
+        st = run_tspbb(path, "simple")
+        results[ALG_SIMPLE] = st
+        _print_solver_status(ALG_SIMPLE, st, dp_cost)
+
+        # Concorde
+        print(f"  Concorde...", file=sys.stderr, end=" ", flush=True)
+        st = run_concorde(path, concorde_seed)
+        results[ALG_CONCORDE] = st
+        if st["timeout"]:
+            print(f"TIMEOUT", file=sys.stderr)
+        elif st["error"]:
+            print(f"ERROR: {st['error']}", file=sys.stderr)
+        else:
+            c_cost = st.get("cost")
+            c_time = st.get("elapsed", 0)
+            c_bb = st.get("bbnodes")
+            if c_cost is not None:
+                match = "OK" if abs(c_cost - dp_cost) < 1e-6 else "WRONG"
+                print(f"cost={c_cost:.0f} {match} time={fmt_time(c_time)} bbnodes={c_bb}", file=sys.stderr)
             else:
-                print(f"INFEASIBLE", file=sys.stderr)
-                summary[strategy]["ok"] += 1
-                summary[strategy]["total_time"] += stats["elapsed"]
+                print(f"no solution time={fmt_time(c_time)}", file=sys.stderr)
+
+        # ── Update summary ──
+        for alg in [ALG_SMART, ALG_SIMPLE, ALG_CONCORDE]:
+            st = results[alg]
+            if st["timeout"]:
+                summary[alg]["timeout"] += 1
+            elif st["error"]:
+                summary[alg]["error"] += 1
+            elif st.get("feasible"):
+                if dp_feasible and abs(st["cost"] - dp_cost) > 1e-6:
+                    summary[alg]["wrong_cost"] += 1
+                else:
+                    summary[alg]["ok"] += 1
+                summary[alg]["total_time"] += st["elapsed"]
+                # B&B node counts
+                bbnodes = None
+                if alg == ALG_CONCORDE:
+                    bbnodes = st.get("bbnodes")
+                else:
+                    bbnodes = st.get("nodes_created")
+                if bbnodes is not None:
+                    summary[alg]["total_bbnodes"] += bbnodes
+                    summary[alg]["count_nodes"] += 1
+            else:
+                # Infeasible — count as OK if DP also infeasible
+                summary[alg]["ok"] += 1
+                summary[alg]["total_time"] += st["elapsed"]
 
         # ── Instance output ──
         lines.append(f"## {idx}. `{rel_path}` (n={dim})")
         lines.append("")
-        lines.append(f"**DP optimal cost:** {dp_cost_str}  ")
+        lines.append(f"**DP optimal cost:** {fmt_cost(dp_cost) if dp_feasible else 'infeasible'}  ")
         lines.append(f"**DP time:** {fmt_time(dp_elapsed)}  ")
         lines.append("")
 
@@ -532,53 +724,65 @@ def main():
             lines.append(f"**DP optimal tour:** `{tour_str}`  ")
             lines.append("")
 
-        # Comparison table
-        lines.append("| Strategy | Cost | Match | Time | Created | Expanded | Pruned(Bound) | Pruned(Infeas) | Root LB | Init UB |")
-        lines.append("|----------|------|-------|------|---------|----------|---------------|----------------|---------|---------|")
+        # Results table — all 4 algorithms
+        lines.append("| Algorithm | Cost | Match DP | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |")
+        lines.append("|-----------|------|----------|------|---------------|----------------|---------------|----------------|---------|")
 
-        for strategy in STRATEGIES:
-            tag = STRATEGY_LABELS[strategy]
-            st = strategies_data[strategy]
+        for alg in ALL_ALGORITHMS:
+            st = results[alg]
+            label = alg
 
             if st["timeout"]:
-                lines.append(f"| {tag} | TIMEOUT | - | {fmt_time(st['elapsed'])} | - | - | - | - | - | - |")
+                lines.append(f"| {label} | TIMEOUT | - | {fmt_time(st['elapsed'])} | - | - | - | - | - |")
             elif st["error"]:
-                lines.append(f"| {tag} | ERROR | - | - | - | - | - | - | - | - |")
-            else:
-                cost_s = fmt_cost(st["cost"])
-                if dp_cost < INF / 2 and st["feasible"]:
-                    match = ":white_check_mark:" if abs(st["cost"] - dp_cost) < 1e-6 else ":x:"
-                elif not st["feasible"] and dp_cost >= INF / 2:
-                    match = ":white_check_mark:"
-                elif not st["feasible"]:
-                    match = ":x:"
-                else:
-                    match = "-"
+                lines.append(f"| {label} | ERROR | - | - | - | - | - | - | - |")
+            elif alg == ALG_DP:
+                cost_s = fmt_cost(st["cost"]) if st["feasible"] else "infeasible"
                 lines.append(
-                    f"| {tag} | {cost_s} | {match} | {fmt_time(st['elapsed'])} "
-                    f"| {fmt_val(st['nodes_created'])} | {fmt_val(st['nodes_expanded'])} "
-                    f"| {fmt_val(st['pruned_bound'])} | {fmt_val(st['pruned_infeasible'])} "
-                    f"| {fmt_cost(st['root_lb'])} | {fmt_cost(st['init_ub'])} |"
+                    f"| {label} | {cost_s} | N/A | {fmt_time(st['elapsed'])} "
+                    f"| - | - | - | - | - |"
                 )
+            else:
+                cost_s = fmt_cost(st.get("cost"))
+                match = cost_match(st.get("cost"), dp_cost)
+                if alg == ALG_CONCORDE:
+                    lines.append(
+                        f"| {label} | {cost_s} | {match} | {fmt_time(st['elapsed'])} "
+                        f"| - | - | - | - | {fmt_val(st.get('bbnodes'))} |"
+                    )
+                else:
+                    lines.append(
+                        f"| {label} | {cost_s} | {match} | {fmt_time(st['elapsed'])} "
+                        f"| {fmt_val(st.get('nodes_created'))} | {fmt_val(st.get('nodes_expanded'))} "
+                        f"| {fmt_val(st.get('pruned_bound'))} | {fmt_val(st.get('pruned_infeasible'))} "
+                        f"| - |"
+                    )
         lines.append("")
 
-        # Per-strategy tours
+        # Tours
         tour_lines = []
-        for strategy in STRATEGIES:
-            tag = STRATEGY_LABELS[strategy]
-            st = strategies_data[strategy]
-            if st.get("tour_list") and len(st["tour_list"]) > 1:
-                unique_tour = list(dict.fromkeys(st["tour_list"]))
-                cost_info = ""
-                if dp_cost < INF / 2 and st["feasible"]:
-                    if abs(st["cost"] - dp_cost) < 1e-6:
-                        cost_info = " (=DP)"
-                    else:
-                        cost_info = " (DIFFERS from DP)"
-                tour_lines.append(
-                    f"- **{tag}:** `{' -> '.join(str(v) for v in unique_tour)}` "
-                    f"cost={fmt_cost(st['cost'])}{cost_info}"
-                )
+        for alg in ALL_ALGORITHMS:
+            st = results[alg]
+            if alg == ALG_DP:
+                if st.get("tour_list"):
+                    tour = st["tour_list"]
+                    t_str = " -> ".join(str(v) for v in tour) + f" -> {tour[0]}"
+                    tour_lines.append(
+                        f"- **{alg} (ground truth):** `{t_str}` cost={fmt_cost(st['cost'])}"
+                    )
+            else:
+                if st.get("tour_list") and len(st["tour_list"]) > 1:
+                    unique_tour = list(dict.fromkeys(st["tour_list"]))
+                    cost_info = ""
+                    if dp_feasible and st.get("feasible"):
+                        if abs(st["cost"] - dp_cost) < 1e-6:
+                            cost_info = " (=DP)"
+                        else:
+                            cost_info = " (DIFFERS from DP)"
+                    tour_lines.append(
+                        f"- **{alg}:** `{' -> '.join(str(v) for v in unique_tour)}` "
+                        f"cost={fmt_cost(st.get('cost'))}{cost_info}"
+                    )
 
         if tour_lines:
             lines.append("**Tours found:**")
@@ -586,19 +790,34 @@ def main():
             lines.append("")
 
         # Debug output (collapsible)
-        for strategy in STRATEGIES:
-            tag = STRATEGY_LABELS[strategy]
-            st = strategies_data[strategy]
+        for alg in [ALG_SMART, ALG_SIMPLE, ALG_CONCORDE]:
+            st = results[alg]
             debug_text = st.get("stderr", "")
             if debug_text.strip():
                 lines.append(f"<details>")
-                lines.append(f"<summary>{tag} debug output</summary>")
+                lines.append(f"<summary>{alg} debug output</summary>")
                 lines.append("")
                 lines.append("```")
                 lines.append(debug_text.strip())
                 lines.append("```")
                 lines.append("</details>")
                 lines.append("")
+
+        # ── Collect per-instance data for matrix ──
+        dp_solved = results[ALG_DP]["feasible"]
+        per_instance.append({
+            "idx": idx,
+            "name": rel_path,
+            "n": dim,
+            "dp_cost": fmt_cost(results[ALG_DP]["cost"]) if dp_solved else "infeasible",
+            "dp_time": fmt_time(results[ALG_DP]["elapsed"]),
+            "smart_cost": fmt_cost(results[ALG_SMART].get("cost")) if results[ALG_SMART].get("feasible") else ("ERR" if results[ALG_SMART]["error"] else "TO" if results[ALG_SMART]["timeout"] else "-"),
+            "smart_time": fmt_time(results[ALG_SMART]["elapsed"]),
+            "simple_cost": fmt_cost(results[ALG_SIMPLE].get("cost")) if results[ALG_SIMPLE].get("feasible") else ("ERR" if results[ALG_SIMPLE]["error"] else "TO" if results[ALG_SIMPLE]["timeout"] else "-"),
+            "simple_time": fmt_time(results[ALG_SIMPLE]["elapsed"]),
+            "concorde_cost": fmt_cost(results[ALG_CONCORDE].get("cost")) if results[ALG_CONCORDE].get("feasible") else ("ERR" if results[ALG_CONCORDE]["error"] else "TO" if results[ALG_CONCORDE]["timeout"] else "-"),
+            "concorde_time": fmt_time(results[ALG_CONCORDE]["elapsed"]),
+        })
 
         lines.append("---")
         lines.append("")
@@ -608,27 +827,63 @@ def main():
     lines.append("")
     lines.append("## Summary")
     lines.append("")
-    lines.append("| Strategy | Solved | Timeout | Error | Wrong Cost | Total Time | Avg Time | Avg Expanded | Total Expanded | Total Created |")
-    lines.append("|----------|--------|---------|-------|------------|------------|----------|--------------|----------------|---------------|")
 
-    for strategy in STRATEGIES:
-        tag = STRATEGY_LABELS[strategy]
-        s = summary[strategy]
+    # Overall table
+    lines.append("| Algorithm | Solved | Timeout | Error | Wrong Cost | Total Time | Avg Time | Avg B&B Nodes | Total B&B Nodes |")
+    lines.append("|-----------|--------|---------|-------|------------|------------|----------|---------------|-----------------|")
+
+    for alg in [ALG_SMART, ALG_SIMPLE, ALG_CONCORDE]:
+        s = summary[alg]
         ok = s["ok"]
         timeout = s["timeout"]
         error = s["error"]
         wrong = s["wrong_cost"]
         total_time = s["total_time"]
         avg_time = total_time / ok if ok > 0 else 0
-        avg_nodes = s["total_nodes_expanded"] / s["count_nodes"] if s["count_nodes"] > 0 else 0
+        avg_bb = s["total_bbnodes"] / s["count_nodes"] if s["count_nodes"] > 0 else 0
         lines.append(
-            f"| {tag} | {ok} | {timeout} | {error} | {wrong} | {fmt_time(total_time)} "
-            f"| {fmt_time(avg_time)} | {avg_nodes:.0f} | {s['total_nodes_expanded']} | {s['total_nodes_created']} |"
+            f"| {alg} | {ok} | {timeout} | {error} | {wrong} | {fmt_time(total_time)} "
+            f"| {fmt_time(avg_time)} | {avg_bb:.0f} | {s['total_bbnodes']} |"
         )
     lines.append("")
+
+    # Per-instance comparison matrix
+    lines.append("### Per-Instance Results Matrix")
+    lines.append("")
+    header = "| # | Instance | n | DP Cost | Smart Cost | Simple Cost | Concorde Cost | DP Time | Smart Time | Simple Time | Concorde Time |"
+    lines.append(header)
+    sep = "|---|---|---|---|---|---|---|---|---|---|---|"
+    lines.append(sep)
+
+    for pi in per_instance:
+        lines.append(
+            f"| {pi['idx']} | `{pi['name']}` | {pi['n']} "
+            f"| {pi['dp_cost']} | {pi['smart_cost']} | {pi['simple_cost']} | {pi['concorde_cost']} "
+            f"| {pi['dp_time']} | {pi['smart_time']} | {pi['simple_time']} | {pi['concorde_time']} |"
+        )
+    lines.append("")
+
     flush()
 
     print(f"\nResults written to: {OUT_PATH}", file=sys.stderr)
+
+
+def _print_solver_status(label: str, stats: dict, dp_cost: float):
+    """Print a one-line solver status to stderr."""
+    if stats["timeout"]:
+        print(f"TIMEOUT", file=sys.stderr)
+    elif stats["error"]:
+        print(f"ERROR: {stats['error']}", file=sys.stderr)
+    elif stats["feasible"]:
+        cost = stats["cost"]
+        expanded = stats.get("nodes_expanded")
+        if dp_cost < INF / 2:
+            tag = "OK (=DP)" if abs(cost - dp_cost) < 1e-6 else f"WRONG (dp={dp_cost:.0f})"
+        else:
+            tag = "OK (infeasible verified)"
+        print(f"cost={cost:.0f} {tag} time={fmt_time(stats['elapsed'])} expanded={expanded}", file=sys.stderr)
+    else:
+        print(f"INFEASIBLE", file=sys.stderr)
 
 
 if __name__ == "__main__":
