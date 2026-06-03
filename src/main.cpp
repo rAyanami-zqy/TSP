@@ -15,14 +15,12 @@
 namespace {
 
 struct CliOptions {
-    std::string method = "auto";
     std::string input_path;
     std::string batch_path;
-    std::size_t exact_max_n = 12;
+    std::size_t exact_max_n = 10000;
     bool debug = false;
-    std::size_t debug_interval = 1000;
+    std::size_t debug_interval = 10000;
     tsp::BranchStrategy branch_strategy = tsp::BranchStrategy::Smart;
-    tsp::HeuristicOptions heuristic;
 };
 
 struct RunResult {
@@ -83,7 +81,7 @@ std::string formatDouble(double value)
     return out.str();
 }
 
-std::string formatTourLimited(const std::vector<int>& tour, std::size_t max_vertices = 80)
+std::string formatTourLimited(const std::vector<int>& tour, std::size_t max_vertices = 10000)
 {
     if (tour.size() <= max_vertices) {
         return tsp::formatTour(tour);
@@ -109,19 +107,16 @@ std::string formatTourLimited(const std::vector<int>& tour, std::size_t max_vert
     return out.str();
 }
 
-// 统一的单实例求解入口：自动识别矩阵或 TSPLIB，并按选项选择精确/启发式求解。
+// 统一的单实例求解入口：自动识别矩阵或 TSPLIB，进行精确求解
 RunResult solveInput(std::istream& input, const CliOptions& options)
 {
     tsp::TspProblem problem = tsp::readTspProblem(input);
     const int dimension = problem.dimension();
-    const bool use_exact = options.method == "exact"
-        || (options.method == "auto" && static_cast<std::size_t>(dimension) <= options.exact_max_n);
-
     RunResult output;
-    output.method = use_exact ? "exact" : "heuristic";
+    output.method = "exact";
     output.problem_name = problem.name;
     output.dimension = dimension;
-    output.exact = use_exact;
+    output.exact = true;
 
     if (options.debug) {
         std::cerr << "[tsp-debug] problem loaded: name=" << output.problem_name
@@ -129,21 +124,13 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
                   << " method=" << output.method << '\n';
     }
 
-    if (use_exact) {
-        auto distance = problem.toDenseMatrix(options.exact_max_n);
-        tsp::BranchBoundSolver solver(std::move(distance));
-        if (options.debug) {
-            solver.setDebugOutput(std::cerr, options.debug_interval);
-        }
-        output.result = solver.solve(options.branch_strategy);
-    } else {
-        tsp::HeuristicOptions heuristic_options = options.heuristic;
-        if (options.debug) {
-            heuristic_options.debug.output = &std::cerr;
-            heuristic_options.debug.interval = options.debug_interval;
-        }
-        output.result = tsp::solveHeuristic(problem, heuristic_options);
+    
+    auto distance = problem.toDenseMatrix(options.exact_max_n);
+    tsp::BranchBoundSolver solver(std::move(distance));
+    if (options.debug) {
+        solver.setDebugOutput(std::cerr, options.debug_interval);
     }
+    output.result = solver.solve(options.branch_strategy);
     return output;
 }
 
@@ -303,15 +290,8 @@ void printUsage(const char* program)
               << "  " << program << " [options] [matrix-or-tsplib-file]\n"
               << "  " << program << " [options] --batch <list-file>\n"
               << "\nOptions:\n"
-              << "  --method <auto|exact|heuristic>\n"
               << "  --branch-strategy <smart|simple>\n"
               << "  --exact-max-n <n>\n"
-              << "  --starts <n>\n"
-              << "  --nearest-scan-limit <n>\n"
-              << "  --full-two-opt-limit <n>\n"
-              << "  --two-opt-window <n>\n"
-              << "  --two-opt-passes <n>\n"
-              << "  --seed <n>\n"
               << "  --debug\n"
               << "  --debug-interval <n>\n";
 }
@@ -352,25 +332,8 @@ CliOptions parseArgs(int argc, char** argv)
             } else {
                 throw std::runtime_error("--branch-strategy must be smart or simple");
             }
-        } else if (arg == "--method") {
-            options.method = require_value(arg);
-            if (options.method != "auto" && options.method != "exact" && options.method != "heuristic") {
-                throw std::runtime_error("--method must be auto, exact, or heuristic");
-            }
         } else if (arg == "--exact-max-n") {
             options.exact_max_n = parseSizeOption(require_value(arg), arg);
-        } else if (arg == "--starts") {
-            options.heuristic.starts = parseSizeOption(require_value(arg), arg);
-        } else if (arg == "--nearest-scan-limit") {
-            options.heuristic.nearest_scan_limit = parseSizeOption(require_value(arg), arg);
-        } else if (arg == "--full-two-opt-limit") {
-            options.heuristic.full_two_opt_limit = parseSizeOption(require_value(arg), arg);
-        } else if (arg == "--two-opt-window") {
-            options.heuristic.two_opt_window = parseSizeOption(require_value(arg), arg);
-        } else if (arg == "--two-opt-passes") {
-            options.heuristic.two_opt_passes = parseSizeOption(require_value(arg), arg);
-        } else if (arg == "--seed") {
-            options.heuristic.seed = static_cast<unsigned>(parseSizeOption(require_value(arg), arg));
         } else if (arg == "--debug") {
             options.debug = true;
         } else if (arg == "--debug-interval") {

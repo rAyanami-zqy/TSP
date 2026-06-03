@@ -370,6 +370,8 @@ SolveResult BranchBoundSolver::solve(BranchStrategy strategy)
         writeDebugLine(debug_, "initial incumbent: unavailable");
     }
     Node root;
+    // 根节点候选节点
+    
     // 根节点没有任何强制边或禁止边。
     root.forced.assign(edge_state_size, 0);
     root.forbidden.assign(edge_state_size, 0);

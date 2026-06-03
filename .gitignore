@@ -1,6 +1,9 @@
 build/
 cmake-build-*/
-__pycache__/
-*.pyc
+*.obj
+*.exe
+*.out
 *.tsp
 tsplib/
+__pycache__/
+*.pyc

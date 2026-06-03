@@ -9,6 +9,11 @@ Algorithms compared:
   4. Concorde                       (exact, state-of-the-art)
 
 Output: docs/strategy-comparison-results.md
+
+Usage:
+  python3 tools/compare_strategies.py
+
+To change which instances are tested, edit the INSTANCE_SOURCES block below.
 """
 
 import subprocess
@@ -25,11 +30,48 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 SOLVER = os.path.join(PROJECT_ROOT, "build", "tsp_bb")
 CONCORDE = os.path.join(PROJECT_ROOT, "concorde", "TSP", "concorde")
 CONVERTER = os.path.join(PROJECT_ROOT, "tools", "convert_to_tsplib.py")
-EXAMPLES_DIR = os.path.join(PROJECT_ROOT, "examples")
 OUT_PATH = os.path.join(PROJECT_ROOT, "docs", "strategy-comparison-results.md")
 
-TIMEOUT = 3600  # 1 hour per instance-method
-DEBUG_INTERVAL = 10000
+# ── Global settings ──────────────────────────────────────────────────
+
+TIMEOUT = 3600  # seconds per instance per algorithm
+DEBUG_INTERVAL = 100000  # how often tsp_bb prints debug progress
+CONCORDE_SEED = 123  # fixed seed for reproducibility
+
+# ============================================================
+# Instance Sources — edit this block to control which instances
+# are included in the comparison. Each entry is a dict:
+#
+#   path      : directory relative to PROJECT_ROOT (required)
+#   recursive : walk subdirectories? True/False (default True)
+#   max_dim   : only include instances with n <= max_dim
+#               set to None for no size limit
+#   skip_dirs : subdirectories to skip when recursive
+#               (default: ["_archives", "tsplib"])
+#   extensions: file extensions to scan (default: [".txt", ".tsp"])
+#
+# Examples:
+#   {"path": "data/classic/tsplib",  "max_dim": 29}    # TSPLIB, n<30
+#   {"path": "data/classic/national","max_dim": 29}    # National, n<30
+#   {"path": "data/classic",         "max_dim": 50}    # All classic, n<=50
+#   {"path": "examples",             "max_dim": None}   # All examples
+#   {"path": "data/classic/vlsi",    "max_dim": 500}   # Small VLSI only
+# ============================================================
+INSTANCE_SOURCES = [
+    # Small project examples (hand-crafted)
+    {"path": "examples", "recursive": True, "max_dim": 30,
+     "skip_dirs": ["tsplib"]},
+
+    # Classic TSPLIB benchmark — instances with fewer than 30 vertices
+    #{"path": "data/classic/tsplib", "recursive": False, "max_dim": 29},
+    # result: burma14(14) ulysses16(16) gr17(17) gr21(21) ulysses22(22)
+    #         gr24(24) fri26(26) bayg29(29) bays29(29)
+
+    # Classic National benchmark — instances with fewer than 30 vertices
+    #{"path": "data/classic/national", "recursive": False, "max_dim": 29},
+    # result: wi29(29)
+]
+# ============================================================
 
 # Algorithm IDs
 ALG_DP       = "DP"          # Held-Karp DP (ground truth)
@@ -40,6 +82,10 @@ ALG_CONCORDE = "Concorde"    # Concorde exact solver
 ALL_ALGORITHMS = [ALG_DP, ALG_SMART, ALG_SIMPLE, ALG_CONCORDE]
 
 INF = float("inf")
+
+DEFAULT_SKIP_DIRS = {"_archives", "tsplib"}
+DEFAULT_EXTENSIONS = (".txt", ".tsp")
+
 
 # ── Held-Karp DP (ground truth) ──────────────────────────────────────
 
@@ -106,26 +152,8 @@ def held_karp(matrix: list[list[float]]) -> tuple[float, list[int]]:
 
 # ── Instance Discovery ────────────────────────────────────────────────
 
-def find_example_instances() -> list[tuple[str, int]]:
-    """Find all TSP instances under examples/. Returns [(path, dimension), ...]."""
-    instances = []
-    for dirpath, dirnames, filenames in os.walk(EXAMPLES_DIR):
-        dirnames[:] = [d for d in dirnames if not d.startswith(".")
-                       and d not in ("tsplib",)]
-        for fname in sorted(filenames):
-            if fname.startswith(".") or fname.endswith((".gz", ".tsp")):
-                continue
-            if fname == "batch.txt":
-                continue
-            filepath = os.path.join(dirpath, fname)
-            dim = _parse_dimension(filepath)
-            if dim is not None and dim >= 3:
-                instances.append((filepath, dim))
-    return instances
-
-
 def _parse_dimension(filepath: str) -> int | None:
-    """Parse DIMENSION from TSPLIB header or matrix format (first token)."""
+    """Parse DIMENSION from TSPLIB header or first-line-number format."""
     with open(filepath, "r") as f:
         first_line = f.readline().strip()
         tokens = first_line.split()
@@ -138,6 +166,7 @@ def _parse_dimension(filepath: str) -> int | None:
         for line in f:
             upper = line.strip().upper()
             if upper.startswith("DIMENSION"):
+                line = line.replace(" ", "")  # handle "DIMENSION : 29"
                 parts = line.split(":")
                 if len(parts) == 2:
                     return int(parts[1].strip())
@@ -147,10 +176,72 @@ def _parse_dimension(filepath: str) -> int | None:
     return None
 
 
+def find_instances() -> list[tuple[str, int]]:
+    """Discover instances from all configured INSTANCE_SOURCES.
+
+    Returns a list of (absolute_path, dimension) tuples sorted by dimension
+    then name.
+    """
+    instances = []
+    seen = set()  # deduplicate by basename
+
+    for cfg in INSTANCE_SOURCES:
+        base_path = os.path.join(PROJECT_ROOT, cfg["path"])
+        if not os.path.isdir(base_path):
+            print(f"Warning: source not found, skipping: {base_path}", file=sys.stderr)
+            continue
+
+        recursive = cfg.get("recursive", True)
+        max_dim = cfg.get("max_dim", None)
+        skip_dirs = set(cfg.get("skip_dirs", DEFAULT_SKIP_DIRS))
+        extensions = tuple(cfg.get("extensions", DEFAULT_EXTENSIONS))
+
+        if recursive:
+            walker = os.walk(base_path)
+        else:
+            walker = [(base_path, [], sorted(os.listdir(base_path)))]
+
+        for dirpath, dirnames, filenames in walker:
+            if recursive:
+                dirnames[:] = [
+                    d for d in dirnames
+                    if not d.startswith(".") and d not in skip_dirs
+                ]
+
+            for fname in sorted(filenames):
+                if fname.startswith("."):
+                    continue
+                if fname.endswith(".gz"):
+                    continue
+                if fname == "batch.txt":
+                    continue
+                if not fname.endswith(extensions):
+                    continue
+
+                filepath = os.path.join(dirpath, fname)
+                dim = _parse_dimension(filepath)
+
+                if dim is None or dim < 3:
+                    continue
+                if max_dim is not None and dim > max_dim:
+                    continue
+
+                # Deduplicate by filename
+                if fname in seen:
+                    continue
+                seen.add(fname)
+
+                instances.append((filepath, dim))
+
+    # Sort by dimension, then name
+    instances.sort(key=lambda x: (x[1], os.path.basename(x[0])))
+    return instances
+
+
 # ── Distance Matrix Loading ───────────────────────────────────────────
 
 def load_distance_matrix(filepath: str) -> tuple[list[list[float]], int]:
-    """Load distance matrix from file (matrix or TSPLIB). Returns (matrix, n)."""
+    """Load distance matrix from file (raw matrix, TSPLIB coord, or TSPLIB explicit)."""
     with open(filepath, "r") as f:
         content = f.read()
 
@@ -194,9 +285,11 @@ def _load_tsplib_coord(filepath: str) -> tuple[list[list[float]], int]:
                 break
             if section is None:
                 if upper.startswith("DIMENSION"):
+                    line = line.replace(" ", "")
                     parts = line.split(":")
                     dimension = int(parts[1].strip()) if len(parts) == 2 else int(line.split()[1])
                 elif upper.startswith("EDGE_WEIGHT_TYPE"):
+                    line = line.replace(" ", "")
                     parts = line.split(":")
                     edge_weight_type = parts[1].strip().upper() if len(parts) == 2 else line.split()[1].upper()
             elif section == "coord":
@@ -265,9 +358,11 @@ def _load_tsplib_explicit(filepath: str) -> tuple[list[list[float]], int]:
                 break
             if section is None:
                 if upper.startswith("DIMENSION"):
+                    line = line.replace(" ", "")
                     parts = line.split(":")
                     dimension = int(parts[1].strip()) if len(parts) == 2 else int(line.split()[1])
                 elif upper.startswith("EDGE_WEIGHT_FORMAT"):
+                    line = line.replace(" ", "")
                     parts = line.split(":")
                     edge_weight_format = parts[1].strip().upper() if len(parts) == 2 else line.split()[1].upper()
             elif section == "weights":
@@ -333,7 +428,6 @@ def ensure_tsplib_for_concorde(instance_path: str, tmpdir: str) -> str:
     if is_tsplib_format(instance_path):
         return instance_path
 
-    # Convert raw matrix to TSPLIB using the converter script
     basename = os.path.splitext(os.path.basename(instance_path))[0]
     out_path = os.path.join(tmpdir, basename + ".tsp")
 
@@ -472,7 +566,6 @@ def run_tspbb(instance_path: str, strategy: str) -> dict:
     """Run tsp_bb solver with a branch strategy. Returns stats dict with elapsed time."""
     cmd = [
         SOLVER,
-        "--method", "exact",
         "--branch-strategy", strategy,
         "--exact-max-n", "30",
         "--debug",
@@ -548,6 +641,17 @@ def cost_match(alg_cost: float | None, dp_cost: float) -> str:
     return ":x:"
 
 
+def _build_source_description() -> str:
+    """Build a human-readable description of the configured instance sources."""
+    parts = []
+    for cfg in INSTANCE_SOURCES:
+        path = cfg["path"]
+        max_dim = cfg.get("max_dim")
+        dim_str = f"n <= {max_dim}" if max_dim is not None else "all sizes"
+        parts.append(f"`{path}` ({dim_str})")
+    return ", ".join(parts)
+
+
 # ── Main ──────────────────────────────────────────────────────────────
 
 def main():
@@ -562,12 +666,17 @@ def main():
             print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
-    instances = find_example_instances()
+    instances = find_instances()
     if not instances:
-        print("Error: no instances found under examples/", file=sys.stderr)
+        print("Error: no instances found matching the configured sources", file=sys.stderr)
+        print("Check INSTANCE_SOURCES in the script header.", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Found {len(instances)} instances in examples/\n", file=sys.stderr)
+    source_desc = _build_source_description()
+    print(f"Found {len(instances)} instances from {len(INSTANCE_SOURCES)} source(s):", file=sys.stderr)
+    for p, d in instances:
+        print(f"  n={d:3d}  {os.path.relpath(p, PROJECT_ROOT)}", file=sys.stderr)
+    print(file=sys.stderr)
 
     lines = []
     lines.append("# TSP Algorithm Comparison")
@@ -581,7 +690,7 @@ def main():
     lines.append("| **Simple** | Branch & Bound with simple branching (max-degree vertex) |")
     lines.append("| **Concorde** | State-of-the-art Concorde TSP solver (exact, with QSopt LP) |")
     lines.append("")
-    lines.append(f"**Instances:** {len(instances)} from `examples/`  ")
+    lines.append(f"**Instances:** {len(instances)} from {source_desc}  ")
     lines.append(f"**Timeout:** {TIMEOUT}s ({TIMEOUT // 3600}h) per method per instance  ")
     lines.append(f"**Ground truth:** Held-Karp DP  ")
     lines.append("")
@@ -596,17 +705,12 @@ def main():
 
     flush()
 
-    # Summary accumulators (excludes DP as it's ground truth)
     summary = {
         alg: {"ok": 0, "timeout": 0, "error": 0, "wrong_cost": 0,
               "total_time": 0.0, "total_bbnodes": 0, "count_nodes": 0}
         for alg in [ALG_SMART, ALG_SIMPLE, ALG_CONCORDE]
     }
 
-    # Concorde seed — fixed for reproducibility
-    concorde_seed = 123
-
-    # Collect per-instance data for summary matrix
     per_instance = []
 
     for idx, (path, dim) in enumerate(instances, 1):
@@ -637,10 +741,9 @@ def main():
         else:
             print(f"INFEASIBLE", file=sys.stderr)
 
-        # ── Run all algorithms (collect results) ──
+        # ── Run all algorithms ──
         results = {}
 
-        # DP (already computed)
         results[ALG_DP] = {
             "cost": dp_cost if dp_feasible else None,
             "feasible": dp_feasible,
@@ -669,7 +772,7 @@ def main():
 
         # Concorde
         print(f"  Concorde...", file=sys.stderr, end=" ", flush=True)
-        st = run_concorde(path, concorde_seed)
+        st = run_concorde(path, CONCORDE_SEED)
         results[ALG_CONCORDE] = st
         if st["timeout"]:
             print(f"TIMEOUT", file=sys.stderr)
@@ -698,7 +801,6 @@ def main():
                 else:
                     summary[alg]["ok"] += 1
                 summary[alg]["total_time"] += st["elapsed"]
-                # B&B node counts
                 bbnodes = None
                 if alg == ALG_CONCORDE:
                     bbnodes = st.get("bbnodes")
@@ -708,7 +810,6 @@ def main():
                     summary[alg]["total_bbnodes"] += bbnodes
                     summary[alg]["count_nodes"] += 1
             else:
-                # Infeasible — count as OK if DP also infeasible
                 summary[alg]["ok"] += 1
                 summary[alg]["total_time"] += st["elapsed"]
 
@@ -724,7 +825,7 @@ def main():
             lines.append(f"**DP optimal tour:** `{tour_str}`  ")
             lines.append("")
 
-        # Results table — all 4 algorithms
+        # Results table
         lines.append("| Algorithm | Cost | Match DP | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |")
         lines.append("|-----------|------|----------|------|---------------|----------------|---------------|----------------|---------|")
 
@@ -803,7 +904,7 @@ def main():
                 lines.append("</details>")
                 lines.append("")
 
-        # ── Collect per-instance data for matrix ──
+        # ── Collect per-instance data ──
         dp_solved = results[ALG_DP]["feasible"]
         per_instance.append({
             "idx": idx,
@@ -828,7 +929,6 @@ def main():
     lines.append("## Summary")
     lines.append("")
 
-    # Overall table
     lines.append("| Algorithm | Solved | Timeout | Error | Wrong Cost | Total Time | Avg Time | Avg B&B Nodes | Total B&B Nodes |")
     lines.append("|-----------|--------|---------|-------|------------|------------|----------|---------------|-----------------|")
 
@@ -847,7 +947,7 @@ def main():
         )
     lines.append("")
 
-    # Per-instance comparison matrix
+    # Per-instance matrix
     lines.append("### Per-Instance Results Matrix")
     lines.append("")
     header = "| # | Instance | n | DP Cost | Smart Cost | Simple Cost | Concorde Cost | DP Time | Smart Time | Simple Time | Concorde Time |"
