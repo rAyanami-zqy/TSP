@@ -371,12 +371,24 @@ SolveResult BranchBoundSolver::solve(BranchStrategy strategy)
     }
     Node root;
     // 根节点候选节点
-    
+
     // 根节点没有任何强制边或禁止边。
     root.forced.assign(edge_state_size, 0);
     root.forbidden.assign(edge_state_size, 0);
+    // 边候选集初始化
+    std::vector<Edge> branch_candidates;
+    for(int u = 0;u<n_;u++){
+        for(int v = v;v<n_;v++){
+            if(isFinite(dist_[u][v])){
+                continue;
+            }
+            branch_candidates.push_back(Edge{u,v,dist_[u][v]});
+        }
+    }
+    //根节点无需再计算候选集
+    //buildBranchCandidates(root,branch_candidates);
 
-    OneTree root_tree = computeOneTree(root.forced, root.forbidden);
+    OneTree root_tree = computeOneTree(root,branch_candidates);
     if (!root_tree.feasible) {
         // 根节点都无法构造 1-tree，说明实例无法形成 Hamilton 回路。
         result.feasible = false;
@@ -402,7 +414,7 @@ SolveResult BranchBoundSolver::solve(BranchStrategy strategy)
         OneTree tree;
     };
 
-    auto search = [&](auto&& self, Node node, OneTree current_tree) -> void {
+    auto search = [&](auto&& self, Node node, std::vector<Edge>& branch_candidates, OneTree current_tree) -> void {
         node.bound = current_tree.cost;
         // 当前节点的下界已经不优于已知最优可行解，可以直接剪枝。
         if (shouldPrune(node.bound, best_cost)) {
@@ -411,6 +423,7 @@ SolveResult BranchBoundSolver::solve(BranchStrategy strategy)
         }
 
         ++result.stats.nodes_expanded;
+        // debug输出
         if (debug_.output != nullptr && result.stats.nodes_expanded % debug_interval == 0) {
             std::ostringstream line;
             line << "progress: expanded=" << result.stats.nodes_expanded
@@ -436,9 +449,7 @@ SolveResult BranchBoundSolver::solve(BranchStrategy strategy)
             }
             return;
         }
-
-        std::vector<Edge> branch_candidates = buildBranchCandidates(node);
-
+        std::vector<Edge> delete_Edge;
         auto make_child = [&](const Edge& branch_edge, bool force_edge) {
             PendingChild pending;
             pending.node.depth = node.depth + 1;
@@ -454,8 +465,9 @@ SolveResult BranchBoundSolver::solve(BranchStrategy strategy)
                 pending.node.forbidden[id] = 1;
             }
 
+            buildBranchCandidates(pending.node,branch_candidates);
             // 子节点重新计算受约束 1-tree；构造失败表示该分支不可行。
-            OneTree child_tree = computeOneTree(pending.node.forced, pending.node.forbidden);
+            OneTree child_tree = computeOneTree(pending.node,branch_candidates);
             if (!child_tree.feasible) {
                 ++result.stats.nodes_pruned_infeasible;
                 return pending;
@@ -470,12 +482,12 @@ SolveResult BranchBoundSolver::solve(BranchStrategy strategy)
 
         auto visit = [&](PendingChild& child) {
             if (child.available) {
-                self(self, std::move(child.node), std::move(child.tree));
+                self(self, std::move(child.node),branch_candidates, std::move(child.tree));
             }
         };
 
         if (strategy == BranchStrategy::Smart) {
-            // Smart: 选一条边做 force/forbid 二分支，优先 1-tree 中最大度数顶点的边。
+            // Smart: 选一条边做 force/forbid 二分支，优先 1-tree 中最大度数顶点的最大边。
             Edge branch_edge;
             if (!chooseBranchEdge(node, current_tree, branch_candidates, branch_edge)) {
                 writeDebugLine(debug_,
@@ -521,7 +533,7 @@ SolveResult BranchBoundSolver::solve(BranchStrategy strategy)
         }
     };
 
-    search(search, std::move(root), std::move(root_tree));
+    search(search, std::move(root),branch_candidates,std::move(root_tree));
 
     // 搜索结束后，best_cost 有限且 best_tour 非空才算找到可行最优解。
     if (isFinite(best_cost) && !best_tour.empty()) {
@@ -568,81 +580,12 @@ bool BranchBoundSolver::isForbidden(const std::vector<unsigned char>& forbidden,
 
 // 在当前分支节点的强制边和禁止边约束下，构造受约束的 1-tree 以计算下界。构造失败表示当前分支不可行。
 BranchBoundSolver::OneTree BranchBoundSolver::computeOneTree(
-    const std::vector<unsigned char>& forced,
-    const std::vector<unsigned char>& forbidden) const
+    const Node &node_,std::vector<Edge>&branch_candidates) const
 {
     OneTree result;
-    result.degree.assign(n_, 0);
-    // forced_degree 统计每个顶点在强制边中的度数，提前检查强制边是否已经让某点度数超过 2。
-    std::vector<int> forced_degree(n_, 0);
-    // forced_components 统计强制边形成的连通分量，提前检查是否已经形成不包含全部顶点的子回路。
-    DisjointSet forced_components(n_);
-    // component_vertices[c] 统计强制边分量 c 中的顶点数，component_edges[c] 统计其中的强制边数，用于判断是否存在真子集上边数等于点数的分量。
-    std::vector<int> component_vertices(n_, 1);
-    std::vector<int> component_edges(n_, 0);
-
-    // 先检查 forced / forbidden 是否互相冲突，以及强制边是否让某点度数超过 2。
-    for (int u = 0; u < n_; ++u) {
-        for (int v = u + 1; v < n_; ++v) {
-            const std::size_t id = edgeId(u, v);
-            // 同一条边不能既强制选择又禁止选择。
-            if (forced[id] && forbidden[id]) {
-                return result;
-            }
-            if (!forced[id]) {
-                continue;
-            }
-            // 强制选择一条缺边，当前分支必然不可行。
-            if (!isFinite(dist_[u][v])) {
-                return result;
-            }
-            ++forced_degree[u];
-            ++forced_degree[v];
-            if (forced_degree[u] > 2 || forced_degree[v] > 2) {
-                return result;
-            }
-        }
+    if(branch_candidates.empty()){
+        return result;
     }
-
-    // 强制边如果提前形成不包含全部顶点的环，则不可能扩展成 Hamilton 回路。
-    for (int u = 0; u < n_; ++u) {
-        for (int v = u + 1; v < n_; ++v) {
-            if (!isForced(forced, u, v)) {
-                continue;
-            }
-            // 这里只建立强制边形成的连通分量，后续统计每个分量的边数和点数。
-            int root_u = forced_components.find(u);
-            int root_v = forced_components.find(v);
-            if (root_u != root_v) {
-                forced_components.unite(root_u, root_v);
-            }
-        }
-    }
-
-    // 统计每个强制边分量的顶点数和强制边数，检查是否存在真子集上边数等于点数的分量。
-    std::fill(component_vertices.begin(), component_vertices.end(), 0);
-    std::fill(component_edges.begin(), component_edges.end(), 0);
-    // component_vertices[c] 表示强制边分量 c 中有多少个顶点。
-    for (int v = 0; v < n_; ++v) {
-        ++component_vertices[forced_components.find(v)];
-    }
-    // component_edges[c] 表示强制边分量 c 中已经有多少条强制边。
-    for (int u = 0; u < n_; ++u) {
-        for (int v = u + 1; v < n_; ++v) {
-            if (isForced(forced, u, v)) {
-                ++component_edges[forced_components.find(u)];
-            }
-        }
-    }
-    for (int c = 0; c < n_; ++c) {
-        // 在一个真子集上边数等于点数，说明强制边已经闭成子回路。
-        if (component_vertices[c] > 0
-            && component_edges[c] == component_vertices[c]
-            && component_vertices[c] < n_) {
-            return result;
-        }
-    }
-
     // 下面开始构造受约束的 1-tree。构造失败表示在当前 forced / forbidden 约束下无法形成 1-tree，当前分支不可行。
     DisjointSet tree_components(n_);
     int mst_edges = 0;
@@ -654,7 +597,7 @@ BranchBoundSolver::OneTree BranchBoundSolver::computeOneTree(
     // 先放入非 0 顶点之间的强制边，再用 Kruskal 补齐。
     for (int u = 1; u < n_; ++u) {
         for (int v = u + 1; v < n_; ++v) {
-            if (!isForced(forced, u, v)) {
+            if (!isForced(node_.forced, u, v)) {
                 continue;
             }
             // MST 部分不能含环；强制边若已经成环，此分支不可行。
@@ -666,23 +609,12 @@ BranchBoundSolver::OneTree BranchBoundSolver::computeOneTree(
             ++mst_edges;
         }
     }
-
-    std::vector<Edge> mst_candidates;
-    // 收集所有可用于 MST 补齐的候选边，排除已强制、已禁止和缺边。
-    for (int u = 1; u < n_; ++u) {
-        for (int v = u + 1; v < n_; ++v) {
-            if (isForced(forced, u, v) || isForbidden(forbidden, u, v) || !isFinite(dist_[u][v])) {
-                continue;
-            }
-            mst_candidates.push_back(Edge{u, v, dist_[u][v]});
-        }
-    }
-    std::sort(mst_candidates.begin(), mst_candidates.end(), [](const Edge& lhs, const Edge& rhs) {
+    std::sort(branch_candidates.begin(), branch_candidates.end(), [](const Edge& lhs, const Edge& rhs) {
         return lhs.w < rhs.w;
     });
 
     // Kruskal：按权重从小到大加入不会成环的边，直到 MST 有 n-2 条边。
-    for (const Edge& edge : mst_candidates) {
+    for (const Edge& edge : branch_candidates) {
         if (mst_edges == n_ - 2) {
             break;
         }
@@ -701,9 +633,9 @@ BranchBoundSolver::OneTree BranchBoundSolver::computeOneTree(
     // 1-tree 的第二部分：给 0 号顶点选择两条受约束的最小 incident edges。
     std::vector<Edge> root_edges;
     for (int v = 1; v < n_; ++v) {
-        if (isForced(forced, 0, v)) {
+        if (isForced(node_.forced, 0, v)) {
             // 与 0 相连的强制边必须先加入 root_edges。
-            if (isForbidden(forbidden, 0, v) || !isFinite(dist_[0][v])) {
+            if (isForbidden(node_.forbidden, 0, v) || !isFinite(dist_[0][v])) {
                 return result;
             }
             root_edges.push_back(Edge{0, v, dist_[0][v]});
@@ -717,7 +649,7 @@ BranchBoundSolver::OneTree BranchBoundSolver::computeOneTree(
     std::vector<Edge> root_candidates;
     // 收集 0 号顶点还可以选择的边，用于补足两条 incident edges。
     for (int v = 1; v < n_; ++v) {
-        if (isForced(forced, 0, v) || isForbidden(forbidden, 0, v) || !isFinite(dist_[0][v])) {
+        if (isForced(node_.forced, 0, v) || isForbidden(node_.forbidden, 0, v) || !isFinite(dist_[0][v])) {
             continue;
         }
         root_candidates.push_back(Edge{0, v, dist_[0][v]});
@@ -800,19 +732,82 @@ std::vector<int> BranchBoundSolver::buildTour(const std::vector<Edge>& edges) co
     return tour;
 }
 
-std::vector<BranchBoundSolver::Edge> BranchBoundSolver::buildBranchCandidates(const Node& node) const
+bool BranchBoundSolver::buildBranchCandidates(const Node& node,std::vector<Edge>& branch_candidates) const
 {
-    std::vector<Edge> candidates;
-    candidates.reserve(static_cast<std::size_t>(n_) * static_cast<std::size_t>(n_ - 1) / 2);
+    // forced_degree 统计每个顶点在强制边中的度数，提前检查强制边是否已经让某点度数超过 2。
+    std::vector<int> forced_degree(n_, 0);
+    // forced_components 统计强制边形成的连通分量，提前检查是否已经形成不包含全部顶点的子回路。
+    DisjointSet forced_components(n_);
+    // component_vertices[c] 统计强制边分量 c 中的顶点数，component_edges[c] 统计其中的强制边数，用于判断是否存在真子集上边数等于点数的分量。
+    std::vector<int> component_vertices(n_, 1);
+    std::vector<int> component_edges(n_, 0);
+
+    // 先检查 forced / forbidden 是否互相冲突，以及强制边是否让某点度数超过 2。
     for (int u = 0; u < n_; ++u) {
         for (int v = u + 1; v < n_; ++v) {
-            if (isForced(node.forced, u, v) || isForbidden(node.forbidden, u, v) || !isFinite(dist_[u][v])) {
+            const std::size_t id = edgeId(u, v);
+            // 同一条边不能既强制选择又禁止选择。
+            if (node.forced[id] && node.forbidden[id]) {
+                return false;
+            }
+            if (!node.forced[id]) {
                 continue;
             }
-            candidates.push_back(Edge{u, v, dist_[u][v]});
+            // 强制选择一条缺边，当前分支必然不可行。
+            if (!isFinite(dist_[u][v])) {
+                return false;
+            }
+            ++forced_degree[u];
+            ++forced_degree[v];
+            if (forced_degree[u] > 2 || forced_degree[v] > 2) {
+                return false;
+            }
         }
     }
-    return candidates;
+        // 强制边如果提前形成不包含全部顶点的环，则不可能扩展成 Hamilton 回路。
+    for (int u = 0; u < n_; ++u) {
+        for (int v = u + 1; v < n_; ++v) {
+            if (!isForced(node.forced, u, v)) {
+                continue;
+            }
+            // 这里只建立强制边形成的连通分量，后续统计每个分量的边数和点数。
+            int root_u = forced_components.find(u);
+            int root_v = forced_components.find(v);
+            if (root_u != root_v) {
+                forced_components.unite(root_u, root_v);
+            }
+        }
+    }
+
+    // 统计每个强制边分量的顶点数和强制边数，检查是否存在真子集上边数等于点数的分量。
+    std::fill(component_vertices.begin(), component_vertices.end(), 0);
+    std::fill(component_edges.begin(), component_edges.end(), 0);
+    // component_vertices[c] 表示强制边分量 c 中有多少个顶点。
+    for (int v = 0; v < n_; ++v) {
+        ++component_vertices[forced_components.find(v)];
+    }
+    // component_edges[c] 表示强制边分量 c 中已经有多少条强制边。
+    for (int u = 0; u < n_; ++u) {
+        for (int v = u + 1; v < n_; ++v) {
+            if (isForced(node.forced, u, v)) {
+                ++component_edges[forced_components.find(u)];
+            }
+        }
+    }
+    for (int c = 0; c < n_; ++c) {
+        // 在一个真子集上边数等于点数，说明强制边已经闭成子回路。
+        if (component_vertices[c] > 0
+            && component_edges[c] == component_vertices[c]
+            && component_vertices[c] < n_) {
+            return false;
+        }
+    }
+    
+    for(auto bb:branch_candidates){
+        //1.foced后度大于二的候选边均移除
+        //2.移除的边加入fobiden
+    }
+    return branch_candidates.empty();
 }
 
 bool BranchBoundSolver::chooseBranchEdge(

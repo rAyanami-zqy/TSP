@@ -119,14 +119,13 @@ private:
     bool isForbidden(const std::vector<unsigned char>& forbidden, int u, int v) const;
 
     // 在 forced / forbidden 约束下构造最小 1-tree，作为该节点的下界。
-    OneTree computeOneTree(const std::vector<unsigned char>& forced,
-                           const std::vector<unsigned char>& forbidden) const;
+    OneTree computeOneTree(const Node& node_,std::vector<Edge>& branch_candidates)const;
     // 判断一个 1-tree 是否已经是一条合法的 Hamilton 回路。
     bool isTour(const OneTree& one_tree) const;
     // 从 1-tree 的边集合构造访问顺序的顶点序列；如果无法构成合法回路则返回空。
     std::vector<int> buildTour(const std::vector<Edge>& edges) const;
     // 收集当前节点尚未决定且实际存在的边，作为本节点分支候选集。
-    std::vector<Edge> buildBranchCandidates(const Node& node) const;
+    bool buildBranchCandidates(const Node& node,std::vector<Edge>& branch_candidates)const;
     // 从当前候选集中选择一条未决边做二分支：包含该边 / 禁止该边；选择时优先当前 1-tree。
     bool chooseBranchEdge(const Node& node,
                           const OneTree& one_tree,
