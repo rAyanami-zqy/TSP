@@ -125,7 +125,8 @@ private:
     // 从 1-tree 的边集合构造访问顺序的顶点序列；如果无法构成合法回路则返回空。
     std::vector<int> buildTour(const std::vector<Edge>& edges) const;
     // 收集当前节点尚未决定且实际存在的边，作为本节点分支候选集。
-    bool buildBranchCandidates(const Node& node,std::vector<Edge>& branch_candidates)const;
+    bool buildBranchCandidates(const Node& node,std::vector<Edge>& branch_candidates,
+                               std::vector<Edge>& removed) const;
     // 从当前候选集中选择一条未决边做二分支：包含该边 / 禁止该边；选择时优先当前 1-tree。
     bool chooseBranchEdge(const Node& node,
                           const OneTree& one_tree,

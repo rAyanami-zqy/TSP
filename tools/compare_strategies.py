@@ -3,10 +3,12 @@
 Unified TSP comparison script.
 
 Algorithms compared:
-  1. Held-Karp Dynamic Programming (ground truth, exact)
+  1. Concorde                       (exact, state-of-the-art, reference)
   2. tsp_bb Smart branch strategy  (exact B&B)
   3. tsp_bb Simple branch strategy (exact B&B)
-  4. Concorde                       (exact, state-of-the-art)
+
+Tours from all three solvers are compared: Concorde tour serves as reference,
+and Smart / Simple tours are checked against it.
 
 Output: docs/strategy-comparison-results.md
 
@@ -63,91 +65,28 @@ INSTANCE_SOURCES = [
      "skip_dirs": ["tsplib"]},
 
     # Classic TSPLIB benchmark — instances with fewer than 30 vertices
-    #{"path": "data/classic/tsplib", "recursive": False, "max_dim": 29},
+    {"path": "data/classic/tsplib", "recursive": False, "max_dim": 49},
     # result: burma14(14) ulysses16(16) gr17(17) gr21(21) ulysses22(22)
     #         gr24(24) fri26(26) bayg29(29) bays29(29)
 
     # Classic National benchmark — instances with fewer than 30 vertices
-    #{"path": "data/classic/national", "recursive": False, "max_dim": 29},
+    {"path": "data/classic/national", "recursive": False, "max_dim": 49},
     # result: wi29(29)
 ]
 # ============================================================
 
 # Algorithm IDs
-ALG_DP       = "DP"          # Held-Karp DP (ground truth)
 ALG_SMART    = "Smart"       # tsp_bb exact + smart branch
 ALG_SIMPLE   = "Simple"      # tsp_bb exact + simple branch
-ALG_CONCORDE = "Concorde"    # Concorde exact solver
+ALG_CONCORDE = "Concorde"    # Concorde exact solver (reference)
 
-ALL_ALGORITHMS = [ALG_DP, ALG_SMART, ALG_SIMPLE, ALG_CONCORDE]
+ALL_ALGORITHMS = [ALG_CONCORDE, ALG_SMART, ALG_SIMPLE]
 
 INF = float("inf")
 
 DEFAULT_SKIP_DIRS = {"_archives", "tsplib"}
 DEFAULT_EXTENSIONS = (".txt", ".tsp")
 
-
-# ── Held-Karp DP (ground truth) ──────────────────────────────────────
-
-def held_karp(matrix: list[list[float]]) -> tuple[float, list[int]]:
-    """Return (optimal_cost, optimal_tour). Returns (INF, []) if infeasible."""
-    n = len(matrix)
-    if n < 3:
-        return INF, []
-
-    dp: dict[tuple[int, int], tuple[float, int]] = {}
-    for v in range(1, n):
-        if math.isfinite(matrix[0][v]):
-            dp[(1 << (v - 1), v)] = (matrix[0][v], -1)
-
-    full_mask = (1 << (n - 1)) - 1
-    for mask in range(1, full_mask + 1):
-        for last in range(1, n):
-            entry = dp.get((mask, last))
-            if entry is None:
-                continue
-            current_cost, _ = entry
-
-            remaining = full_mask ^ mask
-            bitset = remaining
-            while bitset:
-                bit = bitset & -bitset
-                nxt = bit.bit_length()
-                if math.isfinite(matrix[last][nxt]):
-                    next_mask = mask | bit
-                    new_cost = current_cost + matrix[last][nxt]
-                    prev = dp.get((next_mask, nxt))
-                    if prev is None or new_cost < prev[0]:
-                        dp[(next_mask, nxt)] = (new_cost, last)
-                bitset -= bit
-
-    best_cost = INF
-    best_last = -1
-    for last in range(1, n):
-        entry = dp.get((full_mask, last))
-        if entry is None:
-            continue
-        if not math.isfinite(matrix[last][0]):
-            continue
-        total = entry[0] + matrix[last][0]
-        if total < best_cost:
-            best_cost = total
-            best_last = last
-
-    if best_last < 0:
-        return INF, []
-
-    tour = []
-    mask = full_mask
-    v = best_last
-    while v != -1:
-        tour.append(v)
-        _, parent = dp[(mask, v)]
-        mask ^= (1 << (v - 1))
-        v = parent
-    tour.append(0)
-    tour.reverse()
-    return best_cost, tour
 
 
 # ── Instance Discovery ────────────────────────────────────────────────
@@ -268,6 +207,13 @@ def _parse_weight(token: str) -> float:
     return float(token)
 
 
+# Section markers that may appear after the primary data section in TSPLIB files.
+_TSBLIB_SECTION_MARKERS = frozenset({
+    "NODE_COORD_SECTION", "EDGE_WEIGHT_SECTION",
+    "DISPLAY_DATA_SECTION", "TOUR_SECTION",
+})
+
+
 def _load_tsplib_coord(filepath: str) -> tuple[list[list[float]], int]:
     coords = []
     edge_weight_type = "EUC_2D"
@@ -293,6 +239,8 @@ def _load_tsplib_coord(filepath: str) -> tuple[list[list[float]], int]:
                     parts = line.split(":")
                     edge_weight_type = parts[1].strip().upper() if len(parts) == 2 else line.split()[1].upper()
             elif section == "coord":
+                if upper in _TSBLIB_SECTION_MARKERS:
+                    break  # stop reading coords when another section starts
                 parts = line.split()
                 if len(parts) >= 3:
                     coords.append((float(parts[1]), float(parts[2])))
@@ -366,6 +314,8 @@ def _load_tsplib_explicit(filepath: str) -> tuple[list[list[float]], int]:
                     parts = line.split(":")
                     edge_weight_format = parts[1].strip().upper() if len(parts) == 2 else line.split()[1].upper()
             elif section == "weights":
+                if upper in _TSBLIB_SECTION_MARKERS:
+                    break  # stop reading weights when another section starts
                 for token in line.split():
                     values.append(_parse_weight(token))
 
@@ -468,11 +418,40 @@ def parse_concorde_output(stdout: str) -> dict:
     return stats
 
 
+def parse_concorde_sol(sol_path: str) -> list[int] | None:
+    """Parse a Concorde .sol file and return the optimal tour as a list of ints.
+
+    .sol format: first line is the node count, subsequent lines give the
+    node indices (0-based) in tour order, space-separated (possibly
+    multiple per line). Returns None on failure.
+    """
+    try:
+        with open(sol_path, "r") as f:
+            text = f.read()
+        tokens = text.split()
+        if len(tokens) < 2:
+            return None
+        n = int(tokens[0])
+        tour = [int(v) for v in tokens[1:]]
+        if len(tour) == n:
+            return tour
+        return None
+    except (OSError, ValueError):
+        return None
+
+
 def run_concorde(instance_path: str, seed: int = 123) -> dict:
-    """Run Concorde on an instance. Returns stats dict with elapsed time."""
+    """Run Concorde on an instance. Returns stats dict with elapsed time and tour."""
     tmpdir = tempfile.mkdtemp(prefix="concorde_tmp_")
     try:
         tsplib_path = ensure_tsplib_for_concorde(instance_path, tmpdir)
+
+        # If the input is outside tmpdir (native TSPLIB file), copy it in
+        # so Concorde writes the .sol file inside tmpdir.
+        if Path(tsplib_path).parent != Path(tmpdir):
+            dest = Path(tmpdir) / Path(tsplib_path).name
+            shutil.copy2(tsplib_path, dest)
+            tsplib_path = str(dest)
 
         cmd = [
             CONCORDE,
@@ -481,13 +460,26 @@ def run_concorde(instance_path: str, seed: int = 123) -> dict:
         ]
         t0 = time.perf_counter()
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT)
+            # Run with cwd=tmpdir so Concorde writes its output files
+            # (.sol, .sav, .pul, .mas) there instead of the project root.
+            result = subprocess.run(cmd, capture_output=True, text=True,
+                                    timeout=TIMEOUT, cwd=tmpdir)
             elapsed = time.perf_counter() - t0
             stats = parse_concorde_output(result.stdout)
             stats["elapsed"] = elapsed
             stats["timeout"] = False
             stats["error"] = None
             stats["stderr"] = result.stderr
+            stats["tour"] = None
+            stats["tour_list"] = None
+
+            # Locate the .sol file Concorde wrote inside tmpdir
+            sol_glob = list(Path(tmpdir).glob("*.sol"))
+            if sol_glob:
+                tour = parse_concorde_sol(str(sol_glob[0]))
+                if tour:
+                    stats["tour"] = " -> ".join(str(v) for v in tour)
+                    stats["tour_list"] = tour
         except subprocess.TimeoutExpired:
             stats = _empty_stats_concorde()
             stats["elapsed"] = TIMEOUT
@@ -506,6 +498,7 @@ def _empty_stats_concorde() -> dict:
         "cost": None, "feasible": False, "time": None, "bbnodes": None,
         "status": "unknown", "elapsed": 0.0, "timeout": False,
         "error": None, "stderr": "",
+        "tour": None, "tour_list": None,
     }
 
 
@@ -567,7 +560,7 @@ def run_tspbb(instance_path: str, strategy: str) -> dict:
     cmd = [
         SOLVER,
         "--branch-strategy", strategy,
-        "--exact-max-n", "30",
+        "--exact-max-n", "100",
         "--debug",
         "--debug-interval", str(DEBUG_INTERVAL),
         instance_path,
@@ -630,13 +623,13 @@ def fmt_val(val, template="{}") -> str:
     return template.format(val)
 
 
-def cost_match(alg_cost: float | None, dp_cost: float) -> str:
-    """Return emoji match indicator."""
-    if alg_cost is None:
+def cost_match(alg_cost: float | None, ref_cost: float | None) -> str:
+    """Return emoji match indicator comparing against reference cost."""
+    if alg_cost is None or ref_cost is None:
         return "-"
-    if dp_cost >= INF / 2:
+    if ref_cost >= INF / 2:
         return "-"
-    if abs(alg_cost - dp_cost) < 1e-6:
+    if abs(alg_cost - ref_cost) < 1e-6:
         return ":white_check_mark:"
     return ":x:"
 
@@ -685,14 +678,13 @@ def main():
     lines.append("")
     lines.append("| Algorithm | Description |")
     lines.append("|---|---|")
-    lines.append("| **DP** | Held-Karp Dynamic Programming (exact, ground truth) |")
+    lines.append("| **Concorde** | State-of-the-art Concorde TSP solver (exact, with QSopt LP) — **reference** |")
     lines.append("| **Smart** | Branch & Bound with smart branching (1-tree degree + edge candidate) |")
     lines.append("| **Simple** | Branch & Bound with simple branching (max-degree vertex) |")
-    lines.append("| **Concorde** | State-of-the-art Concorde TSP solver (exact, with QSopt LP) |")
     lines.append("")
     lines.append(f"**Instances:** {len(instances)} from {source_desc}  ")
     lines.append(f"**Timeout:** {TIMEOUT}s ({TIMEOUT // 3600}h) per method per instance  ")
-    lines.append(f"**Ground truth:** Held-Karp DP  ")
+    lines.append(f"**Reference:** Concorde exact solver  ")
     lines.append("")
     lines.append("---")
     lines.append("")
@@ -717,76 +709,37 @@ def main():
         rel_path = os.path.relpath(path, PROJECT_ROOT)
         print(f"\n[{idx}/{len(instances)}] {rel_path} (n={dim})", file=sys.stderr)
 
-        # ── Load matrix + DP ground truth ──
-        try:
-            matrix, n_loaded = load_distance_matrix(path)
-        except Exception as e:
-            print(f"  SKIP: failed to load — {e}", file=sys.stderr)
-            lines.append(f"## {idx}. `{rel_path}` (n={dim})")
-            lines.append("")
-            lines.append(f"**Status:** SKIP — failed to load: {e}")
-            lines.append("")
-            lines.append("---")
-            lines.append("")
-            flush()
-            continue
-
-        print(f"  DP...", file=sys.stderr, end=" ", flush=True)
-        dp_t0 = time.perf_counter()
-        dp_cost, dp_tour = held_karp(matrix)
-        dp_elapsed = time.perf_counter() - dp_t0
-        dp_feasible = dp_cost < INF / 2
-        if dp_feasible:
-            print(f"optimal={dp_cost:.0f} time={fmt_time(dp_elapsed)}", file=sys.stderr)
-        else:
-            print(f"INFEASIBLE", file=sys.stderr)
-
-        # ── Run all algorithms ──
         results = {}
 
-        results[ALG_DP] = {
-            "cost": dp_cost if dp_feasible else None,
-            "feasible": dp_feasible,
-            "elapsed": dp_elapsed,
-            "bbnodes": None,
-            "timeout": False,
-            "error": None,
-            "stderr": "",
-            "root_lb": None, "init_ub": None,
-            "nodes_created": None, "nodes_expanded": None,
-            "pruned_bound": None, "pruned_infeasible": None,
-            "tour": None, "tour_list": dp_tour if dp_feasible else None,
-        }
-
-        # Smart B&B
-        print(f"  Smart...", file=sys.stderr, end=" ", flush=True)
-        st = run_tspbb(path, "smart")
-        results[ALG_SMART] = st
-        _print_solver_status(ALG_SMART, st, dp_cost)
-
-        # Simple B&B
-        print(f"  Simple...", file=sys.stderr, end=" ", flush=True)
-        st = run_tspbb(path, "simple")
-        results[ALG_SIMPLE] = st
-        _print_solver_status(ALG_SIMPLE, st, dp_cost)
-
-        # Concorde
+        # ── Concorde (reference) ──
         print(f"  Concorde...", file=sys.stderr, end=" ", flush=True)
         st = run_concorde(path, CONCORDE_SEED)
         results[ALG_CONCORDE] = st
+        ref_cost = st.get("cost") if st.get("feasible") else None
+        ref_feasible = st.get("feasible", False)
         if st["timeout"]:
             print(f"TIMEOUT", file=sys.stderr)
         elif st["error"]:
             print(f"ERROR: {st['error']}", file=sys.stderr)
         else:
-            c_cost = st.get("cost")
             c_time = st.get("elapsed", 0)
             c_bb = st.get("bbnodes")
-            if c_cost is not None:
-                match = "OK" if abs(c_cost - dp_cost) < 1e-6 else "WRONG"
-                print(f"cost={c_cost:.0f} {match} time={fmt_time(c_time)} bbnodes={c_bb}", file=sys.stderr)
+            if ref_cost is not None:
+                print(f"cost={ref_cost:.0f} time={fmt_time(c_time)} bbnodes={c_bb}", file=sys.stderr)
             else:
                 print(f"no solution time={fmt_time(c_time)}", file=sys.stderr)
+
+        # ── Smart B&B ──
+        print(f"  Smart...", file=sys.stderr, end=" ", flush=True)
+        st = run_tspbb(path, "smart")
+        results[ALG_SMART] = st
+        _print_solver_status(ALG_SMART, st, ref_cost)
+
+        # ── Simple B&B ──
+        print(f"  Simple...", file=sys.stderr, end=" ", flush=True)
+        st = run_tspbb(path, "simple")
+        results[ALG_SIMPLE] = st
+        _print_solver_status(ALG_SIMPLE, st, ref_cost)
 
         # ── Update summary ──
         for alg in [ALG_SMART, ALG_SIMPLE, ALG_CONCORDE]:
@@ -796,7 +749,7 @@ def main():
             elif st["error"]:
                 summary[alg]["error"] += 1
             elif st.get("feasible"):
-                if dp_feasible and abs(st["cost"] - dp_cost) > 1e-6:
+                if ref_feasible and abs(st["cost"] - ref_cost) > 1e-6:
                     summary[alg]["wrong_cost"] += 1
                 else:
                     summary[alg]["ok"] += 1
@@ -816,18 +769,24 @@ def main():
         # ── Instance output ──
         lines.append(f"## {idx}. `{rel_path}` (n={dim})")
         lines.append("")
-        lines.append(f"**DP optimal cost:** {fmt_cost(dp_cost) if dp_feasible else 'infeasible'}  ")
-        lines.append(f"**DP time:** {fmt_time(dp_elapsed)}  ")
+
+        if ref_feasible:
+            lines.append(f"**Concorde optimal cost:** {fmt_cost(ref_cost)}  ")
+            lines.append(f"**Concorde time:** {fmt_time(results[ALG_CONCORDE]['elapsed'])}  ")
+        else:
+            lines.append(f"**Concorde:** failed to find optimal solution  ")
         lines.append("")
 
-        if dp_tour:
-            tour_str = " -> ".join(str(v) for v in dp_tour) + f" -> {dp_tour[0]}"
-            lines.append(f"**DP optimal tour:** `{tour_str}`  ")
+        # Concorde tour (reference)
+        concorde_tour = results[ALG_CONCORDE].get("tour_list")
+        if concorde_tour:
+            t_str = " -> ".join(str(v) for v in concorde_tour) + f" -> {concorde_tour[0]}"
+            lines.append(f"**Concorde (reference) tour:** `{t_str}`  ")
             lines.append("")
 
         # Results table
-        lines.append("| Algorithm | Cost | Match DP | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |")
-        lines.append("|-----------|------|----------|------|---------------|----------------|---------------|----------------|---------|")
+        lines.append("| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |")
+        lines.append("|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|")
 
         for alg in ALL_ALGORITHMS:
             st = results[alg]
@@ -837,53 +796,44 @@ def main():
                 lines.append(f"| {label} | TIMEOUT | - | {fmt_time(st['elapsed'])} | - | - | - | - | - |")
             elif st["error"]:
                 lines.append(f"| {label} | ERROR | - | - | - | - | - | - | - |")
-            elif alg == ALG_DP:
-                cost_s = fmt_cost(st["cost"]) if st["feasible"] else "infeasible"
+            elif alg == ALG_CONCORDE:
+                cost_s = fmt_cost(st.get("cost")) if st.get("feasible") else "infeasible"
                 lines.append(
-                    f"| {label} | {cost_s} | N/A | {fmt_time(st['elapsed'])} "
-                    f"| - | - | - | - | - |"
+                    f"| {label} | {cost_s} | ref | {fmt_time(st['elapsed'])} "
+                    f"| - | - | - | - | {fmt_val(st.get('bbnodes'))} |"
                 )
             else:
                 cost_s = fmt_cost(st.get("cost"))
-                match = cost_match(st.get("cost"), dp_cost)
-                if alg == ALG_CONCORDE:
-                    lines.append(
-                        f"| {label} | {cost_s} | {match} | {fmt_time(st['elapsed'])} "
-                        f"| - | - | - | - | {fmt_val(st.get('bbnodes'))} |"
-                    )
-                else:
-                    lines.append(
-                        f"| {label} | {cost_s} | {match} | {fmt_time(st['elapsed'])} "
-                        f"| {fmt_val(st.get('nodes_created'))} | {fmt_val(st.get('nodes_expanded'))} "
-                        f"| {fmt_val(st.get('pruned_bound'))} | {fmt_val(st.get('pruned_infeasible'))} "
-                        f"| - |"
-                    )
+                match = cost_match(st.get("cost"), ref_cost)
+                lines.append(
+                    f"| {label} | {cost_s} | {match} | {fmt_time(st['elapsed'])} "
+                    f"| {fmt_val(st.get('nodes_created'))} | {fmt_val(st.get('nodes_expanded'))} "
+                    f"| {fmt_val(st.get('pruned_bound'))} | {fmt_val(st.get('pruned_infeasible'))} "
+                    f"| - |"
+                )
         lines.append("")
 
-        # Tours
+        # Tours — compare all three
         tour_lines = []
         for alg in ALL_ALGORITHMS:
             st = results[alg]
-            if alg == ALG_DP:
-                if st.get("tour_list"):
-                    tour = st["tour_list"]
-                    t_str = " -> ".join(str(v) for v in tour) + f" -> {tour[0]}"
-                    tour_lines.append(
-                        f"- **{alg} (ground truth):** `{t_str}` cost={fmt_cost(st['cost'])}"
-                    )
-            else:
-                if st.get("tour_list") and len(st["tour_list"]) > 1:
-                    unique_tour = list(dict.fromkeys(st["tour_list"]))
-                    cost_info = ""
-                    if dp_feasible and st.get("feasible"):
-                        if abs(st["cost"] - dp_cost) < 1e-6:
-                            cost_info = " (=DP)"
+            if st.get("tour_list") and len(st["tour_list"]) > 1:
+                tour_list = list(dict.fromkeys(st["tour_list"]))
+                t_str = " -> ".join(str(v) for v in tour_list) + f" -> {tour_list[0]}"
+                cost_info = ""
+                if alg == ALG_CONCORDE:
+                    cost_info = " (reference)"
+                elif ref_feasible and st.get("feasible"):
+                    if abs(st["cost"] - ref_cost) < 1e-6:
+                        if concorde_tour and tour_list == concorde_tour:
+                            cost_info = " (=ref, same tour)"
                         else:
-                            cost_info = " (DIFFERS from DP)"
-                    tour_lines.append(
-                        f"- **{alg}:** `{' -> '.join(str(v) for v in unique_tour)}` "
-                        f"cost={fmt_cost(st.get('cost'))}{cost_info}"
-                    )
+                            cost_info = " (=ref, different tour)"
+                    else:
+                        cost_info = " (DIFFERS from ref)"
+                tour_lines.append(
+                    f"- **{alg}:** `{t_str}` cost={fmt_cost(st.get('cost'))}{cost_info}"
+                )
 
         if tour_lines:
             lines.append("**Tours found:**")
@@ -905,19 +855,16 @@ def main():
                 lines.append("")
 
         # ── Collect per-instance data ──
-        dp_solved = results[ALG_DP]["feasible"]
         per_instance.append({
             "idx": idx,
             "name": rel_path,
             "n": dim,
-            "dp_cost": fmt_cost(results[ALG_DP]["cost"]) if dp_solved else "infeasible",
-            "dp_time": fmt_time(results[ALG_DP]["elapsed"]),
+            "concorde_cost": fmt_cost(results[ALG_CONCORDE].get("cost")) if results[ALG_CONCORDE].get("feasible") else ("ERR" if results[ALG_CONCORDE]["error"] else "TO" if results[ALG_CONCORDE]["timeout"] else "-"),
+            "concorde_time": fmt_time(results[ALG_CONCORDE]["elapsed"]),
             "smart_cost": fmt_cost(results[ALG_SMART].get("cost")) if results[ALG_SMART].get("feasible") else ("ERR" if results[ALG_SMART]["error"] else "TO" if results[ALG_SMART]["timeout"] else "-"),
             "smart_time": fmt_time(results[ALG_SMART]["elapsed"]),
             "simple_cost": fmt_cost(results[ALG_SIMPLE].get("cost")) if results[ALG_SIMPLE].get("feasible") else ("ERR" if results[ALG_SIMPLE]["error"] else "TO" if results[ALG_SIMPLE]["timeout"] else "-"),
             "simple_time": fmt_time(results[ALG_SIMPLE]["elapsed"]),
-            "concorde_cost": fmt_cost(results[ALG_CONCORDE].get("cost")) if results[ALG_CONCORDE].get("feasible") else ("ERR" if results[ALG_CONCORDE]["error"] else "TO" if results[ALG_CONCORDE]["timeout"] else "-"),
-            "concorde_time": fmt_time(results[ALG_CONCORDE]["elapsed"]),
         })
 
         lines.append("---")
@@ -932,7 +879,7 @@ def main():
     lines.append("| Algorithm | Solved | Timeout | Error | Wrong Cost | Total Time | Avg Time | Avg B&B Nodes | Total B&B Nodes |")
     lines.append("|-----------|--------|---------|-------|------------|------------|----------|---------------|-----------------|")
 
-    for alg in [ALG_SMART, ALG_SIMPLE, ALG_CONCORDE]:
+    for alg in [ALG_CONCORDE, ALG_SMART, ALG_SIMPLE]:
         s = summary[alg]
         ok = s["ok"]
         timeout = s["timeout"]
@@ -950,16 +897,16 @@ def main():
     # Per-instance matrix
     lines.append("### Per-Instance Results Matrix")
     lines.append("")
-    header = "| # | Instance | n | DP Cost | Smart Cost | Simple Cost | Concorde Cost | DP Time | Smart Time | Simple Time | Concorde Time |"
+    header = "| # | Instance | n | Concorde Cost | Smart Cost | Simple Cost | Concorde Time | Smart Time | Simple Time |"
     lines.append(header)
-    sep = "|---|---|---|---|---|---|---|---|---|---|---|"
+    sep = "|---|---|---|---|---|---|---|---|---|"
     lines.append(sep)
 
     for pi in per_instance:
         lines.append(
             f"| {pi['idx']} | `{pi['name']}` | {pi['n']} "
-            f"| {pi['dp_cost']} | {pi['smart_cost']} | {pi['simple_cost']} | {pi['concorde_cost']} "
-            f"| {pi['dp_time']} | {pi['smart_time']} | {pi['simple_time']} | {pi['concorde_time']} |"
+            f"| {pi['concorde_cost']} | {pi['smart_cost']} | {pi['simple_cost']} "
+            f"| {pi['concorde_time']} | {pi['smart_time']} | {pi['simple_time']} |"
         )
     lines.append("")
 
@@ -968,8 +915,8 @@ def main():
     print(f"\nResults written to: {OUT_PATH}", file=sys.stderr)
 
 
-def _print_solver_status(label: str, stats: dict, dp_cost: float):
-    """Print a one-line solver status to stderr."""
+def _print_solver_status(label: str, stats: dict, ref_cost: float | None):
+    """Print a one-line solver status to stderr (comparing against Concorde reference)."""
     if stats["timeout"]:
         print(f"TIMEOUT", file=sys.stderr)
     elif stats["error"]:
@@ -977,10 +924,10 @@ def _print_solver_status(label: str, stats: dict, dp_cost: float):
     elif stats["feasible"]:
         cost = stats["cost"]
         expanded = stats.get("nodes_expanded")
-        if dp_cost < INF / 2:
-            tag = "OK (=DP)" if abs(cost - dp_cost) < 1e-6 else f"WRONG (dp={dp_cost:.0f})"
+        if ref_cost is not None and ref_cost < INF / 2:
+            tag = "OK (=ref)" if abs(cost - ref_cost) < 1e-6 else f"WRONG (ref={ref_cost:.0f})"
         else:
-            tag = "OK (infeasible verified)"
+            tag = "OK (no reference)"
         print(f"cost={cost:.0f} {tag} time={fmt_time(stats['elapsed'])} expanded={expanded}", file=sys.stderr)
     else:
         print(f"INFEASIBLE", file=sys.stderr)

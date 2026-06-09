@@ -404,30 +404,29 @@ SolveResult BranchBoundSolver::solve(BranchStrategy strategy)
         writeDebugLine(debug_, line.str());
     }
 
-    // 记录当前层级对约束和候选集的修改，用于递归返回时还原。
+    // 记录当前层级对 forced/forbidden 标记的修改，用于回溯时还原。
     struct LevelChanges {
-        std::size_t saved_candidate_size = 0;
         std::size_t forced_id = static_cast<std::size_t>(-1);
         std::size_t forbidden_id = static_cast<std::size_t>(-1);
     };
 
+    // try_child 过滤后的候选集保存在这里，visit_child 直接取用，避免重复过滤。
     struct PendingChild {
         bool available = false;
         OneTree tree;
+        std::vector<Edge> filtered_candidates;
     };
 
+    // 候选集按引用传递。通过「仅保存被删除边、回溯时追加」实现空间高效的还原。
     auto search = [&](auto&& self, Node& node, std::vector<Edge>& branch_candidates,
                       OneTree current_tree, int depth) -> void {
         node.bound = current_tree.cost;
         node.depth = depth;
-        // 当前节点的下界已经不优于已知最优可行解，可以直接剪枝。
         if (shouldPrune(node.bound, best_cost)) {
             ++result.stats.nodes_pruned_by_bound;
             return;
         }
-
         ++result.stats.nodes_expanded;
-        // debug输出
         if (debug_.output != nullptr && result.stats.nodes_expanded % debug_interval == 0) {
             std::ostringstream line;
             line << "progress: expanded=" << result.stats.nodes_expanded
@@ -440,9 +439,7 @@ SolveResult BranchBoundSolver::solve(BranchStrategy strategy)
             writeDebugLine(debug_, line.str());
         }
 
-        // 1-tree 若所有顶点度数都是 2，就已经是一条合法 TSP 回路。
         if (isTour(current_tree)) {
-            // 将边集合转成按访问顺序排列的顶点序列。
             std::vector<int> candidate = buildTour(current_tree.edges);
             if (!candidate.empty() && current_tree.cost + kEps < best_cost) {
                 best_cost = current_tree.cost;
@@ -454,10 +451,8 @@ SolveResult BranchBoundSolver::solve(BranchStrategy strategy)
             return;
         }
 
-        // 在当前节点上应用一次分支决策（force 或 forbid 一条边），
-        // 过滤候选集并记录修改以供回溯时还原。
-        auto apply_decision = [&](const Edge& branch_edge, bool force_edge,
-                                  LevelChanges& changes) -> bool {
+        auto apply_flag = [&](const Edge& branch_edge, bool force_edge,
+                              LevelChanges& changes) -> bool {
             const std::size_t id = edgeId(branch_edge.u, branch_edge.v);
             if (force_edge) {
                 if (node.forbidden[id] || !isFinite(dist_[branch_edge.u][branch_edge.v])) {
@@ -466,30 +461,14 @@ SolveResult BranchBoundSolver::solve(BranchStrategy strategy)
                 node.forced[id] = 1;
                 changes.forced_id = id;
             } else {
-                if (node.forced[id]) {
-                    return false;
-                }
+                if (node.forced[id]) { return false; }
                 node.forbidden[id] = 1;
                 changes.forbidden_id = id;
-            }
-            changes.saved_candidate_size = branch_candidates.size();
-            if (!buildBranchCandidates(node, branch_candidates)) {
-                // 过滤失败，还原修改。
-                branch_candidates.resize(changes.saved_candidate_size);
-                if (changes.forced_id != static_cast<std::size_t>(-1)) {
-                    node.forced[changes.forced_id] = 0;
-                }
-                if (changes.forbidden_id != static_cast<std::size_t>(-1)) {
-                    node.forbidden[changes.forbidden_id] = 0;
-                }
-                return false;
             }
             return true;
         };
 
-        // 还原 apply_decision 所做的修改。
-        auto revert_decision = [&](const LevelChanges& changes) {
-            branch_candidates.resize(changes.saved_candidate_size);
+        auto revert_flag = [&](const LevelChanges& changes) {
             if (changes.forced_id != static_cast<std::size_t>(-1)) {
                 node.forced[changes.forced_id] = 0;
             }
@@ -498,16 +477,31 @@ SolveResult BranchBoundSolver::solve(BranchStrategy strategy)
             }
         };
 
-        // 尝试一个分支方向：应用决策并计算 1-tree 下界，之后立即还原。
+        // 试探分支：过滤 → 计算 1-tree → 保存过滤集到 pending → 还原候选集。
         auto try_child = [&](const Edge& branch_edge, bool force_edge,
                              PendingChild& pending) -> bool {
-            LevelChanges changes;
-            if (!apply_decision(branch_edge, force_edge, changes)) {
+            LevelChanges flag_changes;
+            if (!apply_flag(branch_edge, force_edge, flag_changes)) {
+                ++result.stats.nodes_pruned_infeasible;
+                return false;
+            }
+            std::vector<Edge> removed;
+            bool ok = buildBranchCandidates(node, branch_candidates, removed);
+            revert_flag(flag_changes);
+            if (!ok) {
+                branch_candidates.insert(branch_candidates.end(),
+                                         std::make_move_iterator(removed.begin()),
+                                         std::make_move_iterator(removed.end()));
                 ++result.stats.nodes_pruned_infeasible;
                 return false;
             }
             pending.tree = computeOneTree(node, branch_candidates);
-            revert_decision(changes);
+            // 保存过滤集到 pending，再还原当前层候选集
+            pending.filtered_candidates = std::move(branch_candidates);
+            branch_candidates = pending.filtered_candidates;
+            branch_candidates.insert(branch_candidates.end(),
+                                     std::make_move_iterator(removed.begin()),
+                                     std::make_move_iterator(removed.end()));
             if (!pending.tree.feasible) {
                 ++result.stats.nodes_pruned_infeasible;
                 return false;
@@ -517,33 +511,28 @@ SolveResult BranchBoundSolver::solve(BranchStrategy strategy)
             return true;
         };
 
-        // 真正进入子节点搜索：重新应用决策，递归，返回后还原。
+        // 进入子节点：复用 try_child 已过滤的候选集，swap 换入 → 递归 → swap 换回。
         auto visit_child = [&](PendingChild& child, const Edge& branch_edge,
                                bool force_edge) {
-            if (!child.available) {
-                return;
-            }
-            LevelChanges changes;
-            apply_decision(branch_edge, force_edge, changes);
+            if (!child.available) { return; }
+            LevelChanges flag_changes;
+            apply_flag(branch_edge, force_edge, flag_changes);
+            branch_candidates.swap(child.filtered_candidates);
             self(self, node, branch_candidates, std::move(child.tree), depth + 1);
-            revert_decision(changes);
+            branch_candidates.swap(child.filtered_candidates);
+            revert_flag(flag_changes);
         };
 
         if (strategy == BranchStrategy::Smart) {
-            // Smart: 选一条边做 force/forbid 二分支，优先 1-tree 中最大度数顶点的最大边。
             Edge branch_edge;
             if (!chooseBranchEdge(node, current_tree, branch_candidates, branch_edge)) {
                 writeDebugLine(debug_,
                                "dead end: no undecided branch edge at depth=" + std::to_string(depth));
                 return;
             }
-
-            PendingChild forced_child;
-            PendingChild forbidden_child;
+            PendingChild forced_child, forbidden_child;
             bool force_ok = try_child(branch_edge, true, forced_child);
             bool forbid_ok = try_child(branch_edge, false, forbidden_child);
-
-            // 递归 DFS 仍优先搜索下界更小的子树，以便尽早改进上界、增强后续剪枝。
             if (force_ok && forbid_ok
                 && forbidden_child.tree.cost + kEps < forced_child.tree.cost) {
                 visit_child(forbidden_child, branch_edge, false);
@@ -553,20 +542,15 @@ SolveResult BranchBoundSolver::solve(BranchStrategy strategy)
                 visit_child(forbidden_child, branch_edge, false);
             }
         } else {
-            // Simple: 任选一条未决边做 force/forbid 二分叉，无启发式选择。
             if (branch_candidates.empty()) {
                 writeDebugLine(debug_,
                                "dead end: no undecided branch edge at depth=" + std::to_string(depth));
                 return;
             }
-
-            const Edge& branch_edge = branch_candidates.front();
-
-            PendingChild forced_child;
-            PendingChild forbidden_child;
+            Edge branch_edge = branch_candidates.front();
+            PendingChild forced_child, forbidden_child;
             bool force_ok = try_child(branch_edge, true, forced_child);
             bool forbid_ok = try_child(branch_edge, false, forbidden_child);
-
             if (force_ok && forbid_ok
                 && forbidden_child.tree.cost + kEps < forced_child.tree.cost) {
                 visit_child(forbidden_child, branch_edge, false);
@@ -766,7 +750,8 @@ std::vector<int> BranchBoundSolver::buildTour(const std::vector<Edge>& edges) co
     return tour;
 }
 
-bool BranchBoundSolver::buildBranchCandidates(const Node& node,std::vector<Edge>& branch_candidates) const
+bool BranchBoundSolver::buildBranchCandidates(const Node& node,std::vector<Edge>& branch_candidates,
+                                             std::vector<Edge>& removed) const
 {
     // 统计每个顶点在强制边中的度数，检查是否超过 2。
     std::vector<int> forced_degree(n_, 0);
@@ -819,11 +804,12 @@ bool BranchBoundSolver::buildBranchCandidates(const Node& node,std::vector<Edge>
         }
     }
 
-    // 过滤候选集：移除因当前强制/禁止约束而不可行的边。
-    // 使用 swap-to-back 模式将被移除的边保留在 vector 尾部，以便回溯时通过 resize 还原。
-    std::size_t i = 0;
-    while (i < branch_candidates.size()) {
-        const Edge& e = branch_candidates[i];
+    // 过滤候选集：将被移除的边收集到 removed，保留的边压缩到 vector 前端。
+    // 不改变保留边的相对顺序，确保 computeOneTree 的排序结果稳定可预测。
+    removed.clear();
+    std::size_t write = 0;
+    for (std::size_t read = 0; read < branch_candidates.size(); ++read) {
+        const Edge& e = branch_candidates[read];
         const std::size_t eid = edgeId(e.u, e.v);
 
         bool remove = false;
@@ -843,12 +829,15 @@ bool BranchBoundSolver::buildBranchCandidates(const Node& node,std::vector<Edge>
         }
 
         if (remove) {
-            std::swap(branch_candidates[i], branch_candidates.back());
-            branch_candidates.pop_back();
+            removed.push_back(e);
         } else {
-            ++i;
+            if (write != read) {
+                branch_candidates[write] = branch_candidates[read];
+            }
+            ++write;
         }
     }
+    branch_candidates.resize(write);
 
     // 验证每个顶点仍有足够候选边以达到度数 2。
     std::vector<int> available_degree = forced_degree;
