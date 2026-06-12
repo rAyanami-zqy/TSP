@@ -1,0 +1,293 @@
+\documentclass{article}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage[UTF8]{ctex}
+\usepackage{tcolorbox}
+\tcbuselibrary{breakable}
+
+% overflow 环境：带边框、可跨页的容器，承载长算法伪代码
+\newenvironment{overflow}
+  {\tcolorbox[breakable, colback=white, colframe=black, boxrule=0.5pt, arc=0pt,
+              left=2pt, right=2pt, top=2pt, bottom=2pt]}
+  {\endtcolorbox}
+
+\title{TSP}
+\author{Rei Ayanami}
+\date{May 2026}
+
+\begin{document}
+
+\maketitle
+
+\section{主算法伪代码}
+
+算法采用基于 1-tree 下界的深度优先分支定界法。
+1-tree 定义为：在顶点 $0$ 之外的点集 $\{1,\dots,n-1\}$ 上构造最小生成树 (MST)，再加上与顶点 $0$ 相连的两条最小权出边。
+若 $G$ 不连通（存在无穷权边），则下界为 $+\infty$。记 $n$ 为顶点数，$w_{uv}$ 为边 $(u,v)$ 的权，$\varepsilon = 10^{-9}$ 为浮点容差。
+
+\begin{overflow}
+\begin{algorithm}[H]
+\caption{基于 1-tree 下界的 DFS 分支定界 (BranchBoundSolver::solve)}
+\label{alg:tsp-bb}
+\begin{algorithmic}[1]
+
+\State \textbf{输入：} 距离矩阵 $w[0..n{-}1][0..n{-}1]$（对称，非负，无穷表示无边），分支策略 $strategy \in \{\text{Smart}, \text{Simple}\}$
+\State \textbf{输出：} 可行解 $\textit{tour}$ 及其代价 $\textit{best\_cost}$，或不可行标记
+
+\Statex
+
+%---------------------------------------------------------------------
+% 阶段一：初始上界
+%---------------------------------------------------------------------
+\State $\textit{best\_cost} \gets +\infty$，$\textit{best\_tour} \gets \varnothing$
+\State 对多个起点分别运行最近邻构造，取最佳回路做 2-opt 局部优化，更新 $\textit{best\_cost},\textit{best\_tour}$
+
+\Statex
+
+%---------------------------------------------------------------------
+% 阶段二：根节点初始化
+%---------------------------------------------------------------------
+\State $root.\textit{forced} \gets \mathbf{0}_{n \times n}$，$root.\textit{forbidden} \gets \mathbf{0}_{n \times n}$
+\State 收集有限权无向边生成候选集 $C \gets \{(u,v,w_{uv}) \mid 0 \le u < v < n,\; w_{uv} < +\infty\}$
+\State 调用 $\textsc{ComputeOneTree}(root, C)$ 得到根 1-tree $\tau_0$
+\If{$\tau_0 = \text{infeasible}$}
+    \State \Return $\langle\text{infeasible}\rangle$
+\EndIf
+\State $root.\textit{bound} \gets \tau_0.\!\textit{cost}$
+
+\Statex
+
+%---------------------------------------------------------------------
+% 阶段三：递归分支定界
+%---------------------------------------------------------------------
+\State 调用 $\textsc{Search}(root,\; C,\; \tau_0,\; depth{=}0)$
+
+\Statex
+
+%---------------------------------------------------------------------
+% 阶段四：组装结果
+%---------------------------------------------------------------------
+\If{$\textit{best\_cost} < +\infty$}
+    \State \Return $\langle\text{feasible},\; \textit{best\_cost},\; \textit{best\_tour}\rangle$
+\Else
+    \State \Return $\langle\text{infeasible}\rangle$
+\EndIf
+
+\algstore{tspbb}
+\end{algorithmic}
+\end{algorithm}
+\end{overflow}
+
+\newpage
+
+\begin{overflow}
+\begin{algorithm}[H]
+\caption{递归搜索过程 (Search)}
+\label{alg:tsp-bb-search}
+\begin{algorithmic}[1]
+\algrestore{tspbb}
+
+\Statex
+\Function{Search}{$node,\;C,\;\tau,\;depth$}
+    \State $node.\textit{bound} \gets \tau.\!\textit{cost}$
+
+    \Statex \Comment{—— 界限剪枝 ——}
+    \If{$\textit{best\_cost} < +\infty \;\land\; node.\textit{bound} \ge \textit{best\_cost} - \varepsilon$}
+        \State \Return
+    \EndIf
+    \State $\textit{stats}.\!\textit{expanded} \gets \textit{stats}.\!\textit{expanded} + 1$
+
+    \Statex \Comment{—— 可行解检测 ——}
+    \If{$|\tau.\!\textit{edges}| = n \;\land\; \forall v:\; \tau.\!\textit{degree}[v] = 2$}
+        \State $\textit{tour} \gets \textsc{BuildTour}(\tau.\!\textit{edges})$ \Comment{从边集提取顶点序列}
+        \If{$\textit{tour} \neq \varnothing \;\land\; \tau.\!\textit{cost} + \varepsilon < \textit{best\_cost}$}
+            \State $\textit{best\_cost} \gets \tau.\!\textit{cost}$，$\textit{best\_tour} \gets \textit{tour}$
+        \EndIf
+        \State \Return
+    \EndIf
+
+    \Statex \Comment{—— 选择分支边 ——}
+    \If{$strategy = \text{Smart}$}
+        \State $e \gets \Call{ChooseBranchEdge}{node,\;\tau,\;C}$
+        \Comment{见算法 \ref{alg:tsp-bb-choose}}
+    \Else
+        \State $e \gets C[0]$ \Comment{Simple：取候选集第一条边}
+    \EndIf
+    \If{$e = \text{null}$} \State \Return \EndIf
+
+    \Statex \Comment{—— 试探并进入子节点（优先下界小的分支） ——}
+    \State $P_f,\; P_b \gets \text{PendingChild}$ \Comment{分别对应 force 和 forbid 子节点}
+    \State $ok_f \gets \Call{TryChild}{e,\; \textbf{true},\;  P_f,\; node,\; C}$
+    \State $ok_b \gets \Call{TryChild}{e,\; \textbf{false},\; P_b,\; node,\; C}$
+    \If{$ok_f \land ok_b \;\land\; P_b.\!\tau.\!\textit{cost} + \varepsilon < P_f.\!\tau.\!\textit{cost}$}
+        \State $\Call{VisitChild}{P_b,\; e,\; \textbf{false},\; node,\; C,\; depth}$
+        \State $\Call{VisitChild}{P_f,\; e,\; \textbf{true},\;  node,\; C,\; depth}$
+    \Else
+        \State $\Call{VisitChild}{P_f,\; e,\; \textbf{true},\;  node,\; C,\; depth}$
+        \State $\Call{VisitChild}{P_b,\; e,\; \textbf{false},\; node,\; C,\; depth}$
+    \EndIf
+\EndFunction
+
+\Statex
+
+%---------------------------------------------------------------------
+% TryChild
+%---------------------------------------------------------------------
+\Function{TryChild}{$e,\;force\_edge,\;pending,\;node,\;C$}
+    \State 记录 $ch$ 用于回溯；若施加标记失败则剪枝返回 $\textbf{false}$
+    \State $\Call{ApplyFlag}{e,\;force\_edge,\;ch,\;node}$
+    \State $removed \gets \Call{BuildCandidates}{node,\;C}$ \Comment{就地过滤 $C$，删除边收集到 $removed$}
+    \State $\Call{RevertFlag}{ch,\;node}$ \Comment{试探阶段即还原标记}
+    \If{过滤失败} $C \gets C \cup removed$；剪枝返回 $\textbf{false}$ \EndIf
+    \State $pending.\!\tau \gets \Call{ComputeOneTree}{node,\;C}$ \Comment{在过滤后的 $C$ 上计算 1-tree}
+    \State $pending.\!C \gets C$；$C \gets C \cup removed$ \Comment{保存过滤集，还原当前层候选集}
+    \If{$pending.\!\tau = \text{infeasible}$} 剪枝返回 $\textbf{false}$ \EndIf
+    \State $\textit{stats}.\!\textit{created} \gets \textit{stats}.\!\textit{created} + 1$
+    \State \Return $\textbf{true}$
+\EndFunction
+
+\Statex
+
+%---------------------------------------------------------------------
+% VisitChild
+%---------------------------------------------------------------------
+\Function{VisitChild}{$pending,\;e,\;force\_edge,\;node,\;C,\;depth$}
+    \State 施加标记于 $node$；$\Call{Swap}{C,\;pending.\!C}$ \Comment{换入子节点过滤后的候选集}
+    \State $\Call{Search}{node,\;C,\;pending.\!\tau,\;depth+1}$
+    \State $\Call{Swap}{C,\;pending.\!C}$；还原标记 \Comment{回溯}
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+\end{overflow}
+
+\newpage
+
+\begin{overflow}
+\begin{algorithm}[H]
+\caption{1-tree 构造与分支边选择}
+\label{alg:tsp-bb-sub}
+\begin{algorithmic}[1]
+
+\Function{ComputeOneTree}{$node,\;C$}
+    \State \Comment{阶段一：在 $\{1,\dots,n-1\}$ 上构造受约束 MST}
+    \State 初始化并查集 $dsu$，边集 $edges \gets \varnothing$，$cost \gets 0$，$cnt \gets 0$
+    \ForAll{$0 < u < v < n$ 且 $node.\textit{forced}[u][v] = 1$}
+        \State $dsu.\Call{unite}{u,v}$；$edges \gets edges \cup \{(u,v,w_{uv})\}$
+        \State $cost \gets cost + w_{uv}$；$cnt \gets cnt + 1$
+    \EndFor
+    \State 将 $C$ 按边权升序排列
+    \ForAll{$(u,v,w) \in C$ \textbf{且} $cnt < n-2$}
+        \If{$u = 0 \lor v = 0$} \textbf{continue} \EndIf \Comment{跳过与顶点 0 相连的边}
+        \If{$dsu.\Call{unite}{u,v}$}
+            \State $edges \gets edges \cup \{(u,v,w)\}$；$cost \gets cost + w$；$cnt \gets cnt + 1$
+        \EndIf
+    \EndFor
+    \If{$cnt \neq n-2$} \Return $\text{infeasible}$ \EndIf
+
+    \State \Comment{阶段二：选择与顶点 0 相连的两条最轻出边}
+    \State 收集强制连接到 0 的边到 $root\_edges$
+    \State 从 $C$ 中收集与 0 相连的边，按权升序补足至 $|root\_edges| = 2$
+    \If{$|root\_edges| \neq 2$} \Return $\text{infeasible}$ \EndIf
+    \State $edges \gets edges \cup root\_edges$；$cost \gets cost + \sum_{e \in root\_edges} e.w$
+    \State 统计 $\tau.\!\textit{degree}[v]$（$v = 0,\dots,n{-}1$）
+    \State \Return $\langle\text{feasible},\; cost,\; edges,\; degree\rangle$
+\EndFunction
+
+\Statex
+
+\Function{ChooseBranchEdge}{$node,\;\tau,\;C$}
+\label{alg:tsp-bb-choose}
+    \If{$C = \varnothing$} \Return $\text{null}$ \EndIf
+    \State 构建掩码 $mask$ 快速判断边是否在 $C$ 中
+    \State \Comment{启发式一：在 1-tree 度数最大的顶点上选边}
+    \State $v^* \gets \arg\max_v \tau.\!\textit{degree}[v]$
+    \If{$\tau.\!\textit{degree}[v^*] > 2$}
+        \ForAll{$e \in \tau.\!\textit{edges}$ 且 $e$ 入射于 $v^*$}
+            \If{$e \in C$ 且未被强制/禁止} 选权最大的 \EndIf
+        \EndFor
+        \If{找到} \Return 选中的边 \EndIf
+    \EndIf
+    \State \Comment{回退一：在 $\tau$ 的边中任选一条 eligible 边}
+    \ForAll{$e \in \tau.\!\textit{edges}$}
+        \If{$e \in C$ 且未被强制/禁止} 选权最大的 \EndIf
+    \EndFor
+    \If{找到} \Return 选中的边 \EndIf
+    \State \Comment{回退二：在 $C$ 中任选一条 eligible 边}
+    \ForAll{$e \in C$}
+        \If{$e$ 未被强制/禁止} 选权最大的 \EndIf
+    \EndFor
+    \If{找到} \Return 选中的边 \EndIf
+    \State \Return $\text{null}$
+\EndFunction
+
+\end{algorithmic}
+\end{algorithm}
+\end{overflow}
+
+\subsection{候选集过滤 (BuildBranchCandidates)}
+
+\begin{overflow}
+\begin{algorithm}[H]
+\caption{候选集过滤与可行性验证 (BuildBranchCandidates)}
+\label{alg:tsp-bb-candidates}
+\begin{algorithmic}[1]
+
+\Function{BuildBranchCandidates}{$node,\;C,\;removed$}
+    \If{$C = \varnothing$} \State \Return $\textbf{false}$ \EndIf
+
+    \Statex \Comment{—— 阶段一：收集强制边信息 ——}
+    \State $\textit{fdeg}[0..n{-}1] \gets 0$，$\textit{dsu} \gets \Call{DisjointSet}{n}$
+    \ForAll{$(u,v) \in \{0..n{-}1\}^2,\;u<v$}
+        \If{$node.\textit{forced}[u][v] \land node.\textit{forbidden}[u][v]$}
+            \State \Return $\textbf{false}$ \Comment{冲突}
+        \EndIf
+        \If{$\lnot\,node.\textit{forced}[u][v]$} \State \textbf{continue} \EndIf
+        \If{$w_{uv} = +\infty \lor \lnot\,\textit{dsu}.\Call{unite}{u,v}$}
+            \State \Return $\textbf{false}$ \Comment{边不存在或成子回路}
+        \EndIf
+        \If{$\textit{++fdeg}[u] > 2 \lor \textit{++fdeg}[v] > 2$}
+            \State \Return $\textbf{false}$ \Comment{度数超限}
+        \EndIf
+    \EndFor
+    \State $\textit{comp\_sz}[c] \gets |\{v \mid \textit{dsu}.\Call{find}{v} = c\}|$ \Comment{各分量顶点数}
+
+    \Statex \Comment{—— 阶段二：就地过滤候选集 ——}
+    \State $\textit{removed} \gets \varnothing$，$\textit{write} \gets 0$
+    \ForAll{$e \in C$}
+        \If{$node.\textit{forced}[e] \lor node.\textit{forbidden}[e]$} \Comment{已决定边}
+            \State $\textit{removed} \gets \textit{removed} \cup \{e\}$
+        \ElsIf{$\textit{fdeg}[e.u] \ge 2 \lor \textit{fdeg}[e.v] \ge 2$} \Comment{度数饱和}
+            \State $\textit{removed} \gets \textit{removed} \cup \{e\}$
+        \ElsIf{$e.u > 0 \land e.v > 0 \;\land\; \textit{dsu}.\Call{find}{e.u} = \textit{dsu}.\Call{find}{e.v} \;\land\; \textit{comp\_sz}[\textit{dsu}.\Call{find}{e.u}] < n$}
+            \State $\textit{removed} \gets \textit{removed} \cup \{e\}$ \Comment{会形成不含顶点0的子回路}
+        \Else
+            \State $C[\textit{write}] \gets e$；$\textit{write} \gets \textit{write} + 1$
+        \EndIf
+    \EndFor
+    \State $C \gets C[0..\textit{write}{-}1]$
+
+    \Statex \Comment{—— 阶段三：终验 ——}
+    \State $\textit{avail}[v] \gets \textit{fdeg}[v] + |\{e \in C \mid v \in e\}|$（$v = 0..n{-}1$）
+    \If{$\exists\,v,\;\textit{avail}[v] < 2$}
+        \State \Return $\textbf{false}$
+    \EndIf
+    \State \Return $\textbf{true}$
+\EndFunction
+
+\end{algorithmic}
+\end{algorithm}
+\end{overflow}
+
+回溯时仅需将 $\textit{removed}$ 中的边追加回 $C$，不产生候选集副本。
+
+\subsection{剪枝与搜索顺序}
+
+\begin{itemize}
+    \item \textbf{界限剪枝}：若 $node.bound \ge best\_cost - \varepsilon$，则剪掉该子树。该条件是安全的，因为 1-tree 下界不会高估真实最优回路的代价。
+    \item \textbf{子节点排序}：计算 force 和 forbid 两个子节点的 1-tree 下界后，优先递归进入下界较小的子节点。此举使 DFS 尽早发现更优可行解，增强后续剪枝效果。
+    \item \textbf{1-tree 等于最优回路}：若某节点 1-tree 各顶点度数均为 $2$，则该 1-tree 已是满足所有约束的 Hamilton 回路，可直接更新最优解并回溯。
+\end{itemize}
+
+\end{document}

@@ -18,6 +18,8 @@ Usage:
 To change which instances are tested, edit the INSTANCE_SOURCES block below.
 """
 
+from __future__ import annotations
+
 import subprocess
 import sys
 import os
@@ -28,16 +30,29 @@ import shutil
 import tempfile
 from pathlib import Path
 
+from typing import cast
+
+try:
+    import openpyxl  # type: ignore
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side  # type: ignore
+    from openpyxl.utils import get_column_letter  # type: ignore
+    from openpyxl.worksheet.worksheet import Worksheet  # type: ignore
+    from openpyxl.cell.cell import Cell  # type: ignore
+    HAS_OPENPYXL = True
+except ImportError:
+    HAS_OPENPYXL = False
+
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 SOLVER = os.path.join(PROJECT_ROOT, "build", "tsp_bb")
 CONCORDE = os.path.join(PROJECT_ROOT, "concorde", "TSP", "concorde")
 CONVERTER = os.path.join(PROJECT_ROOT, "tools", "convert_to_tsplib.py")
 OUT_PATH = os.path.join(PROJECT_ROOT, "docs", "strategy-comparison-results.md")
+XLSX_PATH = os.path.join(PROJECT_ROOT, "docs", "strategy-comparison-results.xlsx")
 
 # ── Global settings ──────────────────────────────────────────────────
 
 TIMEOUT = 3600  # seconds per instance per algorithm
-DEBUG_INTERVAL = 100000  # how often tsp_bb prints debug progress
+DEBUG_INTERVAL = 5000000  # how often tsp_bb prints debug progress
 CONCORDE_SEED = 123  # fixed seed for reproducibility
 
 # ============================================================
@@ -61,16 +76,16 @@ CONCORDE_SEED = 123  # fixed seed for reproducibility
 # ============================================================
 INSTANCE_SOURCES = [
     # Small project examples (hand-crafted)
-    {"path": "examples", "recursive": True, "max_dim": 30,
+    {"path": "examples", "recursive": True, "max_dim": 49,
      "skip_dirs": ["tsplib"]},
 
     # Classic TSPLIB benchmark — instances with fewer than 30 vertices
-    {"path": "data/classic/tsplib", "recursive": False, "max_dim": 49},
+    {"path": "data/classic/tsplib", "recursive": False, "max_dim": 59},
     # result: burma14(14) ulysses16(16) gr17(17) gr21(21) ulysses22(22)
     #         gr24(24) fri26(26) bayg29(29) bays29(29)
 
     # Classic National benchmark — instances with fewer than 30 vertices
-    {"path": "data/classic/national", "recursive": False, "max_dim": 49},
+    {"path": "data/classic/national", "recursive": False, "max_dim": 59},
     # result: wi29(29)
 ]
 # ============================================================
@@ -855,6 +870,23 @@ def main():
                 lines.append("")
 
         # ── Collect per-instance data ──
+        def _alg_cost_val(st):
+            """Return raw cost value, or None on error/timeout/infeasible."""
+            if st["timeout"] or st["error"] or not st.get("feasible"):
+                return None
+            return st["cost"]
+
+        def _alg_time_val(st):
+            """Return elapsed seconds, or None on error/timeout."""
+            if st["timeout"] or st["error"]:
+                return None
+            return st["elapsed"]
+
+        def _alg_nodes_val(st, alg):
+            if alg == ALG_CONCORDE:
+                return st.get("bbnodes")
+            return st.get("nodes_created")
+
         per_instance.append({
             "idx": idx,
             "name": rel_path,
@@ -865,6 +897,16 @@ def main():
             "smart_time": fmt_time(results[ALG_SMART]["elapsed"]),
             "simple_cost": fmt_cost(results[ALG_SIMPLE].get("cost")) if results[ALG_SIMPLE].get("feasible") else ("ERR" if results[ALG_SIMPLE]["error"] else "TO" if results[ALG_SIMPLE]["timeout"] else "-"),
             "simple_time": fmt_time(results[ALG_SIMPLE]["elapsed"]),
+            # raw numeric values for Excel export
+            "_concorde_cost": _alg_cost_val(results[ALG_CONCORDE]),
+            "_concorde_time": _alg_time_val(results[ALG_CONCORDE]),
+            "_concorde_nodes": _alg_nodes_val(results[ALG_CONCORDE], ALG_CONCORDE),
+            "_smart_cost": _alg_cost_val(results[ALG_SMART]),
+            "_smart_time": _alg_time_val(results[ALG_SMART]),
+            "_smart_nodes": _alg_nodes_val(results[ALG_SMART], ALG_SMART),
+            "_simple_cost": _alg_cost_val(results[ALG_SIMPLE]),
+            "_simple_time": _alg_time_val(results[ALG_SIMPLE]),
+            "_simple_nodes": _alg_nodes_val(results[ALG_SIMPLE], ALG_SIMPLE),
         })
 
         lines.append("---")
@@ -912,6 +954,9 @@ def main():
 
     flush()
 
+    # Excel export
+    export_xlsx(per_instance, summary, XLSX_PATH)
+
     print(f"\nResults written to: {OUT_PATH}", file=sys.stderr)
 
 
@@ -931,6 +976,128 @@ def _print_solver_status(label: str, stats: dict, ref_cost: float | None):
         print(f"cost={cost:.0f} {tag} time={fmt_time(stats['elapsed'])} expanded={expanded}", file=sys.stderr)
     else:
         print(f"INFEASIBLE", file=sys.stderr)
+
+
+# ── Excel Export ────────────────────────────────────────────────────────
+
+def export_xlsx(per_instance: list[dict], summary: dict, xlsx_path: str):
+    """Write per-instance results and summary to an Excel workbook.
+
+    Sheet 1 "Per-Instance": one row per instance with cost / time / branch-nodes
+                             for Concorde, Smart, and Simple.
+    Sheet 2 "Summary": aggregate stats for the three algorithms.
+    """
+    if not HAS_OPENPYXL:
+        print("Warning: openpyxl not installed. Skipping Excel export. "
+              "Install with: pip install openpyxl", file=sys.stderr)
+        return
+
+    wb = openpyxl.Workbook()
+
+    # ── Styles ──
+    header_font = Font(bold=True, size=11)
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    header_font_white = Font(bold=True, size=11, color="FFFFFF")
+    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    cell_align = Alignment(horizontal="center", vertical="center")
+    thin_border = Border(
+        left=Side(style="thin"),
+        right=Side(style="thin"),
+        top=Side(style="thin"),
+        bottom=Side(style="thin"),
+    )
+
+    def style_header(ws: Worksheet, row: int, ncols: int) -> None:
+        for col in range(1, ncols + 1):
+            cell = cast(Cell, ws.cell(row=row, column=col))
+            cell.font = header_font_white
+            cell.fill = header_fill
+            cell.alignment = header_align
+            cell.border = thin_border
+
+    def style_data_cell(cell: Cell) -> None:
+        cell.alignment = cell_align
+        cell.border = thin_border
+
+    # ═══════════════════════════════════════════════════════════════
+    # Sheet 1: Per-Instance Results
+    # ═══════════════════════════════════════════════════════════════
+    ws1 = cast(Worksheet, wb.active)
+    ws1.title = "Per-Instance"
+
+    headers1 = [
+        "#", "Instance", "n",
+        "Concorde Cost", "Concorde Time (s)", "Concorde BBNodes",
+        "Smart Cost", "Smart Time (s)", "Smart Nodes Created",
+        "Simple Cost", "Simple Time (s)", "Simple Nodes Created",
+    ]
+    for c, h in enumerate(headers1, 1):
+        ws1.cell(row=1, column=c, value=h)
+    style_header(ws1, 1, len(headers1))
+
+    for r, pi in enumerate(per_instance, 2):
+        values = [
+            pi["idx"], pi["name"], pi["n"],
+            pi.get("_concorde_cost"), pi.get("_concorde_time"), pi.get("_concorde_nodes"),
+            pi.get("_smart_cost"), pi.get("_smart_time"), pi.get("_smart_nodes"),
+            pi.get("_simple_cost"), pi.get("_simple_time"), pi.get("_simple_nodes"),
+        ]
+        for c, v in enumerate(values, 1):
+            cell = cast(Cell, ws1.cell(row=r, column=c))
+            if v is None:
+                cell.value = "-"
+            elif isinstance(v, float):
+                cell.value = round(v, 2)
+            else:
+                cell.value = str(v)
+            style_data_cell(cell)
+
+    # Column widths
+    col_widths1 = [5, 35, 6, 14, 14, 14, 14, 14, 14, 14, 14, 14]
+    for c, w in enumerate(col_widths1, 1):
+        ws1.column_dimensions[get_column_letter(c)].width = w
+
+    ws1.freeze_panes = "A2"
+
+    # ═══════════════════════════════════════════════════════════════
+    # Sheet 2: Summary
+    # ═══════════════════════════════════════════════════════════════
+    ws2 = cast(Worksheet, wb.create_sheet("Summary"))
+
+    headers2 = [
+        "Algorithm", "Solved", "Timeout", "Error", "Wrong Cost",
+        "Total Time (s)", "Avg Time (s)", "Avg B&B Nodes", "Total B&B Nodes",
+    ]
+    for c, h in enumerate(headers2, 1):
+        ws2.cell(row=1, column=c, value=h)
+    style_header(ws2, 1, len(headers2))
+
+    alg_order = [ALG_CONCORDE, ALG_SMART, ALG_SIMPLE]
+    for r, alg in enumerate(alg_order, 2):
+        s = summary[alg]
+        ok = s["ok"]
+        total_time = s["total_time"]
+        avg_time = total_time / ok if ok > 0 else 0
+        avg_bb = s["total_bbnodes"] / s["count_nodes"] if s["count_nodes"] > 0 else 0
+        values = [
+            alg, ok, s["timeout"], s["error"], s["wrong_cost"],
+            round(total_time, 2), round(avg_time, 2),
+            round(avg_bb, 0), s["total_bbnodes"],
+        ]
+        for c, v in enumerate(values, 1):
+            cell = cast(Cell, ws2.cell(row=r, column=c))
+            cell.value = v
+            style_data_cell(cell)
+
+    col_widths2 = [16, 10, 10, 8, 12, 14, 14, 14, 16]
+    for c, w in enumerate(col_widths2, 1):
+        ws2.column_dimensions[get_column_letter(c)].width = w
+
+    ws2.freeze_panes = "A2"
+
+    # ── Save ──
+    wb.save(xlsx_path)
+    print(f"Excel written to: {xlsx_path}", file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <iosfwd>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -111,6 +112,18 @@ private:
         std::vector<unsigned char> forced;
         std::vector<unsigned char> forbidden;
     };
+
+    // 记录当前层级对 forced/forbidden 标记的修改，用于回溯时还原。
+    struct LevelChanges {
+        std::size_t forced_id = static_cast<std::size_t>(-1);
+        std::size_t forbidden_id = static_cast<std::size_t>(-1);
+    };
+
+    // tryChild 过滤后的候选集保存在这里，visitChild 直接取用，避免重复过滤。
+    struct PendingChild {
+        bool available = false;
+        std::vector<Edge> filtered_candidates;
+    };
     // edgeId 把无向边 (u,v) 映射到 forced / forbidden 数组中的一个位置，方便 O(1) 标记边状态。
     std::size_t edgeId(int u, int v) const;
     // forced 数组中非 0 表示该边在当前分支节点中必须被选择。
@@ -141,11 +154,20 @@ private:
     // 2-opt 局部优化：如果交换 tour 中的两条边能降低成本，就执行交换。
     void twoOpt(std::vector<int>& tour, double& cost) const;
 
+    // 递归搜索：进入后在节点状态和候选集上计算 1-tree 下界，剪枝后选择分支边递归。
+    void search(Node& node, std::vector<Edge>& branch_candidates,
+                int depth, BranchStrategy strategy);
+
     // 顶点数。
     int n_ = 0;
     // 距离矩阵，dist[i][j] 是顶点 i 和 j 之间的距离；dist[i][i] 必须为 0。
     std::vector<std::vector<double>> dist_;
     DebugOptions debug_;
+
+    // 搜索过程中的状态。
+    double best_cost_ = std::numeric_limits<double>::infinity();
+    std::vector<int> best_tour_;
+    SolveResult result_;
 };
 
 // 自动识别本项目矩阵格式或 TSPLIB TSP 格式。

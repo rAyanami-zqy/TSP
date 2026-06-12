@@ -350,23 +350,21 @@ void BranchBoundSolver::disableDebugOutput()
 
 SolveResult BranchBoundSolver::solve(BranchStrategy strategy)
 {
-    // 为了用 O(1) 标记任意无向边状态，直接使用 n*n 大小的一维数组。
     const std::size_t edge_state_size = static_cast<std::size_t>(n_) * static_cast<std::size_t>(n_);
 
-    SolveResult result;
-    // 当前已知的最优可行解，初始为无穷大和空路径。
-    std::vector<int> best_tour;
-    double best_cost = std::numeric_limits<double>::infinity();
-    const std::size_t debug_interval = normalizedDebugInterval(debug_);
+    // 重置搜索状态。
+    result_ = SolveResult{};
+    best_cost_ = std::numeric_limits<double>::infinity();
+    best_tour_.clear();
 
     writeDebugLine(debug_, "exact solve started: vertices=" + std::to_string(n_));
 
-    // 先用启发式得到一个上界。上界越小，后续 bound 剪枝越有效。
-    if (findInitialTour(best_tour, best_cost)) {
-        result.stats.initial_upper_bound = best_cost;
-        writeDebugLine(debug_, "initial incumbent: cost=" + formatDebugDouble(best_cost));
+    // 先用启发式得到一个上界。
+    if (findInitialTour(best_tour_, best_cost_)) {
+        result_.stats.initial_upper_bound = best_cost_;
+        writeDebugLine(debug_, "initial incumbent: cost=" + formatDebugDouble(best_cost_));
     } else {
-        result.stats.initial_upper_bound = std::numeric_limits<double>::infinity();
+        result_.stats.initial_upper_bound = std::numeric_limits<double>::infinity();
         writeDebugLine(debug_, "initial incumbent: unavailable");
     }
     Node root;
@@ -386,16 +384,15 @@ SolveResult BranchBoundSolver::solve(BranchStrategy strategy)
 
     OneTree root_tree = computeOneTree(root, branch_candidates);
     if (!root_tree.feasible) {
-        // 根节点都无法构造 1-tree，说明实例无法形成 Hamilton 回路。
-        result.feasible = false;
-        result.cost = std::numeric_limits<double>::infinity();
-        result.stats.root_lower_bound = std::numeric_limits<double>::infinity();
+        result_.feasible = false;
+        result_.cost = std::numeric_limits<double>::infinity();
+        result_.stats.root_lower_bound = std::numeric_limits<double>::infinity();
         writeDebugLine(debug_, "root 1-tree infeasible; exact solve stopped");
-        return result;
+        return result_;
     }
-    result.stats.root_lower_bound = root_tree.cost;
+    result_.stats.root_lower_bound = root_tree.cost;
     root.bound = root_tree.cost;
-    result.stats.nodes_created = 1;
+    result_.stats.nodes_created = 1;
     {
         std::ostringstream line;
         line << "root: lower_bound=" << formatDebugDouble(root.bound)
@@ -404,186 +401,150 @@ SolveResult BranchBoundSolver::solve(BranchStrategy strategy)
         writeDebugLine(debug_, line.str());
     }
 
-    // 记录当前层级对 forced/forbidden 标记的修改，用于回溯时还原。
+    search(root, branch_candidates, 0, strategy);
+
+    // 搜索结束后，best_cost_ 有限且 best_tour_ 非空才算找到可行最优解。
+    if (isFinite(best_cost_) && !best_tour_.empty()) {
+        result_.feasible = true;
+        result_.cost = best_cost_;
+        result_.tour = std::move(best_tour_);
+    } else {
+        result_.feasible = false;
+        result_.cost = std::numeric_limits<double>::infinity();
+    }
+    {
+        std::ostringstream line;
+        line << "exact solve finished: feasible=" << (result_.feasible ? "yes" : "no")
+             << " cost=" << formatDebugDouble(result_.cost)
+             << " expanded=" << result_.stats.nodes_expanded
+             << " created=" << result_.stats.nodes_created
+             << " pruned_bound=" << result_.stats.nodes_pruned_by_bound
+             << " pruned_infeasible=" << result_.stats.nodes_pruned_infeasible;
+        writeDebugLine(debug_, line.str());
+    }
+    return result_;
+}
+
+void BranchBoundSolver::search(Node& node, std::vector<Edge>& branch_candidates,
+                               int depth, BranchStrategy strategy)
+{
+    // Step 1: 计算 1-tree 下界。
+    OneTree current_tree = computeOneTree(node, branch_candidates);
+    node.bound = current_tree.cost;
+    node.depth = depth;
+
+    // Step 2: 下界剪枝判断。
+    if (shouldPrune(node.bound, best_cost_)) {
+        ++result_.stats.nodes_pruned_by_bound;
+        return;
+    }
+    ++result_.stats.nodes_expanded;
+
+    const std::size_t debug_interval = normalizedDebugInterval(debug_);
+    if (debug_.output != nullptr && result_.stats.nodes_expanded % debug_interval == 0) {
+        std::ostringstream line;
+        line << "progress: expanded=" << result_.stats.nodes_expanded
+             << " created=" << result_.stats.nodes_created
+             << " depth=" << depth
+             << " bound=" << formatDebugDouble(node.bound)
+             << " best=" << formatDebugDouble(best_cost_)
+             << " pruned_bound=" << result_.stats.nodes_pruned_by_bound
+             << " pruned_infeasible=" << result_.stats.nodes_pruned_infeasible;
+        writeDebugLine(debug_, line.str());
+    }
+
+    // Step 3: 检查是否已经是合法 TSP 回路。
+    if (isTour(current_tree)) {
+        std::vector<int> candidate = buildTour(current_tree.edges);
+        if (!candidate.empty() && current_tree.cost + kEps < best_cost_) {
+            best_cost_ = current_tree.cost;
+            best_tour_ = std::move(candidate);
+            writeDebugLine(debug_,
+                           "new incumbent: cost=" + formatDebugDouble(best_cost_)
+                               + " source=recursive-node depth=" + std::to_string(depth));
+        }
+        return;
+    }
+
+    // Step 4: 选择分支边。
+    Edge branch_edge;
+    bool has_edge;
+    if (strategy == BranchStrategy::Smart) {
+        has_edge = chooseBranchEdge(node, current_tree, branch_candidates, branch_edge);
+    } else {
+        has_edge = !branch_candidates.empty();
+        if (has_edge) branch_edge = branch_candidates.front();
+    }
+    if (!has_edge) {
+        writeDebugLine(debug_,
+                       "dead end: no undecided branch edge at depth=" + std::to_string(depth));
+        return;
+    }
+
+    // Step 5: 生成子节点并按 force → forbid 顺序递归。
+    // 施加分支约束后过滤候选集，直接进入 search（search 自己算 1-tree 并剪枝），
+    // 返回后还原 flag 和候选集供 sibling 使用。
     struct LevelChanges {
         std::size_t forced_id = static_cast<std::size_t>(-1);
         std::size_t forbidden_id = static_cast<std::size_t>(-1);
     };
-
-    // try_child 过滤后的候选集保存在这里，visit_child 直接取用，避免重复过滤。
-    struct PendingChild {
-        bool available = false;
-        OneTree tree;
-        std::vector<Edge> filtered_candidates;
+    auto apply_flag = [&](const Edge& e, bool force, LevelChanges& changes) -> bool {
+        const std::size_t id = edgeId(e.u, e.v);
+        if (force) {
+            if (node.forbidden[id] || !isFinite(dist_[e.u][e.v])) return false;
+            node.forced[id] = 1;
+            changes.forced_id = id;
+        } else {
+            if (node.forced[id]) return false;
+            node.forbidden[id] = 1;
+            changes.forbidden_id = id;
+        }
+        return true;
+    };
+    auto revert_flag = [&](const LevelChanges& changes) {
+        if (changes.forced_id != static_cast<std::size_t>(-1)) node.forced[changes.forced_id] = 0;
+        if (changes.forbidden_id != static_cast<std::size_t>(-1)) node.forbidden[changes.forbidden_id] = 0;
     };
 
-    // 候选集按引用传递。通过「仅保存被删除边、回溯时追加」实现空间高效的还原。
-    auto search = [&](auto&& self, Node& node, std::vector<Edge>& branch_candidates,
-                      OneTree current_tree, int depth) -> void {
-        node.bound = current_tree.cost;
-        node.depth = depth;
-        if (shouldPrune(node.bound, best_cost)) {
-            ++result.stats.nodes_pruned_by_bound;
+    auto explore_child = [&](bool force) {
+        LevelChanges flag_changes;
+        if (!apply_flag(branch_edge, force, flag_changes)) {
+            ++result_.stats.nodes_pruned_infeasible;
             return;
         }
-        ++result.stats.nodes_expanded;
-        if (debug_.output != nullptr && result.stats.nodes_expanded % debug_interval == 0) {
-            std::ostringstream line;
-            line << "progress: expanded=" << result.stats.nodes_expanded
-                 << " created=" << result.stats.nodes_created
-                 << " depth=" << depth
-                 << " bound=" << formatDebugDouble(node.bound)
-                 << " best=" << formatDebugDouble(best_cost)
-                 << " pruned_bound=" << result.stats.nodes_pruned_by_bound
-                 << " pruned_infeasible=" << result.stats.nodes_pruned_infeasible;
-            writeDebugLine(debug_, line.str());
-        }
-
-        if (isTour(current_tree)) {
-            std::vector<int> candidate = buildTour(current_tree.edges);
-            if (!candidate.empty() && current_tree.cost + kEps < best_cost) {
-                best_cost = current_tree.cost;
-                best_tour = std::move(candidate);
-                writeDebugLine(debug_,
-                               "new incumbent: cost=" + formatDebugDouble(best_cost)
-                                   + " source=recursive-node depth=" + std::to_string(depth));
-            }
-            return;
-        }
-
-        auto apply_flag = [&](const Edge& branch_edge, bool force_edge,
-                              LevelChanges& changes) -> bool {
-            const std::size_t id = edgeId(branch_edge.u, branch_edge.v);
-            if (force_edge) {
-                if (node.forbidden[id] || !isFinite(dist_[branch_edge.u][branch_edge.v])) {
-                    return false;
-                }
-                node.forced[id] = 1;
-                changes.forced_id = id;
-            } else {
-                if (node.forced[id]) { return false; }
-                node.forbidden[id] = 1;
-                changes.forbidden_id = id;
-            }
-            return true;
-        };
-
-        auto revert_flag = [&](const LevelChanges& changes) {
-            if (changes.forced_id != static_cast<std::size_t>(-1)) {
-                node.forced[changes.forced_id] = 0;
-            }
-            if (changes.forbidden_id != static_cast<std::size_t>(-1)) {
-                node.forbidden[changes.forbidden_id] = 0;
-            }
-        };
-
-        // 试探分支：过滤 → 计算 1-tree → 保存过滤集到 pending → 还原候选集。
-        auto try_child = [&](const Edge& branch_edge, bool force_edge,
-                             PendingChild& pending) -> bool {
-            LevelChanges flag_changes;
-            if (!apply_flag(branch_edge, force_edge, flag_changes)) {
-                ++result.stats.nodes_pruned_infeasible;
-                return false;
-            }
-            std::vector<Edge> removed;
-            bool ok = buildBranchCandidates(node, branch_candidates, removed);
+        // 在 flag 生效时过滤候选集
+        std::vector<Edge> removed;
+        bool ok = buildBranchCandidates(node, branch_candidates, removed);
+        if (!ok) {
             revert_flag(flag_changes);
-            if (!ok) {
-                branch_candidates.insert(branch_candidates.end(),
-                                         std::make_move_iterator(removed.begin()),
-                                         std::make_move_iterator(removed.end()));
-                ++result.stats.nodes_pruned_infeasible;
-                return false;
-            }
-            pending.tree = computeOneTree(node, branch_candidates);
-            // 保存过滤集到 pending，再还原当前层候选集
-            pending.filtered_candidates = std::move(branch_candidates);
-            branch_candidates = pending.filtered_candidates;
             branch_candidates.insert(branch_candidates.end(),
                                      std::make_move_iterator(removed.begin()),
                                      std::make_move_iterator(removed.end()));
-            if (!pending.tree.feasible) {
-                ++result.stats.nodes_pruned_infeasible;
-                return false;
-            }
-            pending.available = true;
-            ++result.stats.nodes_created;
-            return true;
-        };
-
-        // 进入子节点：复用 try_child 已过滤的候选集，swap 换入 → 递归 → swap 换回。
-        auto visit_child = [&](PendingChild& child, const Edge& branch_edge,
-                               bool force_edge) {
-            if (!child.available) { return; }
-            LevelChanges flag_changes;
-            apply_flag(branch_edge, force_edge, flag_changes);
-            branch_candidates.swap(child.filtered_candidates);
-            self(self, node, branch_candidates, std::move(child.tree), depth + 1);
-            branch_candidates.swap(child.filtered_candidates);
-            revert_flag(flag_changes);
-        };
-
-        if (strategy == BranchStrategy::Smart) {
-            Edge branch_edge;
-            if (!chooseBranchEdge(node, current_tree, branch_candidates, branch_edge)) {
-                writeDebugLine(debug_,
-                               "dead end: no undecided branch edge at depth=" + std::to_string(depth));
-                return;
-            }
-            PendingChild forced_child, forbidden_child;
-            bool force_ok = try_child(branch_edge, true, forced_child);
-            bool forbid_ok = try_child(branch_edge, false, forbidden_child);
-            if (force_ok && forbid_ok
-                && forbidden_child.tree.cost + kEps < forced_child.tree.cost) {
-                visit_child(forbidden_child, branch_edge, false);
-                visit_child(forced_child, branch_edge, true);
-            } else {
-                visit_child(forced_child, branch_edge, true);
-                visit_child(forbidden_child, branch_edge, false);
-            }
-        } else {
-            if (branch_candidates.empty()) {
-                writeDebugLine(debug_,
-                               "dead end: no undecided branch edge at depth=" + std::to_string(depth));
-                return;
-            }
-            Edge branch_edge = branch_candidates.front();
-            PendingChild forced_child, forbidden_child;
-            bool force_ok = try_child(branch_edge, true, forced_child);
-            bool forbid_ok = try_child(branch_edge, false, forbidden_child);
-            if (force_ok && forbid_ok
-                && forbidden_child.tree.cost + kEps < forced_child.tree.cost) {
-                visit_child(forbidden_child, branch_edge, false);
-                visit_child(forced_child, branch_edge, true);
-            } else {
-                visit_child(forced_child, branch_edge, true);
-                visit_child(forbidden_child, branch_edge, false);
-            }
+            ++result_.stats.nodes_pruned_infeasible;
+            return;
         }
+
+        // 保存子节点候选集，再还原当前层候选集供 sibling 使用
+        std::vector<Edge> child_candidates = std::move(branch_candidates);
+        branch_candidates = child_candidates;
+        branch_candidates.insert(branch_candidates.end(),
+                                 std::make_move_iterator(removed.begin()),
+                                 std::make_move_iterator(removed.end()));
+
+        ++result_.stats.nodes_created;
+
+        // 进入子节点：换入子节点候选集，递归（search 自己算 1-tree 并剪枝）
+        branch_candidates.swap(child_candidates);
+        search(node, branch_candidates, depth + 1, strategy);
+        branch_candidates.swap(child_candidates);
+
+        revert_flag(flag_changes);
     };
 
-    search(search, root, branch_candidates, std::move(root_tree), 0);
-
-    // 搜索结束后，best_cost 有限且 best_tour 非空才算找到可行最优解。
-    if (isFinite(best_cost) && !best_tour.empty()) {
-        result.feasible = true;
-        result.cost = best_cost;
-        result.tour = std::move(best_tour);
-    } else {
-        result.feasible = false;
-        result.cost = std::numeric_limits<double>::infinity();
-    }
-    {
-        std::ostringstream line;
-        line << "exact solve finished: feasible=" << (result.feasible ? "yes" : "no")
-             << " cost=" << formatDebugDouble(result.cost)
-             << " expanded=" << result.stats.nodes_expanded
-             << " created=" << result.stats.nodes_created
-             << " pruned_bound=" << result.stats.nodes_pruned_by_bound
-             << " pruned_infeasible=" << result.stats.nodes_pruned_infeasible;
-        writeDebugLine(debug_, line.str());
-    }
-    return result;
+    // force 分支优先
+    explore_child(true);
+    // forbid 分支
+    explore_child(false);
 }
 
 std::size_t BranchBoundSolver::edgeId(int u, int v) const
