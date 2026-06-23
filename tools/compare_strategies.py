@@ -7,13 +7,13 @@ Algorithms compared:
   2. tsp_bb Smart branch strategy  (exact B&B)
   3. tsp_bb Simple branch strategy (exact B&B)
 
-Tours from all three solvers are compared: Concorde tour serves as reference,
-and Smart / Simple tours are checked against it.
+When --benchmark is passed, also compares against the solver built from HEAD~1
+to measure optimization speedup.
 
 Output: docs/strategy-comparison-results.md
 
 Usage:
-  python3 tools/compare_strategies.py
+  python3 tools/compare_strategies.py [--benchmark]
 
 To change which instances are tested, edit the INSTANCE_SOURCES block below.
 """
@@ -42,8 +42,12 @@ try:
 except ImportError:
     HAS_OPENPYXL = False
 
+# ── CLI flags ──────────────────────────────────────────────────────
+BENCHMARK_MODE = "--benchmark" in sys.argv
+
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 SOLVER = os.path.join(PROJECT_ROOT, "build", "tsp_bb")
+SOLVER_OLD = os.path.join(PROJECT_ROOT, "build", "tsp_bb_old")
 CONCORDE = os.path.join(PROJECT_ROOT, "concorde", "TSP", "concorde")
 CONVERTER = os.path.join(PROJECT_ROOT, "tools", "convert_to_tsplib.py")
 OUT_PATH = os.path.join(PROJECT_ROOT, "docs", "strategy-comparison-results.md")
@@ -51,7 +55,7 @@ XLSX_PATH = os.path.join(PROJECT_ROOT, "docs", "strategy-comparison-results.xlsx
 
 # ── Global settings ──────────────────────────────────────────────────
 
-TIMEOUT = 3600  # seconds per instance per algorithm
+TIMEOUT = 1800  # seconds per instance per algorithm
 DEBUG_INTERVAL = 5000000  # how often tsp_bb prints debug progress
 CONCORDE_SEED = 123  # fixed seed for reproducibility
 
@@ -94,13 +98,77 @@ INSTANCE_SOURCES = [
 ALG_SMART    = "Smart"       # tsp_bb exact + smart branch
 ALG_SIMPLE   = "Simple"      # tsp_bb exact + simple branch
 ALG_CONCORDE = "Concorde"    # Concorde exact solver (reference)
+ALG_SMART_OLD  = "Smart (old)"   # previous-commit smart, only in benchmark mode
+ALG_SIMPLE_OLD = "Simple (old)"  # previous-commit simple, only in benchmark mode
 
 ALL_ALGORITHMS = [ALG_CONCORDE, ALG_SMART, ALG_SIMPLE]
+BENCHMARK_ALGORITHMS = [ALG_SMART_OLD, ALG_SIMPLE_OLD]
 
 INF = float("inf")
 
 DEFAULT_SKIP_DIRS = {"_archives", "tsplib"}
 DEFAULT_EXTENSIONS = (".txt", ".tsp")
+
+
+# ── Old solver build ─────────────────────────────────────────────────
+
+def build_old_solver() -> bool:
+    """Build tsp_bb from HEAD~1 as `tsp_bb_old` in the build directory.
+
+    Uses a temporary git worktree to avoid disturbing the working tree.
+    Returns True on success.
+    """
+    import tempfile as _tmp
+
+    print("Building old solver from HEAD~1...", file=sys.stderr)
+    try:
+        # Create temporary worktree from HEAD~1
+        old_tree = _tmp.mkdtemp(prefix="tsp_bb_old_")
+        subprocess.run(
+            ["git", "worktree", "add", "--detach", old_tree, "HEAD~1"],
+            cwd=PROJECT_ROOT, check=True, capture_output=True, timeout=30
+        )
+
+        # Build inside the worktree
+        build_dir = os.path.join(old_tree, "build")
+        os.makedirs(build_dir, exist_ok=True)
+        subprocess.run(
+            ["cmake", "..", "-DCMAKE_BUILD_TYPE=Release"],
+            cwd=build_dir, check=True, capture_output=True, timeout=60
+        )
+        subprocess.run(
+            ["make", "-j", str(os.cpu_count() or 4)],
+            cwd=build_dir, check=True, capture_output=True, timeout=120
+        )
+
+        # Copy binary to main build directory
+        old_binary = os.path.join(build_dir, "tsp_bb")
+        if os.path.isfile(old_binary):
+            shutil.copy2(old_binary, SOLVER_OLD)
+            os.chmod(SOLVER_OLD, 0o755)
+            print(f"  Old solver built successfully: {SOLVER_OLD}", file=sys.stderr)
+            return True
+        else:
+            print("  Error: old solver binary not found after build", file=sys.stderr)
+            return False
+
+    except subprocess.CalledProcessError as e:
+        print(f"  Error building old solver: {e}", file=sys.stderr)
+        if e.stderr:
+            print(f"  {e.stderr.decode()[:500]}", file=sys.stderr)
+        return False
+    except Exception as e:
+        print(f"  Error: {e}", file=sys.stderr)
+        return False
+    finally:
+        # Cleanup worktree
+        try:
+            subprocess.run(
+                ["git", "worktree", "remove", "--force", old_tree],
+                cwd=PROJECT_ROOT, capture_output=True, timeout=10
+            )
+        except Exception:
+            pass
 
 
 
@@ -570,10 +638,11 @@ def parse_tspbb_stats(stdout: str) -> dict:
     return stats
 
 
-def run_tspbb(instance_path: str, strategy: str) -> dict:
+def run_tspbb(instance_path: str, strategy: str, binary: str | None = None) -> dict:
     """Run tsp_bb solver with a branch strategy. Returns stats dict with elapsed time."""
+    solver_bin = binary if binary else SOLVER
     cmd = [
-        SOLVER,
+        solver_bin,
         "--branch-strategy", strategy,
         "--exact-max-n", "100",
         "--debug",
@@ -669,6 +738,12 @@ def main():
         errors.append(f"tsp_bb solver not found: {SOLVER} (run: cd build && cmake .. && make)")
     if not os.path.isfile(CONCORDE):
         errors.append(f"Concorde not found: {CONCORDE}")
+    if BENCHMARK_MODE:
+        if not os.path.isfile(SOLVER_OLD):
+            if not build_old_solver():
+                errors.append("Failed to build old solver from HEAD~1")
+        if not os.path.isfile(SOLVER_OLD):
+            errors.append(f"Old solver not found: {SOLVER_OLD}")
     if errors:
         for e in errors:
             print(f"Error: {e}", file=sys.stderr)
@@ -712,10 +787,13 @@ def main():
 
     flush()
 
+    algo_list = [ALG_SMART, ALG_SIMPLE, ALG_CONCORDE]
+    if BENCHMARK_MODE:
+        algo_list.extend([ALG_SMART_OLD, ALG_SIMPLE_OLD])
     summary = {
         alg: {"ok": 0, "timeout": 0, "error": 0, "wrong_cost": 0,
               "total_time": 0.0, "total_bbnodes": 0, "count_nodes": 0}
-        for alg in [ALG_SMART, ALG_SIMPLE, ALG_CONCORDE]
+        for alg in algo_list
     }
 
     per_instance = []
@@ -756,8 +834,20 @@ def main():
         results[ALG_SIMPLE] = st
         _print_solver_status(ALG_SIMPLE, st, ref_cost)
 
+        # ── Benchmark: Old solver ──
+        if BENCHMARK_MODE:
+            print(f"  Smart (old)...", file=sys.stderr, end=" ", flush=True)
+            st = run_tspbb(path, "smart", binary=SOLVER_OLD)
+            results[ALG_SMART_OLD] = st
+            _print_solver_status(ALG_SMART_OLD, st, ref_cost)
+
+            print(f"  Simple (old)...", file=sys.stderr, end=" ", flush=True)
+            st = run_tspbb(path, "simple", binary=SOLVER_OLD)
+            results[ALG_SIMPLE_OLD] = st
+            _print_solver_status(ALG_SIMPLE_OLD, st, ref_cost)
+
         # ── Update summary ──
-        for alg in [ALG_SMART, ALG_SIMPLE, ALG_CONCORDE]:
+        for alg in algo_list:
             st = results[alg]
             if st["timeout"]:
                 summary[alg]["timeout"] += 1
@@ -800,28 +890,46 @@ def main():
             lines.append("")
 
         # Results table
-        lines.append("| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |")
-        lines.append("|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|")
+        if BENCHMARK_MODE:
+            lines.append("| Algorithm | Cost | Match Ref | Time | Speedup | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |")
+            lines.append("|-----------|------|-----------|------|---------|---------------|----------------|---------------|----------------|---------|")
+        else:
+            lines.append("| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |")
+            lines.append("|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|")
 
-        for alg in ALL_ALGORITHMS:
+        new_smart_time = results[ALG_SMART].get("elapsed", 0) if not results[ALG_SMART].get("timeout") and not results[ALG_SMART].get("error") else None
+        new_simple_time = results[ALG_SIMPLE].get("elapsed", 0) if not results[ALG_SIMPLE].get("timeout") and not results[ALG_SIMPLE].get("error") else None
+
+        for alg in ALL_ALGORITHMS + (BENCHMARK_ALGORITHMS if BENCHMARK_MODE else []):
             st = results[alg]
             label = alg
 
             if st["timeout"]:
-                lines.append(f"| {label} | TIMEOUT | - | {fmt_time(st['elapsed'])} | - | - | - | - | - |")
+                lines.append(f"| {label} | TIMEOUT | - | {fmt_time(st['elapsed'])} | - | - | - | - | - | - |")
             elif st["error"]:
-                lines.append(f"| {label} | ERROR | - | - | - | - | - | - | - |")
+                lines.append(f"| {label} | ERROR | - | - | - | - | - | - | - | - |")
             elif alg == ALG_CONCORDE:
                 cost_s = fmt_cost(st.get("cost")) if st.get("feasible") else "infeasible"
                 lines.append(
                     f"| {label} | {cost_s} | ref | {fmt_time(st['elapsed'])} "
-                    f"| - | - | - | - | {fmt_val(st.get('bbnodes'))} |"
+                    f"| - | - | - | - | - | {fmt_val(st.get('bbnodes'))} |"
                 )
             else:
                 cost_s = fmt_cost(st.get("cost"))
                 match = cost_match(st.get("cost"), ref_cost)
+                t = st.get("elapsed", 0)
+                # Compute speedup for old algorithms
+                speedup_str = "-"
+                if BENCHMARK_MODE and t > 0:
+                    if alg == ALG_SMART_OLD and new_smart_time and new_smart_time > 0:
+                        ratio = t / new_smart_time
+                        speedup_str = f"{ratio:.2f}x" if ratio >= 1 else f"{1/ratio:.2f}x slower"
+                    elif alg == ALG_SIMPLE_OLD and new_simple_time and new_simple_time > 0:
+                        ratio = t / new_simple_time
+                        speedup_str = f"{ratio:.2f}x" if ratio >= 1 else f"{1/ratio:.2f}x slower"
+                time_col = f"{fmt_time(t)} | {speedup_str}" if BENCHMARK_MODE else fmt_time(t)
                 lines.append(
-                    f"| {label} | {cost_s} | {match} | {fmt_time(st['elapsed'])} "
+                    f"| {label} | {cost_s} | {match} | {time_col} "
                     f"| {fmt_val(st.get('nodes_created'))} | {fmt_val(st.get('nodes_expanded'))} "
                     f"| {fmt_val(st.get('pruned_bound'))} | {fmt_val(st.get('pruned_infeasible'))} "
                     f"| - |"
@@ -887,7 +995,7 @@ def main():
                 return st.get("bbnodes")
             return st.get("nodes_created")
 
-        per_instance.append({
+        pi_entry = {
             "idx": idx,
             "name": rel_path,
             "n": dim,
@@ -907,7 +1015,21 @@ def main():
             "_simple_cost": _alg_cost_val(results[ALG_SIMPLE]),
             "_simple_time": _alg_time_val(results[ALG_SIMPLE]),
             "_simple_nodes": _alg_nodes_val(results[ALG_SIMPLE], ALG_SIMPLE),
-        })
+        }
+        if BENCHMARK_MODE:
+            pi_entry.update({
+                "smart_old_cost": fmt_cost(results[ALG_SMART_OLD].get("cost")) if results[ALG_SMART_OLD].get("feasible") else ("ERR" if results[ALG_SMART_OLD]["error"] else "TO" if results[ALG_SMART_OLD]["timeout"] else "-"),
+                "smart_old_time": fmt_time(results[ALG_SMART_OLD]["elapsed"]),
+                "simple_old_cost": fmt_cost(results[ALG_SIMPLE_OLD].get("cost")) if results[ALG_SIMPLE_OLD].get("feasible") else ("ERR" if results[ALG_SIMPLE_OLD]["error"] else "TO" if results[ALG_SIMPLE_OLD]["timeout"] else "-"),
+                "simple_old_time": fmt_time(results[ALG_SIMPLE_OLD]["elapsed"]),
+                "_smart_old_cost": _alg_cost_val(results[ALG_SMART_OLD]),
+                "_smart_old_time": _alg_time_val(results[ALG_SMART_OLD]),
+                "_smart_old_nodes": _alg_nodes_val(results[ALG_SMART_OLD], ALG_SMART_OLD),
+                "_simple_old_cost": _alg_cost_val(results[ALG_SIMPLE_OLD]),
+                "_simple_old_time": _alg_time_val(results[ALG_SIMPLE_OLD]),
+                "_simple_old_nodes": _alg_nodes_val(results[ALG_SIMPLE_OLD], ALG_SIMPLE_OLD),
+            })
+        per_instance.append(pi_entry)
 
         lines.append("---")
         lines.append("")
@@ -921,7 +1043,7 @@ def main():
     lines.append("| Algorithm | Solved | Timeout | Error | Wrong Cost | Total Time | Avg Time | Avg B&B Nodes | Total B&B Nodes |")
     lines.append("|-----------|--------|---------|-------|------------|------------|----------|---------------|-----------------|")
 
-    for alg in [ALG_CONCORDE, ALG_SMART, ALG_SIMPLE]:
+    for alg in [ALG_CONCORDE, ALG_SMART, ALG_SIMPLE] + (BENCHMARK_ALGORITHMS if BENCHMARK_MODE else []):
         s = summary[alg]
         ok = s["ok"]
         timeout = s["timeout"]
@@ -936,20 +1058,67 @@ def main():
         )
     lines.append("")
 
+    # Benchmark speedup summary
+    if BENCHMARK_MODE:
+        lines.append("### Optimization Speedup (new vs old)")
+        lines.append("")
+        lines.append("| Strategy | Old Total Time | New Total Time | Speedup | Old Avg Nodes | New Avg Nodes | Node Reduction |")
+        lines.append("|----------|---------------|---------------|---------|---------------|---------------|----------------|")
+        for new_alg, old_alg in [(ALG_SMART, ALG_SMART_OLD), (ALG_SIMPLE, ALG_SIMPLE_OLD)]:
+            ns = summary[new_alg]
+            os_ = summary[old_alg]
+            old_time = os_["total_time"]
+            new_time = ns["total_time"]
+            old_avg_bb = os_["total_bbnodes"] / os_["count_nodes"] if os_["count_nodes"] > 0 else 0
+            new_avg_bb = ns["total_bbnodes"] / ns["count_nodes"] if ns["count_nodes"] > 0 else 0
+            if new_time > 0 and old_time > 0:
+                sp = old_time / new_time
+                sp_str = f"{sp:.2f}x"
+            else:
+                sp_str = "-"
+            node_red = ""
+            if old_avg_bb > 0 and new_avg_bb > 0:
+                nr = 1 - new_avg_bb / old_avg_bb
+                node_red = f"{nr:.1%}"
+            lines.append(
+                f"| {new_alg.split()[0]} | {fmt_time(old_time)} | {fmt_time(new_time)} "
+                f"| {sp_str} | {old_avg_bb:.0f} | {new_avg_bb:.0f} | {node_red} |"
+            )
+        lines.append("")
+
     # Per-instance matrix
     lines.append("### Per-Instance Results Matrix")
     lines.append("")
-    header = "| # | Instance | n | Concorde Cost | Smart Cost | Simple Cost | Concorde Time | Smart Time | Simple Time |"
-    lines.append(header)
-    sep = "|---|---|---|---|---|---|---|---|---|"
-    lines.append(sep)
-
-    for pi in per_instance:
-        lines.append(
-            f"| {pi['idx']} | `{pi['name']}` | {pi['n']} "
-            f"| {pi['concorde_cost']} | {pi['smart_cost']} | {pi['simple_cost']} "
-            f"| {pi['concorde_time']} | {pi['smart_time']} | {pi['simple_time']} |"
-        )
+    if BENCHMARK_MODE:
+        header = "| # | Instance | n | Smart Time | Smart(old) Time | Speedup | Simple Time | Simple(old) Time | Speedup |"
+        lines.append(header)
+        sep = "|---|---|---|---|---|---|---|---|---|"
+        lines.append(sep)
+        for pi in per_instance:
+            sm_new = pi.get("_smart_time")
+            sm_old = pi.get("_smart_old_time")
+            si_new = pi.get("_simple_time")
+            si_old = pi.get("_simple_old_time")
+            def _speedup_str(old_t, new_t):
+                if old_t and new_t and old_t > 0 and new_t > 0:
+                    return f"{old_t/new_t:.2f}x"
+                return "-"
+            lines.append(
+                f"| {pi['idx']} | `{pi['name']}` | {pi['n']} "
+                f"| {pi['smart_time']} | {pi.get('smart_old_time', '-')} | {_speedup_str(sm_old, sm_new)} "
+                f"| {pi['simple_time']} | {pi.get('simple_old_time', '-')} | {_speedup_str(si_old, si_new)} |"
+            )
+    else:
+        header = "| # | Instance | n | Concorde Cost | Smart Cost | Simple Cost | Concorde Time | Smart Time | Simple Time |"
+        lines.append(header)
+        sep = "|---|---|---|---|---|---|---|---|---|"
+        lines.append(sep)
+        for pi in per_instance:
+            lines.append(
+                f"| {pi['idx']} | `{pi['name']}` | {pi['n']} "
+                f"| {pi['concorde_cost']} | {pi['smart_cost']} | {pi['simple_cost']} "
+                f"| {pi['concorde_time']} | {pi['smart_time']} | {pi['simple_time']} |"
+            )
     lines.append("")
 
     flush()

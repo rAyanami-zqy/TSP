@@ -103,20 +103,28 @@ private:
         std::vector<int> degree;
     };
 
-    // 分支定界节点：
+    // 分支定界节点（部分解 P）：
     // forced 表示必须选择的边，forbidden 表示禁止选择的边。
-    struct Node {
+    // 同时维护 forced 边的并查集和度数统计，加速 1-tree 计算与候选集筛选。
+    struct PartialSol {
         int depth = 0;
         double bound = 0.0;
         // forced 和 forbidden 数组大小为 n*n，edgeId(u,v) 映射无向边 (u,v) 到其中一个位置。
         std::vector<unsigned char> forced;
         std::vector<unsigned char> forbidden;
-    };
-
-    // 记录当前层级对 forced/forbidden 标记的修改，用于回溯时还原。
-    struct LevelChanges {
-        std::size_t forced_id = static_cast<std::size_t>(-1);
-        std::size_t forbidden_id = static_cast<std::size_t>(-1);
+        // forced 边构成的连通分量并查集（无路径压缩，保证回溯可逆）。
+        std::vector<int> forced_parent;   // parent[i] = parent of vertex i
+        std::vector<int> forced_rank;     // rank[i] = rank of component rooted at i
+        std::vector<int> forced_comp_size; // comp_size[i] = size of component rooted at i
+        // 各顶点在 forced 边子图中的度数。
+        std::vector<int> forced_degree;
+        // forced 边列表与 MST 部分（不含顶点 0 的边）的权值和及计数。
+        std::vector<Edge> forced_edges;
+        double forced_mst_cost = 0.0;
+        int forced_mst_count = 0;
+        // 候选集快速查找表（大小 n*n），由 buildBranchCandidates 维护，
+        // chooseBranchEdge 直接读取，避免重复分配 O(n²) 的掩码数组。
+        std::vector<unsigned char> candidate_mask;
     };
 
     // tryChild 过滤后的候选集保存在这里，visitChild 直接取用，避免重复过滤。
@@ -132,16 +140,16 @@ private:
     bool isForbidden(const std::vector<unsigned char>& forbidden, int u, int v) const;
 
     // 在 forced / forbidden 约束下构造最小 1-tree，作为该节点的下界。
-    OneTree computeOneTree(const Node& node_,std::vector<Edge>& branch_candidates)const;
+    OneTree computeOneTree(const PartialSol& node_,std::vector<Edge>& branch_candidates)const;
     // 判断一个 1-tree 是否已经是一条合法的 Hamilton 回路。
     bool isTour(const OneTree& one_tree) const;
     // 从 1-tree 的边集合构造访问顺序的顶点序列；如果无法构成合法回路则返回空。
     std::vector<int> buildTour(const std::vector<Edge>& edges) const;
     // 收集当前节点尚未决定且实际存在的边，作为本节点分支候选集。
-    bool buildBranchCandidates(const Node& node,std::vector<Edge>& branch_candidates,
+    bool buildBranchCandidates(const PartialSol& node,std::vector<Edge>& branch_candidates,
                                std::vector<Edge>& removed) const;
     // 从当前候选集中选择一条未决边做二分支：包含该边 / 禁止该边；选择时优先当前 1-tree。
-    bool chooseBranchEdge(const Node& node,
+    bool chooseBranchEdge(const PartialSol& node,
                           const OneTree& one_tree,
                           const std::vector<Edge>& candidates,
                           Edge& edge) const;
@@ -155,13 +163,18 @@ private:
     void twoOpt(std::vector<int>& tour, double& cost) const;
 
     // 递归搜索：进入后在节点状态和候选集上计算 1-tree 下界，剪枝后选择分支边递归。
-    void search(Node& node, std::vector<Edge>& branch_candidates,
-                int depth, BranchStrategy strategy);
+    // pre_tree 非空时跳过 computeOneTree，直接复用；用于 forbid 分支优化。
+    void search(PartialSol& node, std::vector<Edge>& branch_candidates,
+                int depth, BranchStrategy strategy,
+                const OneTree* pre_tree = nullptr);
 
     // 顶点数。
     int n_ = 0;
     // 距离矩阵，dist[i][j] 是顶点 i 和 j 之间的距离；dist[i][i] 必须为 0。
     std::vector<std::vector<double>> dist_;
+    // 与顶点 0 相连的所有有限边，按权重升序排列。
+    // 在 computeOneTree 中取前 2 条未被禁止的边作为 1-tree 的 root edges。
+    std::vector<Edge> root_candidates_sorted_;
     DebugOptions debug_;
 
     // 搜索过程中的状态。
