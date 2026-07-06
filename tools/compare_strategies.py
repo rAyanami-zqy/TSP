@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
 """
-Unified TSP comparison script.
+Unified TSP comparison script — auto-discovers all tsp_bb versions in solver/.
 
 Algorithms compared:
   1. Concorde                       (exact, state-of-the-art, reference)
-  2. tsp_bb Smart branch strategy  (exact B&B)
-  3. tsp_bb Simple branch strategy (exact B&B)
+  2. Each tsp_bb version            (exact B&B with built-in strategy)
 
-When --benchmark is passed, also compares against the solver built from HEAD~1
-to measure optimization speedup.
+Every tsp_bb version found under solver/ is automatically included in the
+comparison.  Just drop a new tsp_bb_YY_MM_DD directory into solver/ and
+re-run — no source changes needed.
 
-Output: docs/strategy-comparison-results.md
+Each version uses its built-in branching method (no --branch-strategy arg).
+Versions that still require --branch-strategy are auto-detected and run with
+--branch-strategy smart.
+
+Output: docs/strategy-comparison-results.md  +  .xlsx
 
 Usage:
-  python3 tools/compare_strategies.py [--benchmark]
+  python3 tools/compare_strategies.py
 
 To change which instances are tested, edit the INSTANCE_SOURCES block below.
 """
@@ -26,6 +30,7 @@ import os
 import re
 import time
 import math
+import json
 import shutil
 import tempfile
 from pathlib import Path
@@ -42,22 +47,21 @@ try:
 except ImportError:
     HAS_OPENPYXL = False
 
-# ── CLI flags ──────────────────────────────────────────────────────
-BENCHMARK_MODE = "--benchmark" in sys.argv
-
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-SOLVER = os.path.join(PROJECT_ROOT, "build", "tsp_bb")
-SOLVER_OLD = os.path.join(PROJECT_ROOT, "build", "tsp_bb_old")
 CONCORDE = os.path.join(PROJECT_ROOT, "concorde", "TSP", "concorde")
-CONVERTER = os.path.join(PROJECT_ROOT, "tools", "convert_to_tsplib.py")
 OUT_PATH = os.path.join(PROJECT_ROOT, "docs", "strategy-comparison-results.md")
 XLSX_PATH = os.path.join(PROJECT_ROOT, "docs", "strategy-comparison-results.xlsx")
+CACHE_PATH = os.path.join(PROJECT_ROOT, "docs", "comparison-cache.json")
+CONCORDE_OUT_DIR = os.path.join(PROJECT_ROOT, "TS")
 
 # ── Global settings ──────────────────────────────────────────────────
 
 TIMEOUT = 1800  # seconds per instance per algorithm
 DEBUG_INTERVAL = 5000000  # how often tsp_bb prints debug progress
 CONCORDE_SEED = 123  # fixed seed for reproducibility
+
+# Fallback strategy for older solver versions that still require --branch-strategy.
+LEGACY_STRATEGY = "smart"
 
 # ============================================================
 # Instance Sources — edit this block to control which instances
@@ -94,81 +98,53 @@ INSTANCE_SOURCES = [
 ]
 # ============================================================
 
-# Algorithm IDs
-ALG_SMART    = "Smart"       # tsp_bb exact + smart branch
-ALG_SIMPLE   = "Simple"      # tsp_bb exact + simple branch
-ALG_CONCORDE = "Concorde"    # Concorde exact solver (reference)
-ALG_SMART_OLD  = "Smart (old)"   # previous-commit smart, only in benchmark mode
-ALG_SIMPLE_OLD = "Simple (old)"  # previous-commit simple, only in benchmark mode
-
-ALL_ALGORITHMS = [ALG_CONCORDE, ALG_SMART, ALG_SIMPLE]
-BENCHMARK_ALGORITHMS = [ALG_SMART_OLD, ALG_SIMPLE_OLD]
-
 INF = float("inf")
 
 DEFAULT_SKIP_DIRS = {"_archives", "tsplib"}
 DEFAULT_EXTENSIONS = (".txt", ".tsp")
 
 
-# ── Old solver build ─────────────────────────────────────────────────
+SOLVER_DIR = os.path.join(PROJECT_ROOT, "solver")
 
-def build_old_solver() -> bool:
-    """Build tsp_bb from HEAD~1 as `tsp_bb_old` in the build directory.
+# ── Solver auto-discovery ──────────────────────────────────────────────
 
-    Uses a temporary git worktree to avoid disturbing the working tree.
-    Returns True on success.
+def discover_solvers() -> list[tuple[str, str]]:
+    """Find all tsp_bb versions in solver/ directory.
+
+    Each subdirectory (e.g. ``tsp_bb_26_07_06``) contains a ``tsp_bb`` binary.
+    Returns list of (label, path) tuples sorted by label (chronological).
+    Label is the directory name (e.g. ``tsp_bb_26_07_06``).
     """
-    import tempfile as _tmp
+    if not os.path.isdir(SOLVER_DIR):
+        return []
+    solvers: list[tuple[str, str]] = []
+    for dname in sorted(os.listdir(SOLVER_DIR)):
+        dpath = os.path.join(SOLVER_DIR, dname)
+        if not os.path.isdir(dpath):
+            continue
+        if not dname.startswith("tsp_"):
+            continue
+        binary = os.path.join(dpath, "tsp_bb")
+        if os.path.isfile(binary) and os.access(binary, os.X_OK):
+            solvers.append((dname, binary))
+    return solvers
 
-    print("Building old solver from HEAD~1...", file=sys.stderr)
+
+def needs_strategy_arg(solver_path: str) -> bool:
+    """Check if a solver binary still requires --branch-strategy argument.
+
+    Returns True if the --help output mentions --branch-strategy (old versions),
+    False otherwise (new versions where BP is built-in).
+    """
     try:
-        # Create temporary worktree from HEAD~1
-        old_tree = _tmp.mkdtemp(prefix="tsp_bb_old_")
-        subprocess.run(
-            ["git", "worktree", "add", "--detach", old_tree, "HEAD~1"],
-            cwd=PROJECT_ROOT, check=True, capture_output=True, timeout=30
+        result = subprocess.run(
+            [solver_path, "--help"],
+            capture_output=True, text=True, timeout=5
         )
-
-        # Build inside the worktree
-        build_dir = os.path.join(old_tree, "build")
-        os.makedirs(build_dir, exist_ok=True)
-        subprocess.run(
-            ["cmake", "..", "-DCMAKE_BUILD_TYPE=Release"],
-            cwd=build_dir, check=True, capture_output=True, timeout=60
-        )
-        subprocess.run(
-            ["make", "-j", str(os.cpu_count() or 4)],
-            cwd=build_dir, check=True, capture_output=True, timeout=120
-        )
-
-        # Copy binary to main build directory
-        old_binary = os.path.join(build_dir, "tsp_bb")
-        if os.path.isfile(old_binary):
-            shutil.copy2(old_binary, SOLVER_OLD)
-            os.chmod(SOLVER_OLD, 0o755)
-            print(f"  Old solver built successfully: {SOLVER_OLD}", file=sys.stderr)
-            return True
-        else:
-            print("  Error: old solver binary not found after build", file=sys.stderr)
-            return False
-
-    except subprocess.CalledProcessError as e:
-        print(f"  Error building old solver: {e}", file=sys.stderr)
-        if e.stderr:
-            print(f"  {e.stderr.decode()[:500]}", file=sys.stderr)
-        return False
-    except Exception as e:
-        print(f"  Error: {e}", file=sys.stderr)
-        return False
-    finally:
-        # Cleanup worktree
-        try:
-            subprocess.run(
-                ["git", "worktree", "remove", "--force", old_tree],
-                cwd=PROJECT_ROOT, capture_output=True, timeout=10
-            )
-        except Exception:
-            pass
+        output = result.stderr + result.stdout
+        return "--branch-strategy" in output
+    except Exception:
+        return True  # assume old version if probe fails
 
 
 
@@ -456,21 +432,44 @@ def is_tsplib_format(filepath: str) -> bool:
 
 # ── Concorde Wrapper ─────────────────────────────────────────────────
 
+def matrix_to_tsplib(filepath: str, out_path: str):
+    """Convert a raw matrix-format TSP instance to TSPLIB explicit format.
+
+    Reads the matrix via load_distance_matrix and writes it as TSPLIB
+    EDGE_WEIGHT_SECTION / FULL_MATRIX.
+    """
+    matrix, n = load_distance_matrix(filepath)
+    with open(out_path, "w") as f:
+        f.write(f"NAME: {os.path.splitext(os.path.basename(filepath))[0]}\n")
+        f.write("TYPE: TSP\n")
+        f.write(f"DIMENSION: {n}\n")
+        f.write("EDGE_WEIGHT_TYPE: EXPLICIT\n")
+        f.write("EDGE_WEIGHT_FORMAT: FULL_MATRIX\n")
+        f.write("EDGE_WEIGHT_SECTION\n")
+        for i in range(n):
+            row_vals = []
+            for j in range(n):
+                val = matrix[i][j]
+                if val >= INF / 2:
+                    row_vals.append("999999")
+                else:
+                    row_vals.append(str(int(val)) if val == int(val) else f"{val:.0f}")
+            f.write(" ".join(row_vals) + "\n")
+        f.write("EOF\n")
+
+
 def ensure_tsplib_for_concorde(instance_path: str, tmpdir: str) -> str:
-    """Convert instance to TSPLIB format if needed. Returns path Concorde can read."""
+    """Ensure instance is in TSPLIB format readable by Concorde.
+
+    If the file is already TSPLIB, returns it unchanged.
+    Otherwise converts it to TSPLIB explicit format using Python-native conversion.
+    """
     if is_tsplib_format(instance_path):
         return instance_path
 
     basename = os.path.splitext(os.path.basename(instance_path))[0]
     out_path = os.path.join(tmpdir, basename + ".tsp")
-
-    result = subprocess.run(
-        [sys.executable, CONVERTER, instance_path, "-o", out_path],
-        capture_output=True, text=True, timeout=10
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"TSPLIB conversion failed: {result.stderr}")
-
+    matrix_to_tsplib(instance_path, out_path)
     return out_path
 
 
@@ -524,27 +523,37 @@ def parse_concorde_sol(sol_path: str) -> list[int] | None:
 
 
 def run_concorde(instance_path: str, seed: int = 123) -> dict:
-    """Run Concorde on an instance. Returns stats dict with elapsed time and tour."""
-    tmpdir = tempfile.mkdtemp(prefix="concorde_tmp_")
+    """Run Concorde on an instance. Returns stats dict with elapsed time and tour.
+
+    Concorde output files (.sol, .sav, etc.) are written to a dedicated
+    TS/ subdirectory, never to the project root.
+    """
+    os.makedirs(CONCORDE_OUT_DIR, exist_ok=True)
+    tmpdir = tempfile.mkdtemp(prefix="concorde_", dir=CONCORDE_OUT_DIR)
     try:
         tsplib_path = ensure_tsplib_for_concorde(instance_path, tmpdir)
 
-        # If the input is outside tmpdir (native TSPLIB file), copy it in
-        # so Concorde writes the .sol file inside tmpdir.
+        # Copy input into tmpdir so Concorde writes output files inside it.
         if Path(tsplib_path).parent != Path(tmpdir):
             dest = Path(tmpdir) / Path(tsplib_path).name
             shutil.copy2(tsplib_path, dest)
             tsplib_path = str(dest)
 
+        # Explicitly set the output file so Concorde writes the tour into
+        # tmpdir even when it would otherwise default to the project root.
+        out_name = Path(tsplib_path).stem + ".sol"
+        out_file = os.path.join(tmpdir, out_name)
+
         cmd = [
             CONCORDE,
             "-s", str(seed),
+            "-o", out_file,
             tsplib_path,
         ]
         t0 = time.perf_counter()
         try:
-            # Run with cwd=tmpdir so Concorde writes its output files
-            # (.sol, .sav, .pul, .mas) there instead of the project root.
+            # Run with cwd=tmpdir so any extra Concorde working files
+            # (.sav, .pul, .mas) land there as well.
             result = subprocess.run(cmd, capture_output=True, text=True,
                                     timeout=TIMEOUT, cwd=tmpdir)
             elapsed = time.perf_counter() - t0
@@ -638,12 +647,12 @@ def parse_tspbb_stats(stdout: str) -> dict:
     return stats
 
 
-def run_tspbb(instance_path: str, strategy: str, binary: str | None = None) -> dict:
-    """Run tsp_bb solver with a branch strategy. Returns stats dict with elapsed time."""
-    solver_bin = binary if binary else SOLVER
-    cmd = [
-        solver_bin,
-        "--branch-strategy", strategy,
+def run_tspbb(instance_path: str, binary: str, add_strategy_arg: bool = False) -> dict:
+    """Run tsp_bb solver. Returns stats dict with elapsed time."""
+    cmd = [binary]
+    if add_strategy_arg:
+        cmd += ["--branch-strategy", LEGACY_STRATEGY]
+    cmd += [
         "--exact-max-n", "100",
         "--debug",
         "--debug-interval", str(DEBUG_INTERVAL),
@@ -676,6 +685,157 @@ def _empty_stats_tspbb() -> dict:
         "pruned_bound": None, "pruned_infeasible": None,
         "tour": None, "tour_list": None,
         "elapsed": 0.0, "timeout": False, "error": None, "stderr": "",
+    }
+
+
+# ── Persistent Cache ─────────────────────────────────────────────────
+#
+# Cache file (JSON) stores:
+#   {
+#     "concorde": { "<rel_path>": { cost, elapsed, bbnodes, tour, tour_list } },
+#     "solver_results": {
+#       "<solver_label>": { "<rel_path>": { cost, elapsed, nodes_created, ... } }
+#     },
+#     "solver_timeouts": {
+#       "<solver_label>": { "<rel_path>": true }
+#     }
+#   }
+#
+# On startup the cache is loaded so that:
+#   - Instances that previously timed out (30 min) for a solver are skipped.
+#   - Instances that already have a successful result for a solver are reused.
+#   - Concorde results are also reused (they are deterministic with a fixed seed).
+#
+# The XLSX file is regenerated each run from the cache + newly computed data.
+
+def load_cache() -> dict:
+    """Load the comparison cache from disk. Returns empty dict if not found."""
+    if not os.path.isfile(CACHE_PATH):
+        return {}
+    try:
+        with open(CACHE_PATH, "r") as f:
+            cache = json.load(f)
+        if not isinstance(cache, dict):
+            return {}
+        # Ensure expected sub-dicts exist
+        cache.setdefault("concorde", {})
+        cache.setdefault("solver_results", {})
+        cache.setdefault("solver_timeouts", {})
+        return cache
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"Warning: failed to load cache ({e}), starting fresh.", file=sys.stderr)
+        return {"concorde": {}, "solver_results": {}, "solver_timeouts": {}}
+
+
+def save_cache(cache: dict) -> None:
+    """Persist the cache to disk atomically."""
+    os.makedirs(os.path.dirname(CACHE_PATH), exist_ok=True)
+    tmp = CACHE_PATH + ".tmp"
+    try:
+        with open(tmp, "w") as f:
+            json.dump(cache, f, indent=2, sort_keys=True)
+        os.replace(tmp, CACHE_PATH)
+    except OSError as e:
+        print(f"Warning: failed to save cache: {e}", file=sys.stderr)
+
+
+def get_cached_concorde(cache: dict, rel_path: str) -> dict | None:
+    """Return cached Concorde stats for an instance, or None."""
+    return cache.get("concorde", {}).get(rel_path)
+
+
+def store_concorde_result(cache: dict, rel_path: str, stats: dict) -> None:
+    """Store Concorde stats in the cache."""
+    entry = {
+        "cost": stats.get("cost"),
+        "feasible": stats.get("feasible", False),
+        "elapsed": stats.get("elapsed", 0),
+        "bbnodes": stats.get("bbnodes"),
+        "tour": stats.get("tour"),
+        "tour_list": stats.get("tour_list"),
+        "error": stats.get("error"),
+        "timeout": stats.get("timeout", False),
+    }
+    # Strip non-serialisable fields and huge strings
+    entry.pop("stderr", None)
+    cache.setdefault("concorde", {})[rel_path] = entry
+
+
+def is_solver_timeout_cached(cache: dict, solver_label: str, rel_path: str) -> bool:
+    """Check whether a solver+instance combination already timed out."""
+    return rel_path in cache.get("solver_timeouts", {}).get(solver_label, {})
+
+
+def get_cached_solver_result(cache: dict, solver_label: str, rel_path: str) -> dict | None:
+    """Return cached solver stats, or None."""
+    return cache.get("solver_results", {}).get(solver_label, {}).get(rel_path)
+
+
+def store_solver_timeout(cache: dict, solver_label: str, rel_path: str) -> None:
+    """Record a solver timeout in the cache."""
+    cache.setdefault("solver_timeouts", {}).setdefault(solver_label, {})[rel_path] = True
+
+
+def store_solver_result(cache: dict, solver_label: str, rel_path: str, stats: dict) -> None:
+    """Store a successful solver result in the cache."""
+    entry = {
+        "cost": stats.get("cost"),
+        "feasible": stats.get("feasible", False),
+        "elapsed": stats.get("elapsed", 0),
+        "root_lb": stats.get("root_lb"),
+        "init_ub": stats.get("init_ub"),
+        "nodes_created": stats.get("nodes_created"),
+        "nodes_expanded": stats.get("nodes_expanded"),
+        "pruned_bound": stats.get("pruned_bound"),
+        "pruned_infeasible": stats.get("pruned_infeasible"),
+        "tour": stats.get("tour"),
+        "tour_list": stats.get("tour_list"),
+        "timeout": False,
+    }
+    cache.setdefault("solver_results", {}).setdefault(solver_label, {})[rel_path] = entry
+
+    # If we previously recorded a timeout for this combination, clear it
+    # (a successful run supersedes the timeout).
+    to_dict = cache.get("solver_timeouts", {}).get(solver_label, {})
+    if rel_path in to_dict:
+        del to_dict[rel_path]
+
+
+def cached_stats_to_result(cached: dict) -> dict:
+    """Convert a cached solver entry back to the stats dict shape expected
+    by downstream code."""
+    return {
+        "cost": cached.get("cost"),
+        "feasible": cached.get("feasible", False),
+        "root_lb": cached.get("root_lb"),
+        "init_ub": cached.get("init_ub"),
+        "nodes_created": cached.get("nodes_created"),
+        "nodes_expanded": cached.get("nodes_expanded"),
+        "pruned_bound": cached.get("pruned_bound"),
+        "pruned_infeasible": cached.get("pruned_infeasible"),
+        "tour": cached.get("tour"),
+        "tour_list": cached.get("tour_list"),
+        "elapsed": cached.get("elapsed", 0),
+        "timeout": cached.get("timeout", False),
+        "error": None,
+        "stderr": "",
+    }
+
+
+def cached_concorde_to_stats(cached: dict) -> dict:
+    """Convert a cached Concorde entry back to the stats dict shape."""
+    return {
+        "cost": cached.get("cost"),
+        "feasible": cached.get("feasible", False),
+        "time": None,
+        "bbnodes": cached.get("bbnodes"),
+        "status": "optimal" if cached.get("feasible") else "unknown",
+        "elapsed": cached.get("elapsed", 0),
+        "timeout": cached.get("timeout", False),
+        "error": cached.get("error"),
+        "stderr": "",
+        "tour": cached.get("tour"),
+        "tour_list": cached.get("tour_list"),
     }
 
 
@@ -732,22 +892,50 @@ def _build_source_description() -> str:
 # ── Main ──────────────────────────────────────────────────────────────
 
 def main():
+    # ── Discover solvers ──
+    solvers = discover_solvers()
+    if not solvers:
+        print("Error: no tsp_* solver binaries found in build/", file=sys.stderr)
+        print("Build one first:  cd build && cmake .. && make", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Discovered {len(solvers)} solver version(s):", file=sys.stderr)
+    for label, path in solvers:
+        needs_arg = needs_strategy_arg(path)
+        desc = "legacy (--branch-strategy)" if needs_arg else "BP built-in"
+        print(f"  {label}  ({path})  {desc}", file=sys.stderr)
+    print(file=sys.stderr)
+
     # Validate prerequisites
     errors = []
-    if not os.path.isfile(SOLVER):
-        errors.append(f"tsp_bb solver not found: {SOLVER} (run: cd build && cmake .. && make)")
     if not os.path.isfile(CONCORDE):
         errors.append(f"Concorde not found: {CONCORDE}")
-    if BENCHMARK_MODE:
-        if not os.path.isfile(SOLVER_OLD):
-            if not build_old_solver():
-                errors.append("Failed to build old solver from HEAD~1")
-        if not os.path.isfile(SOLVER_OLD):
-            errors.append(f"Old solver not found: {SOLVER_OLD}")
+    for label, path in solvers:
+        if not os.path.isfile(path):
+            errors.append(f"Solver not found: {path}")
     if errors:
         for e in errors:
             print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
+
+    # Build flat solver list — each version runs once with its built-in method.
+    solver_entries: list[tuple[str, str, bool]] = []  # (label, path, needs_arg)
+    for label, path in solvers:
+        needs_arg = needs_strategy_arg(path)
+        solver_entries.append((label, path, needs_arg))
+        desc = "legacy (--branch-strategy smart)" if needs_arg else "BP built-in"
+        print(f"  {label}: {desc}", file=sys.stderr)
+
+    # Summary keys: solver label
+    def _summary_key(solver_label: str) -> str:
+        return solver_label
+
+    all_summary_keys = [label for label, _, _ in solver_entries]
+    summary: dict[str, dict] = {
+        key: {"ok": 0, "timeout": 0, "error": 0, "wrong_cost": 0,
+              "total_time": 0.0, "total_nodes": 0, "count_nodes": 0}
+        for key in all_summary_keys
+    }
 
     instances = find_instances()
     if not instances:
@@ -761,7 +949,18 @@ def main():
         print(f"  n={d:3d}  {os.path.relpath(p, PROJECT_ROOT)}", file=sys.stderr)
     print(file=sys.stderr)
 
-    lines = []
+    # ── Load persistent cache ──
+    cache = load_cache()
+    cached_concorde = sum(1 for v in cache.get("concorde", {}).values() if v.get("feasible"))
+    cached_solver = sum(len(v) for v in cache.get("solver_results", {}).values())
+    cached_timeouts = sum(len(v) for v in cache.get("solver_timeouts", {}).values())
+    if cached_concorde or cached_solver or cached_timeouts:
+        print(f"Cache loaded: {cached_concorde} Concorde, {cached_solver} solver results, "
+              f"{cached_timeouts} timeout records", file=sys.stderr)
+        print(file=sys.stderr)
+
+    # ── Build markdown header ──
+    lines: list[str] = []
     lines.append("# TSP Algorithm Comparison")
     lines.append("")
     lines.append("## Algorithms Compared")
@@ -769,12 +968,14 @@ def main():
     lines.append("| Algorithm | Description |")
     lines.append("|---|---|")
     lines.append("| **Concorde** | State-of-the-art Concorde TSP solver (exact, with QSopt LP) — **reference** |")
-    lines.append("| **Smart** | Branch & Bound with smart branching (1-tree degree + edge candidate) |")
-    lines.append("| **Simple** | Branch & Bound with simple branching (max-degree vertex) |")
+    for label, path, needs_arg in solver_entries:
+        method = "smart branching (legacy)" if needs_arg else "BP (Branch Partitioning)"
+        lines.append(f"| **{label}** | Branch & Bound solver — {method} |")
     lines.append("")
     lines.append(f"**Instances:** {len(instances)} from {source_desc}  ")
     lines.append(f"**Timeout:** {TIMEOUT}s ({TIMEOUT // 3600}h) per method per instance  ")
     lines.append(f"**Reference:** Concorde exact solver  ")
+    lines.append(f"**Solver versions:** {', '.join(f'`{l}`' for l, _, _ in solver_entries)}  ")
     lines.append("")
     lines.append("---")
     lines.append("")
@@ -787,89 +988,94 @@ def main():
 
     flush()
 
-    algo_list = [ALG_SMART, ALG_SIMPLE, ALG_CONCORDE]
-    if BENCHMARK_MODE:
-        algo_list.extend([ALG_SMART_OLD, ALG_SIMPLE_OLD])
-    summary = {
-        alg: {"ok": 0, "timeout": 0, "error": 0, "wrong_cost": 0,
-              "total_time": 0.0, "total_bbnodes": 0, "count_nodes": 0}
-        for alg in algo_list
-    }
-
-    per_instance = []
+    per_instance: list[dict] = []
 
     for idx, (path, dim) in enumerate(instances, 1):
         rel_path = os.path.relpath(path, PROJECT_ROOT)
         print(f"\n[{idx}/{len(instances)}] {rel_path} (n={dim})", file=sys.stderr)
 
-        results = {}
-
         # ── Concorde (reference) ──
-        print(f"  Concorde...", file=sys.stderr, end=" ", flush=True)
-        st = run_concorde(path, CONCORDE_SEED)
-        results[ALG_CONCORDE] = st
-        ref_cost = st.get("cost") if st.get("feasible") else None
-        ref_feasible = st.get("feasible", False)
-        if st["timeout"]:
-            print(f"TIMEOUT", file=sys.stderr)
-        elif st["error"]:
-            print(f"ERROR: {st['error']}", file=sys.stderr)
+        cached_cc = get_cached_concorde(cache, rel_path)
+        if cached_cc is not None:
+            concorde_stats = cached_concorde_to_stats(cached_cc)
+            ref_cost = concorde_stats.get("cost") if concorde_stats.get("feasible") else None
+            ref_feasible = concorde_stats.get("feasible", False)
+            print(f"  Concorde: (cached) cost={ref_cost} time={fmt_time(concorde_stats.get('elapsed', 0))}", file=sys.stderr)
         else:
-            c_time = st.get("elapsed", 0)
-            c_bb = st.get("bbnodes")
-            if ref_cost is not None:
-                print(f"cost={ref_cost:.0f} time={fmt_time(c_time)} bbnodes={c_bb}", file=sys.stderr)
+            print(f"  Concorde...", file=sys.stderr, end=" ", flush=True)
+            concorde_stats = run_concorde(path, CONCORDE_SEED)
+            store_concorde_result(cache, rel_path, concorde_stats)
+            save_cache(cache)
+            ref_cost = concorde_stats.get("cost") if concorde_stats.get("feasible") else None
+            ref_feasible = concorde_stats.get("feasible", False)
+            if concorde_stats["timeout"]:
+                print(f"TIMEOUT", file=sys.stderr)
+            elif concorde_stats["error"]:
+                print(f"ERROR: {concorde_stats['error']}", file=sys.stderr)
             else:
-                print(f"no solution time={fmt_time(c_time)}", file=sys.stderr)
+                c_time = concorde_stats.get("elapsed", 0)
+                c_bb = concorde_stats.get("bbnodes")
+                if ref_cost is not None:
+                    print(f"cost={ref_cost:.0f} time={fmt_time(c_time)} bbnodes={c_bb}", file=sys.stderr)
+                else:
+                    print(f"no solution time={fmt_time(c_time)}", file=sys.stderr)
 
-        # ── Smart B&B ──
-        print(f"  Smart...", file=sys.stderr, end=" ", flush=True)
-        st = run_tspbb(path, "smart")
-        results[ALG_SMART] = st
-        _print_solver_status(ALG_SMART, st, ref_cost)
+        # ── Run all solver versions ──
+        all_results: dict[str, dict] = {}  # keyed by solver_label
+        for s_label, s_path, needs_arg in solver_entries:
+            # Check timeout cache first — skip immediately if known to time out.
+            if is_solver_timeout_cached(cache, s_label, rel_path):
+                st = _empty_stats_tspbb()
+                st["elapsed"] = TIMEOUT
+                st["timeout"] = True
+                all_results[s_label] = st
+                print(f"  {s_label}: (cached TIMEOUT — skipped)", file=sys.stderr)
+                continue
 
-        # ── Simple B&B ──
-        print(f"  Simple...", file=sys.stderr, end=" ", flush=True)
-        st = run_tspbb(path, "simple")
-        results[ALG_SIMPLE] = st
-        _print_solver_status(ALG_SIMPLE, st, ref_cost)
+            # Check result cache — reuse if we already have a successful run.
+            cached_sr = get_cached_solver_result(cache, s_label, rel_path)
+            if cached_sr is not None:
+                st = cached_stats_to_result(cached_sr)
+                all_results[s_label] = st
+                print(f"  {s_label}: ", file=sys.stderr, end="")
+                _print_solver_status(s_label, st, ref_cost)
+                print(f"           (cached)", file=sys.stderr)
+                continue
 
-        # ── Benchmark: Old solver ──
-        if BENCHMARK_MODE:
-            print(f"  Smart (old)...", file=sys.stderr, end=" ", flush=True)
-            st = run_tspbb(path, "smart", binary=SOLVER_OLD)
-            results[ALG_SMART_OLD] = st
-            _print_solver_status(ALG_SMART_OLD, st, ref_cost)
+            # Run the solver.
+            print(f"  {s_label}: ", file=sys.stderr, end="", flush=True)
+            st = run_tspbb(path, binary=s_path, add_strategy_arg=needs_arg)
+            all_results[s_label] = st
+            _print_solver_status(s_label, st, ref_cost)
 
-            print(f"  Simple (old)...", file=sys.stderr, end=" ", flush=True)
-            st = run_tspbb(path, "simple", binary=SOLVER_OLD)
-            results[ALG_SIMPLE_OLD] = st
-            _print_solver_status(ALG_SIMPLE_OLD, st, ref_cost)
+            # Persist to cache.
+            if st["timeout"]:
+                store_solver_timeout(cache, s_label, rel_path)
+            elif not st["error"]:
+                store_solver_result(cache, s_label, rel_path, st)
+            save_cache(cache)
 
         # ── Update summary ──
-        for alg in algo_list:
-            st = results[alg]
+        for s_label, s_path, needs_arg in solver_entries:
+            skey = _summary_key(s_label)
+            st = all_results[s_label]
             if st["timeout"]:
-                summary[alg]["timeout"] += 1
+                summary[skey]["timeout"] += 1
             elif st["error"]:
-                summary[alg]["error"] += 1
+                summary[skey]["error"] += 1
             elif st.get("feasible"):
                 if ref_feasible and abs(st["cost"] - ref_cost) > 1e-6:
-                    summary[alg]["wrong_cost"] += 1
+                    summary[skey]["wrong_cost"] += 1
                 else:
-                    summary[alg]["ok"] += 1
-                summary[alg]["total_time"] += st["elapsed"]
-                bbnodes = None
-                if alg == ALG_CONCORDE:
-                    bbnodes = st.get("bbnodes")
-                else:
-                    bbnodes = st.get("nodes_created")
-                if bbnodes is not None:
-                    summary[alg]["total_bbnodes"] += bbnodes
-                    summary[alg]["count_nodes"] += 1
+                    summary[skey]["ok"] += 1
+                summary[skey]["total_time"] += st["elapsed"]
+                nodes = st.get("nodes_created")
+                if nodes is not None:
+                    summary[skey]["total_nodes"] += nodes
+                    summary[skey]["count_nodes"] += 1
             else:
-                summary[alg]["ok"] += 1
-                summary[alg]["total_time"] += st["elapsed"]
+                summary[skey]["ok"] += 1
+                summary[skey]["total_time"] += st["elapsed"]
 
         # ── Instance output ──
         lines.append(f"## {idx}. `{rel_path}` (n={dim})")
@@ -877,76 +1083,59 @@ def main():
 
         if ref_feasible:
             lines.append(f"**Concorde optimal cost:** {fmt_cost(ref_cost)}  ")
-            lines.append(f"**Concorde time:** {fmt_time(results[ALG_CONCORDE]['elapsed'])}  ")
+            lines.append(f"**Concorde time:** {fmt_time(concorde_stats['elapsed'])}  ")
         else:
             lines.append(f"**Concorde:** failed to find optimal solution  ")
         lines.append("")
 
         # Concorde tour (reference)
-        concorde_tour = results[ALG_CONCORDE].get("tour_list")
+        concorde_tour = concorde_stats.get("tour_list")
         if concorde_tour:
             t_str = " -> ".join(str(v) for v in concorde_tour) + f" -> {concorde_tour[0]}"
             lines.append(f"**Concorde (reference) tour:** `{t_str}`  ")
             lines.append("")
 
-        # Results table
-        if BENCHMARK_MODE:
-            lines.append("| Algorithm | Cost | Match Ref | Time | Speedup | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |")
-            lines.append("|-----------|------|-----------|------|---------|---------------|----------------|---------------|----------------|---------|")
-        else:
-            lines.append("| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |")
-            lines.append("|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|")
+        # ── Solver comparison table ──
+        lines.append("### Results")
+        lines.append("")
+        header_cols = ["Solver", "Cost", "Time", "Nodes Created", "Nodes Expanded",
+                       "Pruned(Bound)", "Pruned(Infeas)", "Match Ref"]
+        lines.append("| " + " | ".join(header_cols) + " |")
+        lines.append("|" + "|".join(["---"] * len(header_cols)) + "|")
 
-        new_smart_time = results[ALG_SMART].get("elapsed", 0) if not results[ALG_SMART].get("timeout") and not results[ALG_SMART].get("error") else None
-        new_simple_time = results[ALG_SIMPLE].get("elapsed", 0) if not results[ALG_SIMPLE].get("timeout") and not results[ALG_SIMPLE].get("error") else None
-
-        for alg in ALL_ALGORITHMS + (BENCHMARK_ALGORITHMS if BENCHMARK_MODE else []):
-            st = results[alg]
-            label = alg
-
+        for s_label, _, _ in solver_entries:
+            st = all_results.get(s_label)
+            if st is None:
+                continue
             if st["timeout"]:
-                lines.append(f"| {label} | TIMEOUT | - | {fmt_time(st['elapsed'])} | - | - | - | - | - | - |")
+                lines.append(f"| {s_label} | TIMEOUT | {fmt_time(st['elapsed'])} | - | - | - | - | - |")
             elif st["error"]:
-                lines.append(f"| {label} | ERROR | - | - | - | - | - | - | - | - |")
-            elif alg == ALG_CONCORDE:
-                cost_s = fmt_cost(st.get("cost")) if st.get("feasible") else "infeasible"
-                lines.append(
-                    f"| {label} | {cost_s} | ref | {fmt_time(st['elapsed'])} "
-                    f"| - | - | - | - | - | {fmt_val(st.get('bbnodes'))} |"
-                )
+                lines.append(f"| {s_label} | ERROR | - | - | - | - | - | - |")
             else:
                 cost_s = fmt_cost(st.get("cost"))
                 match = cost_match(st.get("cost"), ref_cost)
-                t = st.get("elapsed", 0)
-                # Compute speedup for old algorithms
-                speedup_str = "-"
-                if BENCHMARK_MODE and t > 0:
-                    if alg == ALG_SMART_OLD and new_smart_time and new_smart_time > 0:
-                        ratio = t / new_smart_time
-                        speedup_str = f"{ratio:.2f}x" if ratio >= 1 else f"{1/ratio:.2f}x slower"
-                    elif alg == ALG_SIMPLE_OLD and new_simple_time and new_simple_time > 0:
-                        ratio = t / new_simple_time
-                        speedup_str = f"{ratio:.2f}x" if ratio >= 1 else f"{1/ratio:.2f}x slower"
-                time_col = f"{fmt_time(t)} | {speedup_str}" if BENCHMARK_MODE else fmt_time(t)
                 lines.append(
-                    f"| {label} | {cost_s} | {match} | {time_col} "
+                    f"| {s_label} | {cost_s} | {fmt_time(st.get('elapsed', 0))} "
                     f"| {fmt_val(st.get('nodes_created'))} | {fmt_val(st.get('nodes_expanded'))} "
                     f"| {fmt_val(st.get('pruned_bound'))} | {fmt_val(st.get('pruned_infeasible'))} "
-                    f"| - |"
+                    f"| {match} |"
                 )
         lines.append("")
 
-        # Tours — compare all three
+        # ── Tours ──
         tour_lines = []
-        for alg in ALL_ALGORITHMS:
-            st = results[alg]
-            if st.get("tour_list") and len(st["tour_list"]) > 1:
+        # Concorde tour
+        if concorde_tour and len(concorde_tour) > 1:
+            t_str = " -> ".join(str(v) for v in concorde_tour) + f" -> {concorde_tour[0]}"
+            tour_lines.append(f"- **Concorde (reference):** `{t_str}` cost={fmt_cost(concorde_stats.get('cost'))}")
+
+        for s_label, _, _ in solver_entries:
+            st = all_results.get(s_label)
+            if st and st.get("tour_list") and len(st["tour_list"]) > 1:
                 tour_list = list(dict.fromkeys(st["tour_list"]))
                 t_str = " -> ".join(str(v) for v in tour_list) + f" -> {tour_list[0]}"
                 cost_info = ""
-                if alg == ALG_CONCORDE:
-                    cost_info = " (reference)"
-                elif ref_feasible and st.get("feasible"):
+                if ref_feasible and st.get("feasible"):
                     if abs(st["cost"] - ref_cost) < 1e-6:
                         if concorde_tour and tour_list == concorde_tour:
                             cost_info = " (=ref, same tour)"
@@ -955,7 +1144,7 @@ def main():
                     else:
                         cost_info = " (DIFFERS from ref)"
                 tour_lines.append(
-                    f"- **{alg}:** `{t_str}` cost={fmt_cost(st.get('cost'))}{cost_info}"
+                    f"- **{s_label}:** `{t_str}` cost={fmt_cost(st.get('cost'))}{cost_info}"
                 )
 
         if tour_lines:
@@ -963,72 +1152,40 @@ def main():
             lines.extend(tour_lines)
             lines.append("")
 
-        # Debug output (collapsible)
-        for alg in [ALG_SMART, ALG_SIMPLE, ALG_CONCORDE]:
-            st = results[alg]
-            debug_text = st.get("stderr", "")
-            if debug_text.strip():
-                lines.append(f"<details>")
-                lines.append(f"<summary>{alg} debug output</summary>")
-                lines.append("")
-                lines.append("```")
-                lines.append(debug_text.strip())
-                lines.append("```")
-                lines.append("</details>")
-                lines.append("")
-
-        # ── Collect per-instance data ──
+        # ── Collect per-instance data for Excel ──
         def _alg_cost_val(st):
-            """Return raw cost value, or None on error/timeout/infeasible."""
             if st["timeout"] or st["error"] or not st.get("feasible"):
                 return None
             return st["cost"]
 
         def _alg_time_val(st):
-            """Return elapsed seconds, or None on error/timeout."""
             if st["timeout"] or st["error"]:
                 return None
             return st["elapsed"]
 
-        def _alg_nodes_val(st, alg):
-            if alg == ALG_CONCORDE:
-                return st.get("bbnodes")
+        def _alg_nodes_val(st):
             return st.get("nodes_created")
 
-        pi_entry = {
+        pi_entry: dict = {
             "idx": idx,
             "name": rel_path,
             "n": dim,
-            "concorde_cost": fmt_cost(results[ALG_CONCORDE].get("cost")) if results[ALG_CONCORDE].get("feasible") else ("ERR" if results[ALG_CONCORDE]["error"] else "TO" if results[ALG_CONCORDE]["timeout"] else "-"),
-            "concorde_time": fmt_time(results[ALG_CONCORDE]["elapsed"]),
-            "smart_cost": fmt_cost(results[ALG_SMART].get("cost")) if results[ALG_SMART].get("feasible") else ("ERR" if results[ALG_SMART]["error"] else "TO" if results[ALG_SMART]["timeout"] else "-"),
-            "smart_time": fmt_time(results[ALG_SMART]["elapsed"]),
-            "simple_cost": fmt_cost(results[ALG_SIMPLE].get("cost")) if results[ALG_SIMPLE].get("feasible") else ("ERR" if results[ALG_SIMPLE]["error"] else "TO" if results[ALG_SIMPLE]["timeout"] else "-"),
-            "simple_time": fmt_time(results[ALG_SIMPLE]["elapsed"]),
-            # raw numeric values for Excel export
-            "_concorde_cost": _alg_cost_val(results[ALG_CONCORDE]),
-            "_concorde_time": _alg_time_val(results[ALG_CONCORDE]),
-            "_concorde_nodes": _alg_nodes_val(results[ALG_CONCORDE], ALG_CONCORDE),
-            "_smart_cost": _alg_cost_val(results[ALG_SMART]),
-            "_smart_time": _alg_time_val(results[ALG_SMART]),
-            "_smart_nodes": _alg_nodes_val(results[ALG_SMART], ALG_SMART),
-            "_simple_cost": _alg_cost_val(results[ALG_SIMPLE]),
-            "_simple_time": _alg_time_val(results[ALG_SIMPLE]),
-            "_simple_nodes": _alg_nodes_val(results[ALG_SIMPLE], ALG_SIMPLE),
+            "concorde_cost": fmt_cost(concorde_stats.get("cost")) if concorde_stats.get("feasible") else (
+                "ERR" if concorde_stats["error"] else "TO" if concorde_stats["timeout"] else "-"),
+            "concorde_time": fmt_time(concorde_stats["elapsed"]),
+            "_concorde_cost": _alg_cost_val(concorde_stats),
+            "_concorde_time": _alg_time_val(concorde_stats),
+            "_concorde_nodes": concorde_stats.get("bbnodes"),
         }
-        if BENCHMARK_MODE:
-            pi_entry.update({
-                "smart_old_cost": fmt_cost(results[ALG_SMART_OLD].get("cost")) if results[ALG_SMART_OLD].get("feasible") else ("ERR" if results[ALG_SMART_OLD]["error"] else "TO" if results[ALG_SMART_OLD]["timeout"] else "-"),
-                "smart_old_time": fmt_time(results[ALG_SMART_OLD]["elapsed"]),
-                "simple_old_cost": fmt_cost(results[ALG_SIMPLE_OLD].get("cost")) if results[ALG_SIMPLE_OLD].get("feasible") else ("ERR" if results[ALG_SIMPLE_OLD]["error"] else "TO" if results[ALG_SIMPLE_OLD]["timeout"] else "-"),
-                "simple_old_time": fmt_time(results[ALG_SIMPLE_OLD]["elapsed"]),
-                "_smart_old_cost": _alg_cost_val(results[ALG_SMART_OLD]),
-                "_smart_old_time": _alg_time_val(results[ALG_SMART_OLD]),
-                "_smart_old_nodes": _alg_nodes_val(results[ALG_SMART_OLD], ALG_SMART_OLD),
-                "_simple_old_cost": _alg_cost_val(results[ALG_SIMPLE_OLD]),
-                "_simple_old_time": _alg_time_val(results[ALG_SIMPLE_OLD]),
-                "_simple_old_nodes": _alg_nodes_val(results[ALG_SIMPLE_OLD], ALG_SIMPLE_OLD),
-            })
+        for s_label, _, _ in solver_entries:
+            st = all_results[s_label]
+            pi_entry[f"{s_label}_cost_str"] = (
+                fmt_cost(st.get("cost")) if st.get("feasible") else (
+                    "ERR" if st["error"] else "TO" if st["timeout"] else "-"))
+            pi_entry[f"{s_label}_time_str"] = fmt_time(st["elapsed"])
+            pi_entry[f"_{s_label}_cost"] = _alg_cost_val(st)
+            pi_entry[f"_{s_label}_time"] = _alg_time_val(st)
+            pi_entry[f"_{s_label}_nodes"] = _alg_nodes_val(st)
         per_instance.append(pi_entry)
 
         lines.append("---")
@@ -1040,97 +1197,94 @@ def main():
     lines.append("## Summary")
     lines.append("")
 
-    lines.append("| Algorithm | Solved | Timeout | Error | Wrong Cost | Total Time | Avg Time | Avg B&B Nodes | Total B&B Nodes |")
-    lines.append("|-----------|--------|---------|-------|------------|------------|----------|---------------|-----------------|")
+    sum_header = ["Solver", "Solved", "Timeout", "Error", "Wrong Cost",
+                  "Total Time", "Avg Time", "Avg Nodes", "Total Nodes"]
+    lines.append("| " + " | ".join(sum_header) + " |")
+    lines.append("|" + "|".join(["---"] * len(sum_header)) + "|")
 
-    for alg in [ALG_CONCORDE, ALG_SMART, ALG_SIMPLE] + (BENCHMARK_ALGORITHMS if BENCHMARK_MODE else []):
-        s = summary[alg]
-        ok = s["ok"]
-        timeout = s["timeout"]
-        error = s["error"]
-        wrong = s["wrong_cost"]
-        total_time = s["total_time"]
+    for s_label, _, _ in solver_entries:
+        skey = _summary_key(s_label)
+        s = summary.get(skey, {})
+        ok = s.get("ok", 0)
+        timeout = s.get("timeout", 0)
+        error = s.get("error", 0)
+        wrong = s.get("wrong_cost", 0)
+        total_time = s.get("total_time", 0.0)
         avg_time = total_time / ok if ok > 0 else 0
-        avg_bb = s["total_bbnodes"] / s["count_nodes"] if s["count_nodes"] > 0 else 0
+        total_nodes = s.get("total_nodes", 0)
+        count_nodes = s.get("count_nodes", 0)
+        avg_nodes = total_nodes / count_nodes if count_nodes > 0 else 0
         lines.append(
-            f"| {alg} | {ok} | {timeout} | {error} | {wrong} | {fmt_time(total_time)} "
-            f"| {fmt_time(avg_time)} | {avg_bb:.0f} | {s['total_bbnodes']} |"
+            f"| {s_label} | {ok} | {timeout} | {error} | {wrong} | {fmt_time(total_time)} "
+            f"| {fmt_time(avg_time)} | {avg_nodes:.0f} | {total_nodes} |"
         )
     lines.append("")
 
-    # Benchmark speedup summary
-    if BENCHMARK_MODE:
-        lines.append("### Optimization Speedup (new vs old)")
+    # Cross-version speedup (if multiple solvers)
+    if len(solvers) >= 2:
+        lines.append("### Cross-Version Speedup")
         lines.append("")
-        lines.append("| Strategy | Old Total Time | New Total Time | Speedup | Old Avg Nodes | New Avg Nodes | Node Reduction |")
-        lines.append("|----------|---------------|---------------|---------|---------------|---------------|----------------|")
-        for new_alg, old_alg in [(ALG_SMART, ALG_SMART_OLD), (ALG_SIMPLE, ALG_SIMPLE_OLD)]:
-            ns = summary[new_alg]
-            os_ = summary[old_alg]
-            old_time = os_["total_time"]
-            new_time = ns["total_time"]
-            old_avg_bb = os_["total_bbnodes"] / os_["count_nodes"] if os_["count_nodes"] > 0 else 0
-            new_avg_bb = ns["total_bbnodes"] / ns["count_nodes"] if ns["count_nodes"] > 0 else 0
-            if new_time > 0 and old_time > 0:
-                sp = old_time / new_time
-                sp_str = f"{sp:.2f}x"
+        lines.append("Speedup of each solver relative to the first (baseline) solver, "
+                      "computed from total solve time over all instances.")
+        lines.append("")
+        baseline_label = solvers[0][0]
+        base_skey = _summary_key(baseline_label)
+        base_time = summary[base_skey]["total_time"]
+        base_nodes = (summary[base_skey]["total_nodes"] / summary[base_skey]["count_nodes"]
+                      if summary[base_skey]["count_nodes"] > 0 else 0)
+
+        sp_header = ["Solver", "Total Time", "Speedup vs Baseline", "Avg Nodes", "Node Ratio"]
+        lines.append("| " + " | ".join(sp_header) + " |")
+        lines.append("|" + "|".join(["---"] * len(sp_header)) + "|")
+
+        for s_label, _, _ in solver_entries:
+            skey = _summary_key(s_label)
+            s = summary[skey]
+            total_t = s["total_time"]
+            avg_n = (s["total_nodes"] / s["count_nodes"]
+                     if s["count_nodes"] > 0 else 0)
+            if total_t > 0 and base_time > 0:
+                sp = base_time / total_t
+                sp_str = f"{sp:.2f}x" if sp >= 1 else f"{1/sp:.2f}x slower"
             else:
                 sp_str = "-"
-            node_red = ""
-            if old_avg_bb > 0 and new_avg_bb > 0:
-                nr = 1 - new_avg_bb / old_avg_bb
-                node_red = f"{nr:.1%}"
+            node_ratio_str = ""
+            if base_nodes > 0 and avg_n > 0:
+                node_ratio_str = f"{avg_n / base_nodes:.2f}x"
             lines.append(
-                f"| {new_alg.split()[0]} | {fmt_time(old_time)} | {fmt_time(new_time)} "
-                f"| {sp_str} | {old_avg_bb:.0f} | {new_avg_bb:.0f} | {node_red} |"
+                f"| {s_label} | {fmt_time(total_t)} | {sp_str} "
+                f"| {avg_n:.0f} | {node_ratio_str} |"
             )
         lines.append("")
 
     # Per-instance matrix
     lines.append("### Per-Instance Results Matrix")
     lines.append("")
-    if BENCHMARK_MODE:
-        header = "| # | Instance | n | Smart Time | Smart(old) Time | Speedup | Simple Time | Simple(old) Time | Speedup |"
-        lines.append(header)
-        sep = "|---|---|---|---|---|---|---|---|---|"
-        lines.append(sep)
-        for pi in per_instance:
-            sm_new = pi.get("_smart_time")
-            sm_old = pi.get("_smart_old_time")
-            si_new = pi.get("_simple_time")
-            si_old = pi.get("_simple_old_time")
-            def _speedup_str(old_t, new_t):
-                if old_t and new_t and old_t > 0 and new_t > 0:
-                    return f"{old_t/new_t:.2f}x"
-                return "-"
-            lines.append(
-                f"| {pi['idx']} | `{pi['name']}` | {pi['n']} "
-                f"| {pi['smart_time']} | {pi.get('smart_old_time', '-')} | {_speedup_str(sm_old, sm_new)} "
-                f"| {pi['simple_time']} | {pi.get('simple_old_time', '-')} | {_speedup_str(si_old, si_new)} |"
-            )
-    else:
-        header = "| # | Instance | n | Concorde Cost | Smart Cost | Simple Cost | Concorde Time | Smart Time | Simple Time |"
-        lines.append(header)
-        sep = "|---|---|---|---|---|---|---|---|---|"
-        lines.append(sep)
-        for pi in per_instance:
-            lines.append(
-                f"| {pi['idx']} | `{pi['name']}` | {pi['n']} "
-                f"| {pi['concorde_cost']} | {pi['smart_cost']} | {pi['simple_cost']} "
-                f"| {pi['concorde_time']} | {pi['smart_time']} | {pi['simple_time']} |"
-            )
+    matrix_header = ["#", "Instance", "n", "Concorde Cost"]
+    for s_label, _, _ in solver_entries:
+        matrix_header.append(f"{s_label} Cost")
+        matrix_header.append(f"{s_label} Time")
+    lines.append("| " + " | ".join(matrix_header) + " |")
+    lines.append("|" + "|".join(["---"] * len(matrix_header)) + "|")
+
+    for pi in per_instance:
+        row = [str(pi["idx"]), f"`{pi['name']}`", str(pi["n"]), str(pi["concorde_cost"])]
+        for s_label, _, _ in solver_entries:
+            row.append(str(pi.get(f"{s_label}_cost_str", "-")))
+            row.append(str(pi.get(f"{s_label}_time_str", "-")))
+        lines.append("| " + " | ".join(row) + " |")
     lines.append("")
 
     flush()
 
     # Excel export
-    export_xlsx(per_instance, summary, XLSX_PATH)
+    export_xlsx(per_instance, summary, solver_entries, XLSX_PATH)
 
     print(f"\nResults written to: {OUT_PATH}", file=sys.stderr)
 
 
-def _print_solver_status(label: str, stats: dict, ref_cost: float | None):
-    """Print a one-line solver status to stderr (comparing against Concorde reference)."""
+def _print_solver_status(_label: str, stats: dict, ref_cost: float | None):
+    """Print a one-line solver status to stderr."""
     if stats["timeout"]:
         print(f"TIMEOUT", file=sys.stderr)
     elif stats["error"]:
@@ -1149,13 +1303,10 @@ def _print_solver_status(label: str, stats: dict, ref_cost: float | None):
 
 # ── Excel Export ────────────────────────────────────────────────────────
 
-def export_xlsx(per_instance: list[dict], summary: dict, xlsx_path: str):
-    """Write per-instance results and summary to an Excel workbook.
-
-    Sheet 1 "Per-Instance": one row per instance with cost / time / branch-nodes
-                             for Concorde, Smart, and Simple.
-    Sheet 2 "Summary": aggregate stats for the three algorithms.
-    """
+def export_xlsx(per_instance: list[dict], summary: dict,
+                solver_entries: list[tuple[str, str, bool]],
+                xlsx_path: str):
+    """Write per-instance results and summary to an Excel workbook."""
     if not HAS_OPENPYXL:
         print("Warning: openpyxl not installed. Skipping Excel export. "
               "Install with: pip install openpyxl", file=sys.stderr)
@@ -1164,9 +1315,8 @@ def export_xlsx(per_instance: list[dict], summary: dict, xlsx_path: str):
     wb = openpyxl.Workbook()
 
     # ── Styles ──
-    header_font = Font(bold=True, size=11)
-    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
     header_font_white = Font(bold=True, size=11, color="FFFFFF")
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
     header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
     cell_align = Alignment(horizontal="center", vertical="center")
     thin_border = Border(
@@ -1188,31 +1338,34 @@ def export_xlsx(per_instance: list[dict], summary: dict, xlsx_path: str):
         cell.alignment = cell_align
         cell.border = thin_border
 
-    # ═══════════════════════════════════════════════════════════════
-    # Sheet 1: Per-Instance Results
-    # ═══════════════════════════════════════════════════════════════
-    ws1 = cast(Worksheet, wb.active)
-    ws1.title = "Per-Instance"
+    solver_labels = [label for label, _, _ in solver_entries]
 
-    headers1 = [
-        "#", "Instance", "n",
-        "Concorde Cost", "Concorde Time (s)", "Concorde BBNodes",
-        "Smart Cost", "Smart Time (s)", "Smart Nodes Created",
-        "Simple Cost", "Simple Time (s)", "Simple Nodes Created",
-    ]
-    for c, h in enumerate(headers1, 1):
-        ws1.cell(row=1, column=c, value=h)
-    style_header(ws1, 1, len(headers1))
+    # ═══════════════════════════════════════════════════════════════
+    # Per-Instance Results sheet
+    # ═══════════════════════════════════════════════════════════════
+    ws = cast(Worksheet, wb.create_sheet("Per-Instance Results"))
+
+    headers = ["#", "Instance", "n", "Concorde Cost", "Concorde Time (s)", "Concorde Nodes"]
+    for s_label in solver_labels:
+        headers.append(f"{s_label} Cost")
+        headers.append(f"{s_label} Time (s)")
+        headers.append(f"{s_label} Nodes")
+
+    for c, h in enumerate(headers, 1):
+        ws.cell(row=1, column=c, value=h)
+    style_header(ws, 1, len(headers))
 
     for r, pi in enumerate(per_instance, 2):
-        values = [
+        values: list = [
             pi["idx"], pi["name"], pi["n"],
             pi.get("_concorde_cost"), pi.get("_concorde_time"), pi.get("_concorde_nodes"),
-            pi.get("_smart_cost"), pi.get("_smart_time"), pi.get("_smart_nodes"),
-            pi.get("_simple_cost"), pi.get("_simple_time"), pi.get("_simple_nodes"),
         ]
+        for s_label in solver_labels:
+            values.append(pi.get(f"_{s_label}_cost"))
+            values.append(pi.get(f"_{s_label}_time"))
+            values.append(pi.get(f"_{s_label}_nodes"))
         for c, v in enumerate(values, 1):
-            cell = cast(Cell, ws1.cell(row=r, column=c))
+            cell = cast(Cell, ws.cell(row=r, column=c))
             if v is None:
                 cell.value = "-"
             elif isinstance(v, float):
@@ -1221,48 +1374,100 @@ def export_xlsx(per_instance: list[dict], summary: dict, xlsx_path: str):
                 cell.value = str(v)
             style_data_cell(cell)
 
-    # Column widths
-    col_widths1 = [5, 35, 6, 14, 14, 14, 14, 14, 14, 14, 14, 14]
-    for c, w in enumerate(col_widths1, 1):
-        ws1.column_dimensions[get_column_letter(c)].width = w
-
-    ws1.freeze_panes = "A2"
+    base_widths = [5, 35, 6, 14, 14, 14]
+    solver_widths = [14, 14, 14]
+    all_widths = base_widths + solver_widths * len(solver_labels)
+    for c, w in enumerate(all_widths, 1):
+        ws.column_dimensions[get_column_letter(c)].width = w
+    ws.freeze_panes = "D2"
 
     # ═══════════════════════════════════════════════════════════════
-    # Sheet 2: Summary
+    # Summary sheet
     # ═══════════════════════════════════════════════════════════════
-    ws2 = cast(Worksheet, wb.create_sheet("Summary"))
+    ws_summary = cast(Worksheet, wb.create_sheet("Summary"))
 
-    headers2 = [
-        "Algorithm", "Solved", "Timeout", "Error", "Wrong Cost",
-        "Total Time (s)", "Avg Time (s)", "Avg B&B Nodes", "Total B&B Nodes",
+    sum_headers = [
+        "Solver", "Solved", "Timeout", "Error", "Wrong Cost",
+        "Total Time (s)", "Avg Time (s)", "Avg Nodes", "Total Nodes",
     ]
-    for c, h in enumerate(headers2, 1):
-        ws2.cell(row=1, column=c, value=h)
-    style_header(ws2, 1, len(headers2))
+    for c, h in enumerate(sum_headers, 1):
+        ws_summary.cell(row=1, column=c, value=h)
+    style_header(ws_summary, 1, len(sum_headers))
 
-    alg_order = [ALG_CONCORDE, ALG_SMART, ALG_SIMPLE]
-    for r, alg in enumerate(alg_order, 2):
-        s = summary[alg]
-        ok = s["ok"]
-        total_time = s["total_time"]
+    row = 2
+    for s_label in solver_labels:
+        s = summary.get(s_label, {})
+        ok = s.get("ok", 0)
+        total_time = s.get("total_time", 0.0)
         avg_time = total_time / ok if ok > 0 else 0
-        avg_bb = s["total_bbnodes"] / s["count_nodes"] if s["count_nodes"] > 0 else 0
+        total_nodes = s.get("total_nodes", 0)
+        count_nodes = s.get("count_nodes", 0)
+        avg_nodes = total_nodes / count_nodes if count_nodes > 0 else 0
         values = [
-            alg, ok, s["timeout"], s["error"], s["wrong_cost"],
+            s_label, ok, s.get("timeout", 0),
+            s.get("error", 0), s.get("wrong_cost", 0),
             round(total_time, 2), round(avg_time, 2),
-            round(avg_bb, 0), s["total_bbnodes"],
+            round(avg_nodes, 0), total_nodes,
         ]
         for c, v in enumerate(values, 1):
-            cell = cast(Cell, ws2.cell(row=r, column=c))
+            cell = cast(Cell, ws_summary.cell(row=row, column=c))
             cell.value = v
             style_data_cell(cell)
+        row += 1
 
-    col_widths2 = [16, 10, 10, 8, 12, 14, 14, 14, 16]
-    for c, w in enumerate(col_widths2, 1):
-        ws2.column_dimensions[get_column_letter(c)].width = w
+    sum_widths = [20, 10, 10, 8, 12, 14, 14, 14, 16]
+    for c, w in enumerate(sum_widths, 1):
+        ws_summary.column_dimensions[get_column_letter(c)].width = w
+    ws_summary.freeze_panes = "A2"
 
-    ws2.freeze_panes = "A2"
+    # ═══════════════════════════════════════════════════════════════
+    # Cross-version speedup sheet (if multiple solvers)
+    # ═══════════════════════════════════════════════════════════════
+    if len(solver_entries) >= 2:
+        ws_sp = cast(Worksheet, wb.create_sheet("Speedup"))
+
+        sp_headers = ["Solver", "Total Time (s)", "Speedup vs Baseline", "Avg Nodes", "Node Ratio"]
+        for c, h in enumerate(sp_headers, 1):
+            ws_sp.cell(row=1, column=c, value=h)
+        style_header(ws_sp, 1, len(sp_headers))
+
+        baseline_label = solver_labels[0]
+        base_time = summary[baseline_label]["total_time"]
+        base_nodes = (summary[baseline_label]["total_nodes"] / summary[baseline_label]["count_nodes"]
+                      if summary[baseline_label]["count_nodes"] > 0 else 0)
+
+        row = 2
+        for s_label in solver_labels:
+            s = summary[s_label]
+            total_t = s["total_time"]
+            avg_n = (s["total_nodes"] / s["count_nodes"]
+                     if s["count_nodes"] > 0 else 0)
+            sp_val = round(base_time / total_t, 2) if (total_t > 0 and base_time > 0) else None
+            node_ratio = round(avg_n / base_nodes, 2) if (base_nodes > 0 and avg_n > 0) else None
+            values = [
+                s_label,
+                round(total_t, 2) if total_t > 0 else None,
+                sp_val, round(avg_n, 0) if avg_n > 0 else None,
+                node_ratio,
+            ]
+            for c, v in enumerate(values, 1):
+                cell = cast(Cell, ws_sp.cell(row=row, column=c))
+                cell.value = v if v is not None else "-"
+                style_data_cell(cell)
+            row += 1
+
+        sp_widths = [20, 14, 18, 14, 12]
+        for c, w in enumerate(sp_widths, 1):
+            ws_sp.column_dimensions[get_column_letter(c)].width = w
+        ws_sp.freeze_panes = "A2"
+
+    # Remove default sheet if we added real ones
+    if "Sheet" in wb.sheetnames and len(wb.sheetnames) > 1:
+        del wb["Sheet"]
+
+    # Move Per-Instance Results to first position
+    if "Per-Instance Results" in wb.sheetnames:
+        wb.move_sheet("Per-Instance Results", offset=0)
 
     # ── Save ──
     wb.save(xlsx_path)

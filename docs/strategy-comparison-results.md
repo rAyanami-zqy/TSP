@@ -5,12 +5,13 @@
 | Algorithm | Description |
 |---|---|
 | **Concorde** | State-of-the-art Concorde TSP solver (exact, with QSopt LP) — **reference** |
-| **Smart** | Branch & Bound with smart branching (1-tree degree + edge candidate) |
-| **Simple** | Branch & Bound with simple branching (max-degree vertex) |
+| **tsp_bb_26_07_02** | Branch & Bound solver — smart branching (legacy) |
+| **tsp_bb_26_07_06** | Branch & Bound solver — BP (Branch Partitioning) |
 
 **Instances:** 39 from `examples` (n <= 49), `data/classic/tsplib` (n <= 59), `data/classic/national` (n <= 59)  
 **Timeout:** 1800s (0h) per method per instance  
 **Reference:** Concorde exact solver  
+**Solver versions:** `tsp_bb_26_07_02`, `tsp_bb_26_07_06`  
 
 ---
 
@@ -21,40 +22,17 @@
 
 **Concorde (reference) tour:** `0 -> 3 -> 2 -> 1 -> 0`  
 
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 45 | ref | 2ms | - | - | - | - | - | - |
-| Smart | 45 | :white_check_mark: | 4ms | 5 | 2 | 3 | 0 | - |
-| Simple | 45 | :white_check_mark: | 3ms | 5 | 2 | 3 | 0 | - |
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 45 | 3ms | 5 | 2 | 3 | 0 | :white_check_mark: |
+| tsp_bb_26_07_06 | 45 | 3ms | 3 | 2 | 2 | 0 | :white_check_mark: |
 
 **Tours found:**
-- **Concorde:** `0 -> 3 -> 2 -> 1 -> 0` cost=45 (reference)
-- **Smart:** `0 -> 3 -> 2 -> 1 -> 0` cost=45 (=ref, same tour)
-- **Simple:** `0 -> 3 -> 2 -> 1 -> 0` cost=45 (=ref, same tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=4 method=exact
-[tsp-debug] exact solve started: vertices=4
-[tsp-debug] initial incumbent: cost=45
-[tsp-debug] root: lower_bound=36 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=45 expanded=2 created=5 pruned_bound=3 pruned_infeasible=0
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=4 method=exact
-[tsp-debug] exact solve started: vertices=4
-[tsp-debug] initial incumbent: cost=45
-[tsp-debug] root: lower_bound=36 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=45 expanded=2 created=5 pruned_bound=3 pruned_infeasible=0
-```
-</details>
+- **Concorde (reference):** `0 -> 3 -> 2 -> 1 -> 0` cost=45
+- **tsp_bb_26_07_02:** `0 -> 3 -> 2 -> 1 -> 0` cost=45 (=ref, same tour)
+- **tsp_bb_26_07_06:** `0 -> 3 -> 2 -> 1 -> 0` cost=45 (=ref, same tour)
 
 ---
 
@@ -65,568 +43,249 @@
 
 **Concorde (reference) tour:** `0 -> 1 -> 3 -> 2 -> 0`  
 
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 102 | ref | 2ms | - | - | - | - | - | - |
-| Smart | 102 | :white_check_mark: | 2ms | 1 | 0 | 1 | 0 | - |
-| Simple | 102 | :white_check_mark: | 3ms | 1 | 0 | 1 | 0 | - |
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 102 | 3ms | 1 | 0 | 1 | 0 | :white_check_mark: |
+| tsp_bb_26_07_06 | 102 | 3ms | 1 | 0 | 1 | 0 | :white_check_mark: |
 
 **Tours found:**
-- **Concorde:** `0 -> 1 -> 3 -> 2 -> 0` cost=102 (reference)
-- **Smart:** `0 -> 1 -> 3 -> 2 -> 0` cost=102 (=ref, same tour)
-- **Simple:** `0 -> 1 -> 3 -> 2 -> 0` cost=102 (=ref, same tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=4 method=exact
-[tsp-debug] exact solve started: vertices=4
-[tsp-debug] initial incumbent: cost=102
-[tsp-debug] root: lower_bound=102 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=102 expanded=0 created=1 pruned_bound=1 pruned_infeasible=0
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=4 method=exact
-[tsp-debug] exact solve started: vertices=4
-[tsp-debug] initial incumbent: cost=102
-[tsp-debug] root: lower_bound=102 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=102 expanded=0 created=1 pruned_bound=1 pruned_infeasible=0
-```
-</details>
+- **Concorde (reference):** `0 -> 1 -> 3 -> 2 -> 0` cost=102
+- **tsp_bb_26_07_02:** `0 -> 1 -> 3 -> 2 -> 0` cost=102 (=ref, same tour)
+- **tsp_bb_26_07_06:** `0 -> 1 -> 3 -> 2 -> 0` cost=102 (=ref, same tour)
 
 ---
 
 ## 3. `examples/five-city.tsp` (n=5)
 
 **Concorde optimal cost:** 26  
-**Concorde time:** 1ms  
+**Concorde time:** 2ms  
 
 **Concorde (reference) tour:** `0 -> 4 -> 2 -> 3 -> 1 -> 0`  
 
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 26 | ref | 1ms | - | - | - | - | - | - |
-| Smart | 26 | :white_check_mark: | 3ms | 13 | 6 | 7 | 0 | - |
-| Simple | 26 | :white_check_mark: | 3ms | 13 | 6 | 7 | 0 | - |
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 26 | 3ms | 13 | 6 | 7 | 0 | :white_check_mark: |
+| tsp_bb_26_07_06 | 26 | 4ms | 1 | 1 | 1 | 0 | :white_check_mark: |
 
 **Tours found:**
-- **Concorde:** `0 -> 4 -> 2 -> 3 -> 1 -> 0` cost=26 (reference)
-- **Smart:** `0 -> 1 -> 3 -> 2 -> 4 -> 0` cost=26 (=ref, different tour)
-- **Simple:** `0 -> 1 -> 3 -> 2 -> 4 -> 0` cost=26 (=ref, different tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=five_city dimension=5 method=exact
-[tsp-debug] exact solve started: vertices=5
-[tsp-debug] initial incumbent: cost=26
-[tsp-debug] root: lower_bound=21 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=26 expanded=6 created=13 pruned_bound=7 pruned_infeasible=0
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=five_city dimension=5 method=exact
-[tsp-debug] exact solve started: vertices=5
-[tsp-debug] initial incumbent: cost=26
-[tsp-debug] root: lower_bound=21 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=26 expanded=6 created=13 pruned_bound=7 pruned_infeasible=0
-```
-</details>
+- **Concorde (reference):** `0 -> 4 -> 2 -> 3 -> 1 -> 0` cost=26
+- **tsp_bb_26_07_02:** `0 -> 1 -> 3 -> 2 -> 4 -> 0` cost=26 (=ref, different tour)
+- **tsp_bb_26_07_06:** `0 -> 1 -> 3 -> 2 -> 4 -> 0` cost=26 (=ref, different tour)
 
 ---
 
 ## 4. `examples/five-city.txt` (n=5)
 
 **Concorde optimal cost:** 26  
-**Concorde time:** 3ms  
+**Concorde time:** 2ms  
 
 **Concorde (reference) tour:** `0 -> 4 -> 2 -> 3 -> 1 -> 0`  
 
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 26 | ref | 3ms | - | - | - | - | - | - |
-| Smart | 26 | :white_check_mark: | 2ms | 13 | 6 | 7 | 0 | - |
-| Simple | 26 | :white_check_mark: | 3ms | 13 | 6 | 7 | 0 | - |
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 26 | 2ms | 13 | 6 | 7 | 0 | :white_check_mark: |
+| tsp_bb_26_07_06 | 26 | 3ms | 1 | 1 | 1 | 0 | :white_check_mark: |
 
 **Tours found:**
-- **Concorde:** `0 -> 4 -> 2 -> 3 -> 1 -> 0` cost=26 (reference)
-- **Smart:** `0 -> 1 -> 3 -> 2 -> 4 -> 0` cost=26 (=ref, different tour)
-- **Simple:** `0 -> 1 -> 3 -> 2 -> 4 -> 0` cost=26 (=ref, different tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=5 method=exact
-[tsp-debug] exact solve started: vertices=5
-[tsp-debug] initial incumbent: cost=26
-[tsp-debug] root: lower_bound=21 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=26 expanded=6 created=13 pruned_bound=7 pruned_infeasible=0
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=5 method=exact
-[tsp-debug] exact solve started: vertices=5
-[tsp-debug] initial incumbent: cost=26
-[tsp-debug] root: lower_bound=21 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=26 expanded=6 created=13 pruned_bound=7 pruned_infeasible=0
-```
-</details>
+- **Concorde (reference):** `0 -> 4 -> 2 -> 3 -> 1 -> 0` cost=26
+- **tsp_bb_26_07_02:** `0 -> 1 -> 3 -> 2 -> 4 -> 0` cost=26 (=ref, different tour)
+- **tsp_bb_26_07_06:** `0 -> 1 -> 3 -> 2 -> 4 -> 0` cost=26 (=ref, different tour)
 
 ---
 
 ## 5. `examples/converted/five-node-euc.txt` (n=5)
 
 **Concorde optimal cost:** 8  
-**Concorde time:** 3ms  
+**Concorde time:** 2ms  
 
 **Concorde (reference) tour:** `0 -> 4 -> 1 -> 2 -> 3 -> 0`  
 
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 8 | ref | 3ms | - | - | - | - | - | - |
-| Smart | 8 | :white_check_mark: | 2ms | 15 | 7 | 8 | 0 | - |
-| Simple | 8 | :white_check_mark: | 3ms | 11 | 5 | 6 | 0 | - |
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 8 | 3ms | 15 | 7 | 8 | 0 | :white_check_mark: |
+| tsp_bb_26_07_06 | 8 | 3ms | 11 | 3 | 6 | 0 | :white_check_mark: |
 
 **Tours found:**
-- **Concorde:** `0 -> 4 -> 1 -> 2 -> 3 -> 0` cost=8 (reference)
-- **Smart:** `0 -> 4 -> 1 -> 2 -> 3 -> 0` cost=8 (=ref, same tour)
-- **Simple:** `0 -> 4 -> 1 -> 2 -> 3 -> 0` cost=8 (=ref, same tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=5 method=exact
-[tsp-debug] exact solve started: vertices=5
-[tsp-debug] initial incumbent: cost=8
-[tsp-debug] root: lower_bound=6 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=8 expanded=7 created=15 pruned_bound=8 pruned_infeasible=0
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=5 method=exact
-[tsp-debug] exact solve started: vertices=5
-[tsp-debug] initial incumbent: cost=8
-[tsp-debug] root: lower_bound=6 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=8 expanded=5 created=11 pruned_bound=6 pruned_infeasible=0
-```
-</details>
+- **Concorde (reference):** `0 -> 4 -> 1 -> 2 -> 3 -> 0` cost=8
+- **tsp_bb_26_07_02:** `0 -> 4 -> 1 -> 2 -> 3 -> 0` cost=8 (=ref, same tour)
+- **tsp_bb_26_07_06:** `0 -> 4 -> 1 -> 2 -> 3 -> 0` cost=8 (=ref, same tour)
 
 ---
 
 ## 6. `examples/converted/five-node-explicit.txt` (n=5)
 
 **Concorde optimal cost:** 26  
-**Concorde time:** 1ms  
+**Concorde time:** 2ms  
 
 **Concorde (reference) tour:** `0 -> 4 -> 2 -> 3 -> 1 -> 0`  
 
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 26 | ref | 1ms | - | - | - | - | - | - |
-| Smart | 26 | :white_check_mark: | 4ms | 13 | 6 | 7 | 0 | - |
-| Simple | 26 | :white_check_mark: | 2ms | 13 | 6 | 7 | 0 | - |
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 26 | 3ms | 13 | 6 | 7 | 0 | :white_check_mark: |
+| tsp_bb_26_07_06 | 26 | 3ms | 1 | 1 | 1 | 0 | :white_check_mark: |
 
 **Tours found:**
-- **Concorde:** `0 -> 4 -> 2 -> 3 -> 1 -> 0` cost=26 (reference)
-- **Smart:** `0 -> 1 -> 3 -> 2 -> 4 -> 0` cost=26 (=ref, different tour)
-- **Simple:** `0 -> 1 -> 3 -> 2 -> 4 -> 0` cost=26 (=ref, different tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=5 method=exact
-[tsp-debug] exact solve started: vertices=5
-[tsp-debug] initial incumbent: cost=26
-[tsp-debug] root: lower_bound=21 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=26 expanded=6 created=13 pruned_bound=7 pruned_infeasible=0
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=5 method=exact
-[tsp-debug] exact solve started: vertices=5
-[tsp-debug] initial incumbent: cost=26
-[tsp-debug] root: lower_bound=21 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=26 expanded=6 created=13 pruned_bound=7 pruned_infeasible=0
-```
-</details>
+- **Concorde (reference):** `0 -> 4 -> 2 -> 3 -> 1 -> 0` cost=26
+- **tsp_bb_26_07_02:** `0 -> 1 -> 3 -> 2 -> 4 -> 0` cost=26 (=ref, different tour)
+- **tsp_bb_26_07_06:** `0 -> 1 -> 3 -> 2 -> 4 -> 0` cost=26 (=ref, different tour)
 
 ---
 
 ## 7. `examples/random/sparse/rnd-01-sparse-n5.txt` (n=5)
 
-**Concorde optimal cost:** 110  
-**Concorde time:** 3ms  
+**Concorde:** failed to find optimal solution  
 
-**Concorde (reference) tour:** `0 -> 3 -> 4 -> 2 -> 1 -> 0`  
+### Results
 
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 110 | ref | 3ms | - | - | - | - | - | - |
-| Smart | 110 | :white_check_mark: | 4ms | 5 | 2 | 3 | 0 | - |
-| Simple | 110 | :white_check_mark: | 4ms | 5 | 2 | 3 | 0 | - |
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 110 | 3ms | 5 | 2 | 3 | 0 | - |
+| tsp_bb_26_07_06 | 110 | 3ms | 5 | 2 | 3 | 0 | - |
 
 **Tours found:**
-- **Concorde:** `0 -> 3 -> 4 -> 2 -> 1 -> 0` cost=110 (reference)
-- **Smart:** `3 -> 4 -> 2 -> 1 -> 0 -> 3` cost=110 (=ref, different tour)
-- **Simple:** `3 -> 4 -> 2 -> 1 -> 0 -> 3` cost=110 (=ref, different tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=5 method=exact
-[tsp-debug] exact solve started: vertices=5
-[tsp-debug] initial incumbent: cost=110
-[tsp-debug] root: lower_bound=102 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=110 expanded=2 created=5 pruned_bound=3 pruned_infeasible=0
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=5 method=exact
-[tsp-debug] exact solve started: vertices=5
-[tsp-debug] initial incumbent: cost=110
-[tsp-debug] root: lower_bound=102 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=110 expanded=2 created=5 pruned_bound=3 pruned_infeasible=0
-```
-</details>
+- **tsp_bb_26_07_02:** `3 -> 4 -> 2 -> 1 -> 0 -> 3` cost=110
+- **tsp_bb_26_07_06:** `3 -> 4 -> 2 -> 1 -> 0 -> 3` cost=110
 
 ---
 
 ## 8. `examples/random/complete/rnd-02-complete-n5.txt` (n=5)
 
 **Concorde optimal cost:** 136  
-**Concorde time:** 3ms  
+**Concorde time:** 2ms  
 
 **Concorde (reference) tour:** `0 -> 2 -> 3 -> 4 -> 1 -> 0`  
 
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 136 | ref | 3ms | - | - | - | - | - | - |
-| Smart | 136 | :white_check_mark: | 2ms | 7 | 3 | 4 | 0 | - |
-| Simple | 136 | :white_check_mark: | 4ms | 9 | 4 | 5 | 0 | - |
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 136 | 3ms | 7 | 3 | 4 | 0 | :white_check_mark: |
+| tsp_bb_26_07_06 | 136 | 3ms | 1 | 1 | 1 | 0 | :white_check_mark: |
 
 **Tours found:**
-- **Concorde:** `0 -> 2 -> 3 -> 4 -> 1 -> 0` cost=136 (reference)
-- **Smart:** `0 -> 2 -> 3 -> 4 -> 1 -> 0` cost=136 (=ref, same tour)
-- **Simple:** `0 -> 2 -> 3 -> 4 -> 1 -> 0` cost=136 (=ref, same tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=5 method=exact
-[tsp-debug] exact solve started: vertices=5
-[tsp-debug] initial incumbent: cost=136
-[tsp-debug] root: lower_bound=127 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=136 expanded=3 created=7 pruned_bound=4 pruned_infeasible=0
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=5 method=exact
-[tsp-debug] exact solve started: vertices=5
-[tsp-debug] initial incumbent: cost=136
-[tsp-debug] root: lower_bound=127 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=136 expanded=4 created=9 pruned_bound=5 pruned_infeasible=0
-```
-</details>
+- **Concorde (reference):** `0 -> 2 -> 3 -> 4 -> 1 -> 0` cost=136
+- **tsp_bb_26_07_02:** `0 -> 2 -> 3 -> 4 -> 1 -> 0` cost=136 (=ref, same tour)
+- **tsp_bb_26_07_06:** `0 -> 2 -> 3 -> 4 -> 1 -> 0` cost=136 (=ref, same tour)
 
 ---
 
 ## 9. `examples/random/complete/rnd-04-complete-n5.txt` (n=5)
 
 **Concorde optimal cost:** 88  
-**Concorde time:** 3ms  
+**Concorde time:** 2ms  
 
 **Concorde (reference) tour:** `0 -> 3 -> 2 -> 4 -> 1 -> 0`  
 
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 88 | ref | 3ms | - | - | - | - | - | - |
-| Smart | 88 | :white_check_mark: | 4ms | 7 | 3 | 4 | 0 | - |
-| Simple | 88 | :white_check_mark: | 2ms | 7 | 3 | 4 | 0 | - |
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 88 | 3ms | 7 | 3 | 4 | 0 | :white_check_mark: |
+| tsp_bb_26_07_06 | 88 | 3ms | 1 | 1 | 1 | 0 | :white_check_mark: |
 
 **Tours found:**
-- **Concorde:** `0 -> 3 -> 2 -> 4 -> 1 -> 0` cost=88 (reference)
-- **Smart:** `0 -> 3 -> 2 -> 4 -> 1 -> 0` cost=88 (=ref, same tour)
-- **Simple:** `0 -> 3 -> 2 -> 4 -> 1 -> 0` cost=88 (=ref, same tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=5 method=exact
-[tsp-debug] exact solve started: vertices=5
-[tsp-debug] initial incumbent: cost=88
-[tsp-debug] root: lower_bound=79 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=88 expanded=3 created=7 pruned_bound=4 pruned_infeasible=0
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=5 method=exact
-[tsp-debug] exact solve started: vertices=5
-[tsp-debug] initial incumbent: cost=88
-[tsp-debug] root: lower_bound=79 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=88 expanded=3 created=7 pruned_bound=4 pruned_infeasible=0
-```
-</details>
+- **Concorde (reference):** `0 -> 3 -> 2 -> 4 -> 1 -> 0` cost=88
+- **tsp_bb_26_07_02:** `0 -> 3 -> 2 -> 4 -> 1 -> 0` cost=88 (=ref, same tour)
+- **tsp_bb_26_07_06:** `0 -> 3 -> 2 -> 4 -> 1 -> 0` cost=88 (=ref, same tour)
 
 ---
 
 ## 10. `examples/random/complete/rnd-06-complete-n5.txt` (n=5)
 
 **Concorde optimal cost:** 51  
-**Concorde time:** 3ms  
+**Concorde time:** 2ms  
 
 **Concorde (reference) tour:** `0 -> 4 -> 1 -> 2 -> 3 -> 0`  
 
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 51 | ref | 3ms | - | - | - | - | - | - |
-| Smart | 51 | :white_check_mark: | 2ms | 7 | 3 | 4 | 0 | - |
-| Simple | 51 | :white_check_mark: | 3ms | 9 | 4 | 5 | 0 | - |
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 51 | 3ms | 7 | 3 | 4 | 0 | :white_check_mark: |
+| tsp_bb_26_07_06 | 51 | 3ms | 1 | 1 | 1 | 0 | :white_check_mark: |
 
 **Tours found:**
-- **Concorde:** `0 -> 4 -> 1 -> 2 -> 3 -> 0` cost=51 (reference)
-- **Smart:** `0 -> 3 -> 2 -> 1 -> 4 -> 0` cost=51 (=ref, different tour)
-- **Simple:** `0 -> 3 -> 2 -> 1 -> 4 -> 0` cost=51 (=ref, different tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=5 method=exact
-[tsp-debug] exact solve started: vertices=5
-[tsp-debug] initial incumbent: cost=51
-[tsp-debug] root: lower_bound=43 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=51 expanded=3 created=7 pruned_bound=4 pruned_infeasible=0
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=5 method=exact
-[tsp-debug] exact solve started: vertices=5
-[tsp-debug] initial incumbent: cost=51
-[tsp-debug] root: lower_bound=43 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=51 expanded=4 created=9 pruned_bound=5 pruned_infeasible=0
-```
-</details>
+- **Concorde (reference):** `0 -> 4 -> 1 -> 2 -> 3 -> 0` cost=51
+- **tsp_bb_26_07_02:** `0 -> 3 -> 2 -> 1 -> 4 -> 0` cost=51 (=ref, different tour)
+- **tsp_bb_26_07_06:** `0 -> 3 -> 2 -> 1 -> 4 -> 0` cost=51 (=ref, different tour)
 
 ---
 
 ## 11. `examples/random/sparse/rnd-04-sparse-n6.txt` (n=6)
 
-**Concorde optimal cost:** 115  
-**Concorde time:** 2ms  
+**Concorde:** failed to find optimal solution  
 
-**Concorde (reference) tour:** `0 -> 4 -> 3 -> 5 -> 1 -> 2 -> 0`  
+### Results
 
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 115 | ref | 2ms | - | - | - | - | - | - |
-| Smart | 115 | :white_check_mark: | 4ms | 1 | 0 | 1 | 0 | - |
-| Simple | 115 | :white_check_mark: | 4ms | 1 | 0 | 1 | 0 | - |
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 115 | 3ms | 1 | 0 | 1 | 0 | - |
+| tsp_bb_26_07_06 | 115 | 3ms | 1 | 0 | 1 | 0 | - |
 
 **Tours found:**
-- **Concorde:** `0 -> 4 -> 3 -> 5 -> 1 -> 2 -> 0` cost=115 (reference)
-- **Smart:** `0 -> 4 -> 3 -> 5 -> 1 -> 2 -> 0` cost=115 (=ref, same tour)
-- **Simple:** `0 -> 4 -> 3 -> 5 -> 1 -> 2 -> 0` cost=115 (=ref, same tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=6 method=exact
-[tsp-debug] exact solve started: vertices=6
-[tsp-debug] initial incumbent: cost=115
-[tsp-debug] root: lower_bound=115 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=115 expanded=0 created=1 pruned_bound=1 pruned_infeasible=0
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=6 method=exact
-[tsp-debug] exact solve started: vertices=6
-[tsp-debug] initial incumbent: cost=115
-[tsp-debug] root: lower_bound=115 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=115 expanded=0 created=1 pruned_bound=1 pruned_infeasible=0
-```
-</details>
+- **tsp_bb_26_07_02:** `0 -> 4 -> 3 -> 5 -> 1 -> 2 -> 0` cost=115
+- **tsp_bb_26_07_06:** `0 -> 4 -> 3 -> 5 -> 1 -> 2 -> 0` cost=115
 
 ---
 
 ## 12. `examples/random/sparse/rnd-05-sparse-n6.txt` (n=6)
 
-**Concorde optimal cost:** 100  
-**Concorde time:** 3ms  
+**Concorde:** failed to find optimal solution  
 
-**Concorde (reference) tour:** `0 -> 5 -> 2 -> 1 -> 4 -> 3 -> 0`  
+### Results
 
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 100 | ref | 3ms | - | - | - | - | - | - |
-| Smart | 100 | :white_check_mark: | 4ms | 30 | 22 | 8 | 15 | - |
-| Simple | 100 | :white_check_mark: | 4ms | 29 | 22 | 7 | 16 | - |
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 100 | 3ms | 30 | 22 | 8 | 15 | - |
+| tsp_bb_26_07_06 | 100 | 3ms | 15 | 8 | 3 | 4 | - |
 
 **Tours found:**
-- **Concorde:** `0 -> 5 -> 2 -> 1 -> 4 -> 3 -> 0` cost=100 (reference)
-- **Smart:** `0 -> 5 -> 2 -> 1 -> 4 -> 3 -> 0` cost=100 (=ref, same tour)
-- **Simple:** `0 -> 5 -> 2 -> 1 -> 4 -> 3 -> 0` cost=100 (=ref, same tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=6 method=exact
-[tsp-debug] exact solve started: vertices=6
-[tsp-debug] initial incumbent: cost=100
-[tsp-debug] root: lower_bound=53 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=100 expanded=22 created=30 pruned_bound=8 pruned_infeasible=15
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=6 method=exact
-[tsp-debug] exact solve started: vertices=6
-[tsp-debug] initial incumbent: cost=100
-[tsp-debug] root: lower_bound=53 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=100 expanded=22 created=29 pruned_bound=7 pruned_infeasible=16
-```
-</details>
+- **tsp_bb_26_07_02:** `0 -> 5 -> 2 -> 1 -> 4 -> 3 -> 0` cost=100
+- **tsp_bb_26_07_06:** `0 -> 5 -> 2 -> 1 -> 4 -> 3 -> 0` cost=100
 
 ---
 
 ## 13. `examples/random/sparse/rnd-02-sparse-n7.txt` (n=7)
 
-**Concorde optimal cost:** 196  
-**Concorde time:** 1ms  
+**Concorde:** failed to find optimal solution  
 
-**Concorde (reference) tour:** `0 -> 3 -> 5 -> 1 -> 6 -> 2 -> 4 -> 0`  
+### Results
 
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 196 | ref | 1ms | - | - | - | - | - | - |
-| Smart | 196 | :white_check_mark: | 4ms | 19 | 13 | 6 | 8 | - |
-| Simple | 196 | :white_check_mark: | 2ms | 31 | 21 | 10 | 12 | - |
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 196 | 4ms | 19 | 13 | 6 | 8 | - |
+| tsp_bb_26_07_06 | 196 | 3ms | 13 | 6 | 3 | 2 | - |
 
 **Tours found:**
-- **Concorde:** `0 -> 3 -> 5 -> 1 -> 6 -> 2 -> 4 -> 0` cost=196 (reference)
-- **Smart:** `1 -> 5 -> 3 -> 0 -> 4 -> 2 -> 6 -> 1` cost=196 (=ref, different tour)
-- **Simple:** `1 -> 5 -> 3 -> 0 -> 4 -> 2 -> 6 -> 1` cost=196 (=ref, different tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=7 method=exact
-[tsp-debug] exact solve started: vertices=7
-[tsp-debug] initial incumbent: cost=196
-[tsp-debug] root: lower_bound=161 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=196 expanded=13 created=19 pruned_bound=6 pruned_infeasible=8
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=7 method=exact
-[tsp-debug] exact solve started: vertices=7
-[tsp-debug] initial incumbent: cost=196
-[tsp-debug] root: lower_bound=161 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=196 expanded=21 created=31 pruned_bound=10 pruned_infeasible=12
-```
-</details>
+- **tsp_bb_26_07_02:** `1 -> 5 -> 3 -> 0 -> 4 -> 2 -> 6 -> 1` cost=196
+- **tsp_bb_26_07_06:** `1 -> 5 -> 3 -> 0 -> 4 -> 2 -> 6 -> 1` cost=196
 
 ---
 
 ## 14. `examples/random/sparse/rnd-03-sparse-n7.txt` (n=7)
 
-**Concorde optimal cost:** 86  
-**Concorde time:** 1ms  
+**Concorde:** failed to find optimal solution  
 
-**Concorde (reference) tour:** `0 -> 2 -> 5 -> 4 -> 3 -> 6 -> 1 -> 0`  
+### Results
 
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 86 | ref | 1ms | - | - | - | - | - | - |
-| Smart | 86 | :white_check_mark: | 4ms | 7 | 4 | 3 | 2 | - |
-| Simple | 86 | :white_check_mark: | 4ms | 12 | 9 | 3 | 7 | - |
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 86 | 4ms | 7 | 4 | 3 | 2 | - |
+| tsp_bb_26_07_06 | 86 | 3ms | 1 | 1 | 1 | 0 | - |
 
 **Tours found:**
-- **Concorde:** `0 -> 2 -> 5 -> 4 -> 3 -> 6 -> 1 -> 0` cost=86 (reference)
-- **Smart:** `1 -> 6 -> 3 -> 4 -> 5 -> 2 -> 0 -> 1` cost=86 (=ref, different tour)
-- **Simple:** `1 -> 6 -> 3 -> 4 -> 5 -> 2 -> 0 -> 1` cost=86 (=ref, different tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=7 method=exact
-[tsp-debug] exact solve started: vertices=7
-[tsp-debug] initial incumbent: cost=86
-[tsp-debug] root: lower_bound=78 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=86 expanded=4 created=7 pruned_bound=3 pruned_infeasible=2
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=7 method=exact
-[tsp-debug] exact solve started: vertices=7
-[tsp-debug] initial incumbent: cost=86
-[tsp-debug] root: lower_bound=78 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=86 expanded=9 created=12 pruned_bound=3 pruned_infeasible=7
-```
-</details>
+- **tsp_bb_26_07_02:** `1 -> 6 -> 3 -> 4 -> 5 -> 2 -> 0 -> 1` cost=86
+- **tsp_bb_26_07_06:** `1 -> 6 -> 3 -> 4 -> 5 -> 2 -> 0 -> 1` cost=86
 
 ---
 
@@ -637,84 +296,34 @@
 
 **Concorde (reference) tour:** `0 -> 3 -> 6 -> 5 -> 1 -> 4 -> 2 -> 0`  
 
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 74 | ref | 3ms | - | - | - | - | - | - |
-| Smart | 74 | :white_check_mark: | 4ms | 23 | 11 | 12 | 0 | - |
-| Simple | 74 | :white_check_mark: | 3ms | 32 | 16 | 16 | 1 | - |
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 74 | 3ms | 23 | 11 | 12 | 0 | :white_check_mark: |
+| tsp_bb_26_07_06 | 74 | 4ms | 8 | 4 | 1 | 1 | :white_check_mark: |
 
 **Tours found:**
-- **Concorde:** `0 -> 3 -> 6 -> 5 -> 1 -> 4 -> 2 -> 0` cost=74 (reference)
-- **Smart:** `0 -> 2 -> 4 -> 1 -> 5 -> 6 -> 3 -> 0` cost=74 (=ref, different tour)
-- **Simple:** `0 -> 2 -> 4 -> 1 -> 5 -> 6 -> 3 -> 0` cost=74 (=ref, different tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=7 method=exact
-[tsp-debug] exact solve started: vertices=7
-[tsp-debug] initial incumbent: cost=74
-[tsp-debug] root: lower_bound=49 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=74 expanded=11 created=23 pruned_bound=12 pruned_infeasible=0
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=7 method=exact
-[tsp-debug] exact solve started: vertices=7
-[tsp-debug] initial incumbent: cost=74
-[tsp-debug] root: lower_bound=49 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=74 expanded=16 created=32 pruned_bound=16 pruned_infeasible=1
-```
-</details>
+- **Concorde (reference):** `0 -> 3 -> 6 -> 5 -> 1 -> 4 -> 2 -> 0` cost=74
+- **tsp_bb_26_07_02:** `0 -> 2 -> 4 -> 1 -> 5 -> 6 -> 3 -> 0` cost=74 (=ref, different tour)
+- **tsp_bb_26_07_06:** `0 -> 2 -> 4 -> 1 -> 5 -> 6 -> 3 -> 0` cost=74 (=ref, different tour)
 
 ---
 
 ## 16. `examples/random/sparse/rnd-06-sparse-n7.txt` (n=7)
 
-**Concorde optimal cost:** 199  
-**Concorde time:** 3ms  
+**Concorde:** failed to find optimal solution  
 
-**Concorde (reference) tour:** `0 -> 4 -> 1 -> 5 -> 3 -> 2 -> 6 -> 0`  
+### Results
 
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 199 | ref | 3ms | - | - | - | - | - | - |
-| Smart | 199 | :white_check_mark: | 4ms | 28 | 21 | 7 | 15 | - |
-| Simple | 199 | :white_check_mark: | 3ms | 28 | 22 | 6 | 17 | - |
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 199 | 4ms | 28 | 21 | 7 | 15 | - |
+| tsp_bb_26_07_06 | 199 | 4ms | 7 | 4 | 1 | 0 | - |
 
 **Tours found:**
-- **Concorde:** `0 -> 4 -> 1 -> 5 -> 3 -> 2 -> 6 -> 0` cost=199 (reference)
-- **Smart:** `4 -> 1 -> 5 -> 3 -> 2 -> 6 -> 0 -> 4` cost=199 (=ref, different tour)
-- **Simple:** `4 -> 1 -> 5 -> 3 -> 2 -> 6 -> 0 -> 4` cost=199 (=ref, different tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=7 method=exact
-[tsp-debug] exact solve started: vertices=7
-[tsp-debug] initial incumbent: cost=199
-[tsp-debug] root: lower_bound=169 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=199 expanded=21 created=28 pruned_bound=7 pruned_infeasible=15
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=7 method=exact
-[tsp-debug] exact solve started: vertices=7
-[tsp-debug] initial incumbent: cost=199
-[tsp-debug] root: lower_bound=169 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=199 expanded=22 created=28 pruned_bound=6 pruned_infeasible=17
-```
-</details>
+- **tsp_bb_26_07_02:** `4 -> 1 -> 5 -> 3 -> 2 -> 6 -> 0 -> 4` cost=199
+- **tsp_bb_26_07_06:** `4 -> 1 -> 5 -> 3 -> 2 -> 6 -> 0 -> 4` cost=199
 
 ---
 
@@ -725,84 +334,38 @@
 
 **Concorde (reference) tour:** `0 -> 6 -> 3 -> 2 -> 1 -> 4 -> 5 -> 0`  
 
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 73 | ref | 3ms | - | - | - | - | - | - |
-| Smart | 73 | :white_check_mark: | 4ms | 21 | 10 | 11 | 0 | - |
-| Simple | 73 | :white_check_mark: | 4ms | 31 | 15 | 16 | 0 | - |
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 73 | 4ms | 21 | 10 | 11 | 0 | :white_check_mark: |
+| tsp_bb_26_07_06 | 73 | 3ms | 3 | 2 | 1 | 0 | :white_check_mark: |
 
 **Tours found:**
-- **Concorde:** `0 -> 6 -> 3 -> 2 -> 1 -> 4 -> 5 -> 0` cost=73 (reference)
-- **Smart:** `0 -> 6 -> 3 -> 2 -> 1 -> 4 -> 5 -> 0` cost=73 (=ref, same tour)
-- **Simple:** `0 -> 6 -> 3 -> 2 -> 1 -> 4 -> 5 -> 0` cost=73 (=ref, same tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=7 method=exact
-[tsp-debug] exact solve started: vertices=7
-[tsp-debug] initial incumbent: cost=73
-[tsp-debug] root: lower_bound=50 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=73 expanded=10 created=21 pruned_bound=11 pruned_infeasible=0
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=7 method=exact
-[tsp-debug] exact solve started: vertices=7
-[tsp-debug] initial incumbent: cost=73
-[tsp-debug] root: lower_bound=50 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=73 expanded=15 created=31 pruned_bound=16 pruned_infeasible=0
-```
-</details>
+- **Concorde (reference):** `0 -> 6 -> 3 -> 2 -> 1 -> 4 -> 5 -> 0` cost=73
+- **tsp_bb_26_07_02:** `0 -> 6 -> 3 -> 2 -> 1 -> 4 -> 5 -> 0` cost=73 (=ref, same tour)
+- **tsp_bb_26_07_06:** `0 -> 6 -> 3 -> 2 -> 1 -> 4 -> 5 -> 0` cost=73 (=ref, same tour)
 
 ---
 
 ## 18. `examples/random/complete/rnd-10-complete-n7.txt` (n=7)
 
 **Concorde optimal cost:** 49  
-**Concorde time:** 3ms  
+**Concorde time:** 2ms  
 
 **Concorde (reference) tour:** `0 -> 6 -> 4 -> 5 -> 3 -> 2 -> 1 -> 0`  
 
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 49 | ref | 3ms | - | - | - | - | - | - |
-| Smart | 49 | :white_check_mark: | 4ms | 13 | 6 | 7 | 0 | - |
-| Simple | 49 | :white_check_mark: | 4ms | 23 | 11 | 12 | 0 | - |
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 49 | 3ms | 13 | 6 | 7 | 0 | :white_check_mark: |
+| tsp_bb_26_07_06 | 49 | 3ms | 5 | 3 | 1 | 0 | :white_check_mark: |
 
 **Tours found:**
-- **Concorde:** `0 -> 6 -> 4 -> 5 -> 3 -> 2 -> 1 -> 0` cost=49 (reference)
-- **Smart:** `0 -> 1 -> 2 -> 3 -> 5 -> 4 -> 6 -> 0` cost=49 (=ref, different tour)
-- **Simple:** `0 -> 1 -> 2 -> 3 -> 5 -> 4 -> 6 -> 0` cost=49 (=ref, different tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=7 method=exact
-[tsp-debug] exact solve started: vertices=7
-[tsp-debug] initial incumbent: cost=49
-[tsp-debug] root: lower_bound=45 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=49 expanded=6 created=13 pruned_bound=7 pruned_infeasible=0
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=7 method=exact
-[tsp-debug] exact solve started: vertices=7
-[tsp-debug] initial incumbent: cost=49
-[tsp-debug] root: lower_bound=45 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=49 expanded=11 created=23 pruned_bound=12 pruned_infeasible=0
-```
-</details>
+- **Concorde (reference):** `0 -> 6 -> 4 -> 5 -> 3 -> 2 -> 1 -> 0` cost=49
+- **tsp_bb_26_07_02:** `0 -> 1 -> 2 -> 3 -> 5 -> 4 -> 6 -> 0` cost=49 (=ref, different tour)
+- **tsp_bb_26_07_06:** `0 -> 1 -> 2 -> 3 -> 5 -> 4 -> 6 -> 0` cost=49 (=ref, different tour)
 
 ---
 
@@ -813,230 +376,101 @@
 
 **Concorde (reference) tour:** `0 -> 7 -> 4 -> 3 -> 2 -> 1 -> 6 -> 5 -> 0`  
 
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 64 | ref | 3ms | - | - | - | - | - | - |
-| Smart | 64 | :white_check_mark: | 2ms | 23 | 11 | 12 | 0 | - |
-| Simple | 64 | :white_check_mark: | 4ms | 29 | 14 | 15 | 0 | - |
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 64 | 4ms | 23 | 11 | 12 | 0 | :white_check_mark: |
+| tsp_bb_26_07_06 | 64 | 4ms | 7 | 4 | 2 | 0 | :white_check_mark: |
 
 **Tours found:**
-- **Concorde:** `0 -> 7 -> 4 -> 3 -> 2 -> 1 -> 6 -> 5 -> 0` cost=64 (reference)
-- **Smart:** `2 -> 3 -> 4 -> 7 -> 0 -> 5 -> 6 -> 1 -> 2` cost=64 (=ref, different tour)
-- **Simple:** `2 -> 3 -> 4 -> 7 -> 0 -> 5 -> 6 -> 1 -> 2` cost=64 (=ref, different tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=8 method=exact
-[tsp-debug] exact solve started: vertices=8
-[tsp-debug] initial incumbent: cost=64
-[tsp-debug] root: lower_bound=46 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=64 expanded=11 created=23 pruned_bound=12 pruned_infeasible=0
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=8 method=exact
-[tsp-debug] exact solve started: vertices=8
-[tsp-debug] initial incumbent: cost=64
-[tsp-debug] root: lower_bound=46 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=64 expanded=14 created=29 pruned_bound=15 pruned_infeasible=0
-```
-</details>
+- **Concorde (reference):** `0 -> 7 -> 4 -> 3 -> 2 -> 1 -> 6 -> 5 -> 0` cost=64
+- **tsp_bb_26_07_02:** `2 -> 3 -> 4 -> 7 -> 0 -> 5 -> 6 -> 1 -> 2` cost=64 (=ref, different tour)
+- **tsp_bb_26_07_06:** `2 -> 3 -> 4 -> 7 -> 0 -> 5 -> 6 -> 1 -> 2` cost=64 (=ref, different tour)
 
 ---
 
 ## 20. `examples/random/complete/rnd-09-complete-n8.txt` (n=8)
 
 **Concorde optimal cost:** 93  
-**Concorde time:** 3ms  
+**Concorde time:** 2ms  
 
 **Concorde (reference) tour:** `0 -> 5 -> 4 -> 6 -> 1 -> 3 -> 2 -> 7 -> 0`  
 
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 93 | ref | 3ms | - | - | - | - | - | - |
-| Smart | 93 | :white_check_mark: | 2ms | 77 | 38 | 39 | 0 | - |
-| Simple | 93 | :white_check_mark: | 4ms | 81 | 40 | 41 | 0 | - |
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 93 | 4ms | 77 | 38 | 39 | 0 | :white_check_mark: |
+| tsp_bb_26_07_06 | 93 | 4ms | 33 | 14 | 7 | 0 | :white_check_mark: |
 
 **Tours found:**
-- **Concorde:** `0 -> 5 -> 4 -> 6 -> 1 -> 3 -> 2 -> 7 -> 0` cost=93 (reference)
-- **Smart:** `1 -> 3 -> 2 -> 7 -> 0 -> 5 -> 4 -> 6 -> 1` cost=93 (=ref, different tour)
-- **Simple:** `1 -> 3 -> 2 -> 7 -> 0 -> 5 -> 4 -> 6 -> 1` cost=93 (=ref, different tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=8 method=exact
-[tsp-debug] exact solve started: vertices=8
-[tsp-debug] initial incumbent: cost=93
-[tsp-debug] root: lower_bound=40 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=93 expanded=38 created=77 pruned_bound=39 pruned_infeasible=0
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=matrix dimension=8 method=exact
-[tsp-debug] exact solve started: vertices=8
-[tsp-debug] initial incumbent: cost=93
-[tsp-debug] root: lower_bound=40 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=93 expanded=40 created=81 pruned_bound=41 pruned_infeasible=0
-```
-</details>
+- **Concorde (reference):** `0 -> 5 -> 4 -> 6 -> 1 -> 3 -> 2 -> 7 -> 0` cost=93
+- **tsp_bb_26_07_02:** `1 -> 3 -> 2 -> 7 -> 0 -> 5 -> 4 -> 6 -> 1` cost=93 (=ref, different tour)
+- **tsp_bb_26_07_06:** `1 -> 3 -> 2 -> 7 -> 0 -> 5 -> 4 -> 6 -> 1` cost=93 (=ref, different tour)
 
 ---
 
 ## 21. `data/classic/tsplib/burma14.tsp` (n=14)
 
 **Concorde optimal cost:** 3323  
-**Concorde time:** 19ms  
+**Concorde time:** 20ms  
 
 **Concorde (reference) tour:** `0 -> 1 -> 13 -> 2 -> 3 -> 4 -> 5 -> 11 -> 6 -> 12 -> 7 -> 10 -> 8 -> 9 -> 0`  
 
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 3323 | ref | 19ms | - | - | - | - | - | 1 |
-| Smart | 3323 | :white_check_mark: | 24ms | 18111 | 9162 | 8949 | 214 | - |
-| Simple | 3323 | :white_check_mark: | 52ms | 36847 | 18437 | 18410 | 28 | - |
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 3323 | 38ms | 18111 | 9162 | 8949 | 214 | :white_check_mark: |
+| tsp_bb_26_07_06 | 3323 | 43ms | 16816 | 6016 | 4640 | 21 | :white_check_mark: |
 
 **Tours found:**
-- **Concorde:** `0 -> 1 -> 13 -> 2 -> 3 -> 4 -> 5 -> 11 -> 6 -> 12 -> 7 -> 10 -> 8 -> 9 -> 0` cost=3323 (reference)
-- **Smart:** `1 -> 0 -> 9 -> 8 -> 10 -> 7 -> 12 -> 6 -> 11 -> 5 -> 4 -> 3 -> 2 -> 13 -> 1` cost=3323 (=ref, different tour)
-- **Simple:** `1 -> 0 -> 9 -> 8 -> 10 -> 7 -> 12 -> 6 -> 11 -> 5 -> 4 -> 3 -> 2 -> 13 -> 1` cost=3323 (=ref, different tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=burma14 dimension=14 method=exact
-[tsp-debug] exact solve started: vertices=14
-[tsp-debug] initial incumbent: cost=3323
-[tsp-debug] root: lower_bound=2542 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=3323 expanded=9162 created=18111 pruned_bound=8949 pruned_infeasible=214
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=burma14 dimension=14 method=exact
-[tsp-debug] exact solve started: vertices=14
-[tsp-debug] initial incumbent: cost=3323
-[tsp-debug] root: lower_bound=2542 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=3323 expanded=18437 created=36847 pruned_bound=18410 pruned_infeasible=28
-```
-</details>
-
-<details>
-<summary>Concorde debug output</summary>
-
-```
-ERROR: No dual change in basis finding code
-Did not find a basic optimal solution
-Fractional matching routine failed
-Warning: restarting running timer Miscellaneous
-No warmstart, stumbling on anyway
-```
-</details>
+- **Concorde (reference):** `0 -> 1 -> 13 -> 2 -> 3 -> 4 -> 5 -> 11 -> 6 -> 12 -> 7 -> 10 -> 8 -> 9 -> 0` cost=3323
+- **tsp_bb_26_07_02:** `1 -> 0 -> 9 -> 8 -> 10 -> 7 -> 12 -> 6 -> 11 -> 5 -> 4 -> 3 -> 2 -> 13 -> 1` cost=3323 (=ref, different tour)
+- **tsp_bb_26_07_06:** `1 -> 0 -> 9 -> 8 -> 10 -> 7 -> 12 -> 6 -> 11 -> 5 -> 4 -> 3 -> 2 -> 13 -> 1` cost=3323 (=ref, different tour)
 
 ---
 
 ## 22. `data/classic/tsplib/ulysses16.tsp` (n=16)
 
 **Concorde optimal cost:** 6859  
-**Concorde time:** 44ms  
+**Concorde time:** 26ms  
 
 **Concorde (reference) tour:** `0 -> 13 -> 12 -> 11 -> 6 -> 5 -> 14 -> 4 -> 10 -> 8 -> 9 -> 15 -> 2 -> 1 -> 3 -> 7 -> 0`  
 
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 6859 | ref | 44ms | - | - | - | - | - | 1 |
-| Smart | 6859 | :white_check_mark: | 16.8s | 15447419 | 7797474 | 7649945 | 147530 | - |
-| Simple | 6859 | :white_check_mark: | 20.1s | 18791313 | 9465100 | 9326213 | 138888 | - |
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 6859 | 16.1s | 15447419 | 7797474 | 7649945 | 147530 | :white_check_mark: |
+| tsp_bb_26_07_06 | 6859 | 13.8s | 9328699 | 2855266 | 2796120 | 45196 | :white_check_mark: |
 
 **Tours found:**
-- **Concorde:** `0 -> 13 -> 12 -> 11 -> 6 -> 5 -> 14 -> 4 -> 10 -> 8 -> 9 -> 15 -> 2 -> 1 -> 3 -> 7 -> 0` cost=6859 (reference)
-- **Smart:** `6 -> 5 -> 14 -> 4 -> 10 -> 8 -> 9 -> 15 -> 2 -> 1 -> 3 -> 7 -> 0 -> 13 -> 12 -> 11 -> 6` cost=6859 (=ref, different tour)
-- **Simple:** `6 -> 5 -> 14 -> 4 -> 10 -> 8 -> 9 -> 15 -> 2 -> 1 -> 3 -> 7 -> 0 -> 13 -> 12 -> 11 -> 6` cost=6859 (=ref, different tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=ulysses16.tsp dimension=16 method=exact
-[tsp-debug] exact solve started: vertices=16
-[tsp-debug] initial incumbent: cost=6859
-[tsp-debug] root: lower_bound=4746 search=recursive-dfs strategy=smart
-[tsp-debug] progress: expanded=5000000 created=9893463 depth=21 bound=6551 best=6859 pruned_bound=4893463 pruned_infeasible=106530
-[tsp-debug] exact solve finished: feasible=yes cost=6859 expanded=7797474 created=15447419 pruned_bound=7649945 pruned_infeasible=147530
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=ulysses16.tsp dimension=16 method=exact
-[tsp-debug] exact solve started: vertices=16
-[tsp-debug] initial incumbent: cost=6859
-[tsp-debug] root: lower_bound=4746 search=recursive-dfs strategy=simple
-[tsp-debug] progress: expanded=5000000 created=9924616 depth=16 bound=6454 best=6859 pruned_bound=4924616 pruned_infeasible=75376
-[tsp-debug] exact solve finished: feasible=yes cost=6859 expanded=9465100 created=18791313 pruned_bound=9326213 pruned_infeasible=138888
-```
-</details>
+- **Concorde (reference):** `0 -> 13 -> 12 -> 11 -> 6 -> 5 -> 14 -> 4 -> 10 -> 8 -> 9 -> 15 -> 2 -> 1 -> 3 -> 7 -> 0` cost=6859
+- **tsp_bb_26_07_02:** `6 -> 5 -> 14 -> 4 -> 10 -> 8 -> 9 -> 15 -> 2 -> 1 -> 3 -> 7 -> 0 -> 13 -> 12 -> 11 -> 6` cost=6859 (=ref, different tour)
+- **tsp_bb_26_07_06:** `6 -> 5 -> 14 -> 4 -> 10 -> 8 -> 9 -> 15 -> 2 -> 1 -> 3 -> 7 -> 0 -> 13 -> 12 -> 11 -> 6` cost=6859 (=ref, different tour)
 
 ---
 
 ## 23. `data/classic/tsplib/gr17.tsp` (n=17)
 
 **Concorde optimal cost:** 2085  
-**Concorde time:** 24ms  
+**Concorde time:** 26ms  
 
 **Concorde (reference) tour:** `0 -> 3 -> 12 -> 6 -> 7 -> 5 -> 16 -> 13 -> 14 -> 2 -> 10 -> 9 -> 1 -> 4 -> 8 -> 11 -> 15 -> 0`  
 
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 2085 | ref | 24ms | - | - | - | - | - | 1 |
-| Smart | 2085 | :white_check_mark: | 2.5s | 1817688 | 920131 | 897557 | 22575 | - |
-| Simple | 2085 | :white_check_mark: | 3.2s | 2653019 | 1347388 | 1305631 | 41758 | - |
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 2085 | 2.2s | 1817688 | 920131 | 897557 | 22575 | :white_check_mark: |
+| tsp_bb_26_07_06 | 2085 | 2.1s | 1237494 | 443475 | 343503 | 19611 | :white_check_mark: |
 
 **Tours found:**
-- **Concorde:** `0 -> 3 -> 12 -> 6 -> 7 -> 5 -> 16 -> 13 -> 14 -> 2 -> 10 -> 9 -> 1 -> 4 -> 8 -> 11 -> 15 -> 0` cost=2085 (reference)
-- **Smart:** `0 -> 3 -> 12 -> 6 -> 7 -> 5 -> 16 -> 13 -> 14 -> 2 -> 10 -> 9 -> 1 -> 4 -> 8 -> 11 -> 15 -> 0` cost=2085 (=ref, same tour)
-- **Simple:** `0 -> 3 -> 12 -> 6 -> 7 -> 5 -> 16 -> 13 -> 14 -> 2 -> 10 -> 9 -> 1 -> 4 -> 8 -> 11 -> 15 -> 0` cost=2085 (=ref, same tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=gr17 dimension=17 method=exact
-[tsp-debug] exact solve started: vertices=17
-[tsp-debug] initial incumbent: cost=2085
-[tsp-debug] root: lower_bound=1501 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=2085 expanded=920131 created=1817688 pruned_bound=897557 pruned_infeasible=22575
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=gr17 dimension=17 method=exact
-[tsp-debug] exact solve started: vertices=17
-[tsp-debug] initial incumbent: cost=2085
-[tsp-debug] root: lower_bound=1501 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=2085 expanded=1347388 created=2653019 pruned_bound=1305631 pruned_infeasible=41758
-```
-</details>
+- **Concorde (reference):** `0 -> 3 -> 12 -> 6 -> 7 -> 5 -> 16 -> 13 -> 14 -> 2 -> 10 -> 9 -> 1 -> 4 -> 8 -> 11 -> 15 -> 0` cost=2085
+- **tsp_bb_26_07_02:** `0 -> 3 -> 12 -> 6 -> 7 -> 5 -> 16 -> 13 -> 14 -> 2 -> 10 -> 9 -> 1 -> 4 -> 8 -> 11 -> 15 -> 0` cost=2085 (=ref, same tour)
+- **tsp_bb_26_07_06:** `0 -> 3 -> 12 -> 6 -> 7 -> 5 -> 16 -> 13 -> 14 -> 2 -> 10 -> 9 -> 1 -> 4 -> 8 -> 11 -> 15 -> 0` cost=2085 (=ref, same tour)
 
 ---
 
@@ -1047,429 +481,16 @@ No warmstart, stumbling on anyway
 
 **Concorde (reference) tour:** `0 -> 6 -> 7 -> 5 -> 15 -> 4 -> 8 -> 2 -> 1 -> 20 -> 14 -> 13 -> 12 -> 17 -> 9 -> 16 -> 18 -> 19 -> 10 -> 3 -> 11 -> 0`  
 
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 2707 | ref | 13ms | - | - | - | - | - | 1 |
-| Smart | 2707 | :white_check_mark: | 74ms | 34213 | 17314 | 16899 | 416 | - |
-| Simple | 2707 | :white_check_mark: | 177ms | 78459 | 39689 | 38770 | 920 | - |
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 2707 | 78ms | 34213 | 17314 | 16899 | 416 | :white_check_mark: |
+| tsp_bb_26_07_06 | 2707 | 75ms | 21386 | 8915 | 4966 | 301 | :white_check_mark: |
 
 **Tours found:**
-- **Concorde:** `0 -> 6 -> 7 -> 5 -> 15 -> 4 -> 8 -> 2 -> 1 -> 20 -> 14 -> 13 -> 12 -> 17 -> 9 -> 16 -> 18 -> 19 -> 10 -> 3 -> 11 -> 0` cost=2707 (reference)
-- **Smart:** `2 -> 8 -> 4 -> 15 -> 5 -> 7 -> 6 -> 0 -> 11 -> 3 -> 10 -> 19 -> 18 -> 16 -> 9 -> 17 -> 12 -> 13 -> 14 -> 20 -> 1 -> 2` cost=2707 (=ref, different tour)
-- **Simple:** `2 -> 8 -> 4 -> 15 -> 5 -> 7 -> 6 -> 0 -> 11 -> 3 -> 10 -> 19 -> 18 -> 16 -> 9 -> 17 -> 12 -> 13 -> 14 -> 20 -> 1 -> 2` cost=2707 (=ref, different tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=gr21 dimension=21 method=exact
-[tsp-debug] exact solve started: vertices=21
-[tsp-debug] initial incumbent: cost=2707
-[tsp-debug] root: lower_bound=2252 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=2707 expanded=17314 created=34213 pruned_bound=16899 pruned_infeasible=416
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=gr21 dimension=21 method=exact
-[tsp-debug] exact solve started: vertices=21
-[tsp-debug] initial incumbent: cost=2707
-[tsp-debug] root: lower_bound=2252 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=2707 expanded=39689 created=78459 pruned_bound=38770 pruned_infeasible=920
-```
-</details>
-
----
-
-## 25. `data/classic/tsplib/ulysses22.tsp` (n=22)
-
-**Concorde optimal cost:** 7013  
-**Concorde time:** 79ms  
-
-**Concorde (reference) tour:** `0 -> 13 -> 12 -> 11 -> 6 -> 5 -> 14 -> 4 -> 10 -> 8 -> 9 -> 18 -> 19 -> 20 -> 15 -> 2 -> 1 -> 16 -> 21 -> 3 -> 17 -> 7 -> 0`  
-
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 7013 | ref | 79ms | - | - | - | - | - | 1 |
-| Smart | TIMEOUT | - | 30.0m | - | - | - | - | - | - |
-| Simple | TIMEOUT | - | 30.0m | - | - | - | - | - | - |
-
-**Tours found:**
-- **Concorde:** `0 -> 13 -> 12 -> 11 -> 6 -> 5 -> 14 -> 4 -> 10 -> 8 -> 9 -> 18 -> 19 -> 20 -> 15 -> 2 -> 1 -> 16 -> 21 -> 3 -> 17 -> 7 -> 0` cost=7013 (reference)
-
-<details>
-<summary>Concorde debug output</summary>
-
-```
-ERROR: No dual change in basis finding code
-Did not find a basic optimal solution
-Fractional matching routine failed
-Warning: restarting running timer Miscellaneous
-No warmstart, stumbling on anyway
-```
-</details>
-
----
-
-## 26. `data/classic/tsplib/gr24.tsp` (n=24)
-
-**Concorde optimal cost:** 1272  
-**Concorde time:** 24ms  
-
-**Concorde (reference) tour:** `0 -> 11 -> 3 -> 22 -> 8 -> 12 -> 13 -> 19 -> 1 -> 14 -> 18 -> 21 -> 17 -> 16 -> 9 -> 4 -> 20 -> 7 -> 23 -> 5 -> 6 -> 2 -> 10 -> 15 -> 0`  
-
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 1272 | ref | 24ms | - | - | - | - | - | 1 |
-| Smart | 1272 | :white_check_mark: | 1.3s | 571607 | 287023 | 284584 | 2440 | - |
-| Simple | 1272 | :white_check_mark: | 2.2s | 1069966 | 534997 | 534969 | 29 | - |
-
-**Tours found:**
-- **Concorde:** `0 -> 11 -> 3 -> 22 -> 8 -> 12 -> 13 -> 19 -> 1 -> 14 -> 18 -> 21 -> 17 -> 16 -> 9 -> 4 -> 20 -> 7 -> 23 -> 5 -> 6 -> 2 -> 10 -> 15 -> 0` cost=1272 (reference)
-- **Smart:** `3 -> 11 -> 0 -> 15 -> 10 -> 2 -> 6 -> 5 -> 23 -> 7 -> 20 -> 4 -> 9 -> 16 -> 17 -> 21 -> 18 -> 14 -> 1 -> 19 -> 13 -> 12 -> 8 -> 22 -> 3` cost=1272 (=ref, different tour)
-- **Simple:** `3 -> 11 -> 0 -> 15 -> 10 -> 2 -> 6 -> 5 -> 23 -> 7 -> 20 -> 4 -> 9 -> 16 -> 17 -> 21 -> 18 -> 14 -> 1 -> 19 -> 13 -> 12 -> 8 -> 22 -> 3` cost=1272 (=ref, different tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=gr24 dimension=24 method=exact
-[tsp-debug] exact solve started: vertices=24
-[tsp-debug] initial incumbent: cost=1272
-[tsp-debug] root: lower_bound=1081 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=1272 expanded=287023 created=571607 pruned_bound=284584 pruned_infeasible=2440
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=gr24 dimension=24 method=exact
-[tsp-debug] exact solve started: vertices=24
-[tsp-debug] initial incumbent: cost=1272
-[tsp-debug] root: lower_bound=1081 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=1272 expanded=534997 created=1069966 pruned_bound=534969 pruned_infeasible=29
-```
-</details>
-
----
-
-## 27. `data/classic/tsplib/fri26.tsp` (n=26)
-
-**Concorde optimal cost:** 937  
-**Concorde time:** 24ms  
-
-**Concorde (reference) tour:** `0 -> 1 -> 2 -> 3 -> 5 -> 4 -> 6 -> 7 -> 8 -> 9 -> 13 -> 14 -> 12 -> 11 -> 10 -> 15 -> 18 -> 19 -> 17 -> 16 -> 20 -> 21 -> 25 -> 22 -> 23 -> 24 -> 0`  
-
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 937 | ref | 24ms | - | - | - | - | - | 1 |
-| Smart | 937 | :white_check_mark: | 2.3s | 984246 | 492159 | 492087 | 73 | - |
-| Simple | 937 | :white_check_mark: | 10.4s | 5294723 | 2647361 | 2647362 | 0 | - |
-
-**Tours found:**
-- **Concorde:** `0 -> 1 -> 2 -> 3 -> 5 -> 4 -> 6 -> 7 -> 8 -> 9 -> 13 -> 14 -> 12 -> 11 -> 10 -> 15 -> 18 -> 19 -> 17 -> 16 -> 20 -> 21 -> 25 -> 22 -> 23 -> 24 -> 0` cost=937 (reference)
-- **Smart:** `16 -> 20 -> 21 -> 25 -> 22 -> 23 -> 24 -> 0 -> 1 -> 2 -> 3 -> 5 -> 4 -> 6 -> 7 -> 8 -> 9 -> 13 -> 14 -> 11 -> 12 -> 10 -> 15 -> 18 -> 19 -> 17 -> 16` cost=937 (=ref, different tour)
-- **Simple:** `16 -> 20 -> 21 -> 25 -> 22 -> 23 -> 24 -> 0 -> 1 -> 2 -> 3 -> 5 -> 4 -> 6 -> 7 -> 8 -> 9 -> 13 -> 14 -> 11 -> 12 -> 10 -> 15 -> 18 -> 19 -> 17 -> 16` cost=937 (=ref, different tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=fri26 dimension=26 method=exact
-[tsp-debug] exact solve started: vertices=26
-[tsp-debug] initial incumbent: cost=937
-[tsp-debug] root: lower_bound=824 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=937 expanded=492159 created=984246 pruned_bound=492087 pruned_infeasible=73
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=fri26 dimension=26 method=exact
-[tsp-debug] exact solve started: vertices=26
-[tsp-debug] initial incumbent: cost=937
-[tsp-debug] root: lower_bound=824 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=937 expanded=2647361 created=5294723 pruned_bound=2647362 pruned_infeasible=0
-```
-</details>
-
----
-
-## 28. `data/classic/tsplib/bayg29.tsp` (n=29)
-
-**Concorde optimal cost:** 1610  
-**Concorde time:** 14ms  
-
-**Concorde (reference) tour:** `0 -> 27 -> 5 -> 11 -> 8 -> 25 -> 2 -> 28 -> 4 -> 20 -> 1 -> 19 -> 9 -> 3 -> 14 -> 17 -> 13 -> 16 -> 21 -> 10 -> 18 -> 24 -> 6 -> 22 -> 7 -> 26 -> 15 -> 12 -> 23 -> 0`  
-
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 1610 | ref | 14ms | - | - | - | - | - | 1 |
-| Smart | 1610 | :white_check_mark: | 40.4s | 17113552 | 8571537 | 8542015 | 29521 | - |
-| Simple | 1610 | :white_check_mark: | 1.9m | 51941720 | 25982775 | 25958945 | 23829 | - |
-
-**Tours found:**
-- **Concorde:** `0 -> 27 -> 5 -> 11 -> 8 -> 25 -> 2 -> 28 -> 4 -> 20 -> 1 -> 19 -> 9 -> 3 -> 14 -> 17 -> 13 -> 16 -> 21 -> 10 -> 18 -> 24 -> 6 -> 22 -> 7 -> 26 -> 15 -> 12 -> 23 -> 0` cost=1610 (reference)
-- **Smart:** `0 -> 23 -> 12 -> 15 -> 26 -> 7 -> 22 -> 6 -> 24 -> 18 -> 10 -> 21 -> 16 -> 13 -> 17 -> 14 -> 3 -> 9 -> 19 -> 1 -> 20 -> 4 -> 28 -> 2 -> 25 -> 8 -> 11 -> 5 -> 27 -> 0` cost=1610 (=ref, different tour)
-- **Simple:** `0 -> 27 -> 5 -> 11 -> 8 -> 25 -> 2 -> 28 -> 4 -> 20 -> 1 -> 19 -> 9 -> 3 -> 14 -> 17 -> 13 -> 16 -> 21 -> 10 -> 18 -> 24 -> 6 -> 22 -> 7 -> 26 -> 15 -> 12 -> 23 -> 0` cost=1610 (=ref, same tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=bayg29 dimension=29 method=exact
-[tsp-debug] exact solve started: vertices=29
-[tsp-debug] initial incumbent: cost=1618
-[tsp-debug] root: lower_bound=1375 search=recursive-dfs strategy=smart
-[tsp-debug] progress: expanded=5000000 created=9981593 depth=20 bound=1561 best=1618 pruned_bound=4981593 pruned_infeasible=18396
-[tsp-debug] new incumbent: cost=1610 source=recursive-node depth=21
-[tsp-debug] exact solve finished: feasible=yes cost=1610 expanded=8571537 created=17113552 pruned_bound=8542015 pruned_infeasible=29521
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=bayg29 dimension=29 method=exact
-[tsp-debug] exact solve started: vertices=29
-[tsp-debug] initial incumbent: cost=1618
-[tsp-debug] root: lower_bound=1375 search=recursive-dfs strategy=simple
-[tsp-debug] progress: expanded=5000000 created=9989271 depth=28 bound=1605 best=1618 pruned_bound=4989271 pruned_infeasible=10715
-[tsp-debug] new incumbent: cost=1610 source=recursive-node depth=29
-[tsp-debug] progress: expanded=10000000 created=19983804 depth=34 bound=1609 best=1610 pruned_bound=9983804 pruned_infeasible=16174
-[tsp-debug] progress: expanded=15000000 created=29980378 depth=23 bound=1609 best=1610 pruned_bound=14980378 pruned_infeasible=19606
-[tsp-debug] progress: expanded=20000000 created=39977464 depth=26 bound=1594 best=1610 pruned_bound=19977464 pruned_infeasible=22518
-[tsp-debug] progress: expanded=25000000 created=49976183 depth=19 bound=1589 best=1610 pruned_bound=24976183 pruned_infeasible=23803
-[tsp-debug] exact solve finished: feasible=yes cost=1610 expanded=25982775 created=51941720 pruned_bound=25958945 pruned_infeasible=23829
-```
-</details>
-
----
-
-## 29. `data/classic/tsplib/bays29.tsp` (n=29)
-
-**Concorde optimal cost:** 2020  
-**Concorde time:** 31ms  
-
-**Concorde (reference) tour:** `0 -> 27 -> 5 -> 11 -> 8 -> 4 -> 25 -> 28 -> 2 -> 1 -> 19 -> 9 -> 3 -> 14 -> 17 -> 16 -> 13 -> 21 -> 10 -> 18 -> 24 -> 6 -> 22 -> 26 -> 7 -> 23 -> 15 -> 12 -> 20 -> 0`  
-
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 2020 | ref | 31ms | - | - | - | - | - | 1 |
-| Smart | 2020 | :white_check_mark: | 7.0m | 162609801 | 81440628 | 81169173 | 271456 | - |
-| Simple | 2020 | :white_check_mark: | 11.4m | 316320713 | 158499568 | 157821145 | 678424 | - |
-
-**Tours found:**
-- **Concorde:** `0 -> 27 -> 5 -> 11 -> 8 -> 4 -> 25 -> 28 -> 2 -> 1 -> 19 -> 9 -> 3 -> 14 -> 17 -> 16 -> 13 -> 21 -> 10 -> 18 -> 24 -> 6 -> 22 -> 26 -> 7 -> 23 -> 15 -> 12 -> 20 -> 0` cost=2020 (reference)
-- **Smart:** `7 -> 26 -> 22 -> 6 -> 24 -> 18 -> 10 -> 21 -> 13 -> 16 -> 17 -> 14 -> 3 -> 9 -> 19 -> 1 -> 2 -> 28 -> 25 -> 4 -> 8 -> 11 -> 5 -> 27 -> 0 -> 20 -> 12 -> 15 -> 23 -> 7` cost=2020 (=ref, different tour)
-- **Simple:** `7 -> 26 -> 22 -> 6 -> 24 -> 18 -> 10 -> 21 -> 13 -> 16 -> 17 -> 14 -> 3 -> 9 -> 19 -> 1 -> 2 -> 28 -> 25 -> 4 -> 8 -> 11 -> 5 -> 27 -> 0 -> 20 -> 12 -> 15 -> 23 -> 7` cost=2020 (=ref, different tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=bays29 dimension=29 method=exact
-[tsp-debug] exact solve started: vertices=29
-[tsp-debug] initial incumbent: cost=2020
-[tsp-debug] root: lower_bound=1622 search=recursive-dfs strategy=smart
-[tsp-debug] progress: expanded=5000000 created=9966990 depth=31 bound=1982 best=2020 pruned_bound=4966990 pruned_infeasible=32993
-[tsp-debug] progress: expanded=10000000 created=19945798 depth=22 bound=2018 best=2020 pruned_bound=9945798 pruned_infeasible=54190
-[tsp-debug] progress: expanded=15000000 created=29924632 depth=26 bound=1975 best=2020 pruned_bound=14924632 pruned_infeasible=75355
-[tsp-debug] progress: expanded=20000000 created=39908904 depth=31 bound=2001 best=2020 pruned_bound=19908904 pruned_infeasible=91078
-[tsp-debug] progress: expanded=25000000 created=49883955 depth=30 bound=2008 best=2020 pruned_bound=24883955 pruned_infeasible=116027
-[tsp-debug] progress: expanded=30000000 created=59864402 depth=25 bound=2008 best=2020 pruned_bound=29864402 pruned_infeasible=135583
-[tsp-debug] progress: expanded=35000000 created=69851417 depth=23 bound=1927 best=2020 pruned_bound=34851417 pruned_infeasible=148571
-[tsp-debug] progress: expanded=40000000 created=79839041 depth=27 bound=2015 best=2020 pruned_bound=39839041 pruned_infeasible=160944
-[tsp-debug] progress: expanded=45000000 created=89826816 depth=26 bound=2012 best=2020 pruned_bound=44826816 pruned_infeasible=173172
-[tsp-debug] progress: expanded=50000000 created=99822599 depth=24 bound=2018 best=2020 pruned_bound=49822599 pruned_infeasible=177385
-[tsp-debug] progress: expanded=55000000 created=109818848 depth=28 bound=2018 best=2020 pruned_bound=54818848 pruned_infeasible=181139
-[tsp-debug] progress: expanded=60000000 created=119796538 depth=19 bound=1964 best=2020 pruned_bound=59796538 pruned_infeasible=203451
-[tsp-debug] progress: expanded=65000000 created=129782677 depth=26 bound=2016 best=2020 pruned_bound=64782677 pruned_infeasible=217308
-[tsp-debug] progress: expanded=70000000 created=139767034 depth=22 bound=1952 best=2020 pruned_bound=69767034 pruned_infeasible=232954
-[tsp-debug] progress: expanded=75000000 created=149748148 depth=21 bound=1992 best=2020 pruned_bound=74748148 pruned_infeasible=251838
-[tsp-debug] progress: expanded=80000000 created=159732059 depth=30 bound=2016 best=2020 pruned_bound=79732059 pruned_infeasible=267927
-[tsp-debug] exact solve finished: feasible=yes cost=2020 expanded=81440628 created=162609801 pruned_bound=81169173 pruned_infeasible=271456
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=bays29 dimension=29 method=exact
-[tsp-debug] exact solve started: vertices=29
-[tsp-debug] initial incumbent: cost=2020
-[tsp-debug] root: lower_bound=1622 search=recursive-dfs strategy=simple
-[tsp-debug] progress: expanded=5000000 created=9943009 depth=36 bound=2010 best=2020 pruned_bound=4943009 pruned_infeasible=56971
-[tsp-debug] progress: expanded=10000000 created=19920491 depth=26 bound=1941 best=2020 pruned_bound=9920491 pruned_infeasible=79493
-[tsp-debug] progress: expanded=15000000 created=29892686 depth=33 bound=2016 best=2020 pruned_bound=14892686 pruned_infeasible=107294
-[tsp-debug] progress: expanded=20000000 created=39866846 depth=30 bound=2019 best=2020 pruned_bound=19866846 pruned_infeasible=133135
-[tsp-debug] progress: expanded=25000000 created=49833639 depth=30 bound=1989 best=2020 pruned_bound=24833639 pruned_infeasible=166345
-[tsp-debug] progress: expanded=30000000 created=59811670 depth=36 bound=2016 best=2020 pruned_bound=29811670 pruned_infeasible=188310
-[tsp-debug] progress: expanded=35000000 created=69785461 depth=23 bound=1941 best=2020 pruned_bound=34785461 pruned_infeasible=214523
-[tsp-debug] progress: expanded=40000000 created=79758181 depth=20 bound=1918 best=2020 pruned_bound=39758181 pruned_infeasible=241808
-[tsp-debug] progress: expanded=45000000 created=89732300 depth=28 bound=1975 best=2020 pruned_bound=44732300 pruned_infeasible=267682
-[tsp-debug] progress: expanded=50000000 created=99709536 depth=24 bound=1968 best=2020 pruned_bound=49709536 pruned_infeasible=290450
-[tsp-debug] progress: expanded=55000000 created=109697913 depth=26 bound=2008 best=2020 pruned_bound=54697913 pruned_infeasible=302072
-[tsp-debug] progress: expanded=60000000 created=119669864 depth=29 bound=2000 best=2020 pruned_bound=59669864 pruned_infeasible=330116
-[tsp-debug] progress: expanded=65000000 created=129636339 depth=28 bound=2004 best=2020 pruned_bound=64636339 pruned_infeasible=363649
-[tsp-debug] progress: expanded=70000000 created=139606686 depth=32 bound=1968 best=2020 pruned_bound=69606686 pruned_infeasible=393293
-[tsp-debug] progress: expanded=75000000 created=149590386 depth=32 bound=2008 best=2020 pruned_bound=74590386 pruned_infeasible=409596
-[tsp-debug] progress: expanded=80000000 created=159560050 depth=31 bound=2001 best=2020 pruned_bound=79560050 pruned_infeasible=439938
-[tsp-debug] progress: expanded=85000000 created=169545822 depth=28 bound=2001 best=2020 pruned_bound=84545822 pruned_infeasible=454160
-[tsp-debug] progress: expanded=90000000 created=179523364 depth=28 bound=1962 best=2020 pruned_bound=89523364 pruned_infeasible=476620
-[tsp-debug] progress: expanded=95000000 created=189497036 depth=27 bound=2016 best=2020 pruned_bound=94497036 pruned_infeasible=502949
-[tsp-debug] progress: expanded=100000000 created=199475782 depth=32 bound=1998 best=2020 pruned_bound=99475782 pruned_infeasible=524203
-[tsp-debug] progress: expanded=105000000 created=209458469 depth=31 bound=1976 best=2020 pruned_bound=104458469 pruned_infeasible=541516
-[tsp-debug] progress: expanded=110000000 created=219446259 depth=28 bound=2019 best=2020 pruned_bound=109446259 pruned_infeasible=553725
-[tsp-debug] progress: expanded=115000000 created=229431840 depth=32 bound=2019 best=2020 pruned_bound=114431840 pruned_infeasible=568141
-[tsp-debug] progress: expanded=120000000 created=239413992 depth=33 bound=2003 best=2020 pruned_bound=119413992 pruned_infeasible=585991
-[tsp-debug] progress: expanded=125000000 created=249393233 depth=33 bound=2019 best=2020 pruned_bound=124393233 pruned_infeasible=606747
-[tsp-debug] progress: expanded=130000000 created=259382452 depth=31 bound=2017 best=2020 pruned_bound=129382452 pruned_infeasible=617533
-[tsp-debug] progress: expanded=135000000 created=269369012 depth=27 bound=2003 best=2020 pruned_bound=134369012 pruned_infeasible=630976
-[tsp-debug] progress: expanded=140000000 created=279357033 depth=28 bound=1988 best=2020 pruned_bound=139357033 pruned_infeasible=642950
-[tsp-debug] progress: expanded=145000000 created=289346216 depth=29 bound=2010 best=2020 pruned_bound=144346216 pruned_infeasible=653769
-[tsp-debug] progress: expanded=150000000 created=299332857 depth=26 bound=1991 best=2020 pruned_bound=149332857 pruned_infeasible=667129
-[tsp-debug] progress: expanded=155000000 created=309322855 depth=31 bound=2018 best=2020 pruned_bound=154322855 pruned_infeasible=677129
-[tsp-debug] exact solve finished: feasible=yes cost=2020 expanded=158499568 created=316320713 pruned_bound=157821145 pruned_infeasible=678424
-```
-</details>
-
----
-
-## 30. `data/classic/national/wi29.tsp` (n=29)
-
-**Concorde optimal cost:** 27603  
-**Concorde time:** 24ms  
-
-**Concorde (reference) tour:** `0 -> 4 -> 7 -> 3 -> 2 -> 6 -> 8 -> 12 -> 13 -> 15 -> 23 -> 26 -> 24 -> 19 -> 25 -> 27 -> 28 -> 22 -> 21 -> 20 -> 16 -> 17 -> 18 -> 14 -> 11 -> 10 -> 9 -> 5 -> 1 -> 0`  
-
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 27603 | ref | 24ms | - | - | - | - | - | 1 |
-| Smart | 27603 | :white_check_mark: | 196ms | 77709 | 38866 | 38843 | 24 | - |
-| Simple | 27603 | :white_check_mark: | 2.0m | 49964116 | 25920808 | 24043308 | 1877501 | - |
-
-**Tours found:**
-- **Concorde:** `0 -> 4 -> 7 -> 3 -> 2 -> 6 -> 8 -> 12 -> 13 -> 15 -> 23 -> 26 -> 24 -> 19 -> 25 -> 27 -> 28 -> 22 -> 21 -> 20 -> 16 -> 17 -> 18 -> 14 -> 11 -> 10 -> 9 -> 5 -> 1 -> 0` cost=27603 (reference)
-- **Smart:** `21 -> 22 -> 28 -> 27 -> 25 -> 19 -> 24 -> 26 -> 23 -> 15 -> 13 -> 12 -> 8 -> 6 -> 2 -> 3 -> 7 -> 4 -> 0 -> 1 -> 5 -> 9 -> 10 -> 11 -> 14 -> 18 -> 17 -> 16 -> 20 -> 21` cost=27603 (=ref, different tour)
-- **Simple:** `21 -> 22 -> 28 -> 27 -> 25 -> 19 -> 24 -> 26 -> 23 -> 15 -> 13 -> 12 -> 8 -> 6 -> 2 -> 3 -> 7 -> 4 -> 0 -> 1 -> 5 -> 9 -> 10 -> 11 -> 14 -> 18 -> 17 -> 16 -> 20 -> 21` cost=27603 (=ref, different tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=wi29 dimension=29 method=exact
-[tsp-debug] exact solve started: vertices=29
-[tsp-debug] initial incumbent: cost=27603
-[tsp-debug] root: lower_bound=22727 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=27603 expanded=38866 created=77709 pruned_bound=38843 pruned_infeasible=24
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=wi29 dimension=29 method=exact
-[tsp-debug] exact solve started: vertices=29
-[tsp-debug] initial incumbent: cost=27603
-[tsp-debug] root: lower_bound=22727 search=recursive-dfs strategy=simple
-[tsp-debug] progress: expanded=5000000 created=9944041 depth=30 bound=26969 best=27603 pruned_bound=4944041 pruned_infeasible=55937
-[tsp-debug] progress: expanded=10000000 created=19785101 depth=32 bound=26821 best=27603 pruned_bound=9785101 pruned_infeasible=214881
-[tsp-debug] progress: expanded=15000000 created=29571831 depth=33 bound=27230 best=27603 pruned_bound=14571831 pruned_infeasible=428150
-[tsp-debug] progress: expanded=20000000 created=38823883 depth=31 bound=27070 best=27603 pruned_bound=18823883 pruned_infeasible=1176093
-[tsp-debug] progress: expanded=25000000 created=48264592 depth=27 bound=27541 best=27603 pruned_bound=23264592 pruned_infeasible=1735395
-[tsp-debug] exact solve finished: feasible=yes cost=27603 expanded=25920808 created=49964116 pruned_bound=24043308 pruned_infeasible=1877501
-```
-</details>
-
----
-
-## 31. `data/classic/national/dj38.tsp` (n=38)
-
-**Concorde optimal cost:** 6656  
-**Concorde time:** 36ms  
-
-**Concorde (reference) tour:** `0 -> 9 -> 13 -> 20 -> 28 -> 29 -> 31 -> 34 -> 36 -> 37 -> 32 -> 33 -> 35 -> 30 -> 26 -> 27 -> 23 -> 21 -> 24 -> 25 -> 22 -> 19 -> 14 -> 12 -> 15 -> 16 -> 17 -> 18 -> 10 -> 11 -> 8 -> 7 -> 6 -> 5 -> 4 -> 2 -> 3 -> 1 -> 0`  
-
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 6656 | ref | 36ms | - | - | - | - | - | 1 |
-| Smart | 6656 | :white_check_mark: | 135ms | 25733 | 12866 | 12867 | 0 | - |
-| Simple | 6656 | :white_check_mark: | 10.7s | 2611955 | 1305977 | 1305978 | 0 | - |
-
-**Tours found:**
-- **Concorde:** `0 -> 9 -> 13 -> 20 -> 28 -> 29 -> 31 -> 34 -> 36 -> 37 -> 32 -> 33 -> 35 -> 30 -> 26 -> 27 -> 23 -> 21 -> 24 -> 25 -> 22 -> 19 -> 14 -> 12 -> 15 -> 16 -> 17 -> 18 -> 10 -> 11 -> 8 -> 7 -> 6 -> 5 -> 4 -> 2 -> 3 -> 1 -> 0` cost=6656 (reference)
-- **Smart:** `1 -> 0 -> 9 -> 13 -> 20 -> 28 -> 29 -> 31 -> 34 -> 36 -> 37 -> 32 -> 33 -> 35 -> 30 -> 26 -> 27 -> 23 -> 21 -> 24 -> 25 -> 22 -> 19 -> 14 -> 12 -> 15 -> 16 -> 17 -> 18 -> 10 -> 11 -> 8 -> 7 -> 6 -> 5 -> 4 -> 2 -> 3 -> 1` cost=6656 (=ref, different tour)
-- **Simple:** `1 -> 0 -> 9 -> 13 -> 20 -> 28 -> 29 -> 31 -> 34 -> 36 -> 37 -> 32 -> 33 -> 35 -> 30 -> 26 -> 27 -> 23 -> 21 -> 24 -> 25 -> 22 -> 19 -> 14 -> 12 -> 15 -> 16 -> 17 -> 18 -> 10 -> 11 -> 8 -> 7 -> 6 -> 5 -> 4 -> 2 -> 3 -> 1` cost=6656 (=ref, different tour)
-
-<details>
-<summary>Smart debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=dj38 dimension=38 method=exact
-[tsp-debug] exact solve started: vertices=38
-[tsp-debug] initial incumbent: cost=6656
-[tsp-debug] root: lower_bound=6285 search=recursive-dfs strategy=smart
-[tsp-debug] exact solve finished: feasible=yes cost=6656 expanded=12866 created=25733 pruned_bound=12867 pruned_infeasible=0
-```
-</details>
-
-<details>
-<summary>Simple debug output</summary>
-
-```
-[tsp-debug] problem loaded: name=dj38 dimension=38 method=exact
-[tsp-debug] exact solve started: vertices=38
-[tsp-debug] initial incumbent: cost=6656
-[tsp-debug] root: lower_bound=6285 search=recursive-dfs strategy=simple
-[tsp-debug] exact solve finished: feasible=yes cost=6656 expanded=1305977 created=2611955 pruned_bound=1305978 pruned_infeasible=0
-```
-</details>
-
----
-
-## 32. `data/classic/tsplib/dantzig42.tsp` (n=42)
-
-**Concorde optimal cost:** 699  
-**Concorde time:** 39ms  
-
-**Concorde (reference) tour:** `0 -> 41 -> 40 -> 39 -> 38 -> 37 -> 36 -> 35 -> 34 -> 33 -> 32 -> 31 -> 30 -> 29 -> 28 -> 27 -> 26 -> 25 -> 24 -> 23 -> 22 -> 21 -> 20 -> 19 -> 18 -> 17 -> 16 -> 15 -> 14 -> 13 -> 12 -> 11 -> 10 -> 9 -> 8 -> 7 -> 6 -> 5 -> 4 -> 3 -> 2 -> 1 -> 0`  
-
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 699 | ref | 39ms | - | - | - | - | - | 1 |
-| Smart | TIMEOUT | - | 30.0m | - | - | - | - | - | - |
-| Simple | TIMEOUT | - | 30.0m | - | - | - | - | - | - |
-
-**Tours found:**
-- **Concorde:** `0 -> 41 -> 40 -> 39 -> 38 -> 37 -> 36 -> 35 -> 34 -> 33 -> 32 -> 31 -> 30 -> 29 -> 28 -> 27 -> 26 -> 25 -> 24 -> 23 -> 22 -> 21 -> 20 -> 19 -> 18 -> 17 -> 16 -> 15 -> 14 -> 13 -> 12 -> 11 -> 10 -> 9 -> 8 -> 7 -> 6 -> 5 -> 4 -> 3 -> 2 -> 1 -> 0` cost=699 (reference)
-
----
-
-## 33. `data/classic/tsplib/swiss42.tsp` (n=42)
-
-**Concorde optimal cost:** 1273  
-**Concorde time:** 32ms  
-
-**Concorde (reference) tour:** `0 -> 1 -> 6 -> 4 -> 3 -> 2 -> 27 -> 28 -> 29 -> 30 -> 38 -> 22 -> 39 -> 21 -> 24 -> 40 -> 23 -> 41 -> 9 -> 8 -> 10 -> 25 -> 11 -> 12 -> 18 -> 26 -> 5 -> 13 -> 19 -> 14 -> 16 -> 15 -> 37 -> 7 -> 17 -> 31 -> 36 -> 35 -> 20 -> 33 -> 34 -> 32 -> 0`  
-
-| Algorithm | Cost | Match Ref | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | BBNodes |
-|-----------|------|-----------|------|---------------|----------------|---------------|----------------|---------|
-| Concorde | 1273 | ref | 32ms | - | - | - | - | - | 1 |
-| Smart | TIMEOUT | - | 30.0m | - | - | - | - | - | - |
-| Simple | TIMEOUT | - | 30.0m | - | - | - | - | - | - |
-
-**Tours found:**
-- **Concorde:** `0 -> 1 -> 6 -> 4 -> 3 -> 2 -> 27 -> 28 -> 29 -> 30 -> 38 -> 22 -> 39 -> 21 -> 24 -> 40 -> 23 -> 41 -> 9 -> 8 -> 10 -> 25 -> 11 -> 12 -> 18 -> 26 -> 5 -> 13 -> 19 -> 14 -> 16 -> 15 -> 37 -> 7 -> 17 -> 31 -> 36 -> 35 -> 20 -> 33 -> 34 -> 32 -> 0` cost=1273 (reference)
+- **Concorde (reference):** `0 -> 6 -> 7 -> 5 -> 15 -> 4 -> 8 -> 2 -> 1 -> 20 -> 14 -> 13 -> 12 -> 17 -> 9 -> 16 -> 18 -> 19 -> 10 -> 3 -> 11 -> 0` cost=2707
+- **tsp_bb_26_07_02:** `2 -> 8 -> 4 -> 15 -> 5 -> 7 -> 6 -> 0 -> 11 -> 3 -> 10 -> 19 -> 18 -> 16 -> 9 -> 17 -> 12 -> 13 -> 14 -> 20 -> 1 -> 2` cost=2707 (=ref, different tour)
+- **tsp_bb_26_07_06:** `2 -> 8 -> 4 -> 15 -> 5 -> 7 -> 6 -> 0 -> 11 -> 3 -> 10 -> 19 -> 18 -> 16 -> 9 -> 17 -> 12 -> 13 -> 14 -> 20 -> 1 -> 2` cost=2707 (=ref, different tour)
 
 ---

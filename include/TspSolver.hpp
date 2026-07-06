@@ -66,17 +66,9 @@ struct HeuristicOptions {
     DebugOptions debug;
 };
 
-// 基本分支定界 TSP 求解器。
+// 分支定界 TSP 求解器，使用 BP (Branch Partitioning) 策略。
 // 当前实现面向对称 TSP：dist[i][j] 必须等于 dist[j][i]。
-// 分支策略：
-// Smart      — 优先对 1-tree 中度数最大的顶点选边分支（单边，二分叉）。
-// Exhaustive — 对所有未决边同时展开 force/forbid 分支。
-// Simple     — 任选一条未决边做 force/forbid 二分叉，无启发式选择。
-enum class BranchStrategy {
-    Smart,
-    Exhaustive,
-    Simple
-};
+// BP 策略：在 1-tree 上执行候选边划分（A 集/B 集），仅在 B 集上链式分支。
 
 class BranchBoundSolver {
 public:
@@ -85,7 +77,7 @@ public:
     void setDebugOutput(std::ostream& output, std::size_t progress_interval = 1000);
     void disableDebugOutput();
     // 求解 TSP，返回求解结果和搜索统计。
-    SolveResult solve(BranchStrategy strategy = BranchStrategy::Smart);
+    SolveResult solve();
 
 private:
     struct Edge {
@@ -101,6 +93,8 @@ private:
         // 1-tree 的边集合和度数统计，避免在分支节点中重复计算。
         std::vector<Edge> edges;
         std::vector<int> degree;
+        // 1-tree 中非 forced 的边，按权重升序排列，供 bpPartition 直接取用。
+        std::vector<Edge> unfixed_edges;
     };
 
     // 分支定界节点（部分解 P）：
@@ -148,25 +142,38 @@ private:
     // 收集当前节点尚未决定且实际存在的边，作为本节点分支候选集。
     bool buildBranchCandidates(const PartialSol& node,std::vector<Edge>& branch_candidates,
                                std::vector<Edge>& removed) const;
-    // 从当前候选集中选择一条未决边做二分支：包含该边 / 禁止该边；选择时优先当前 1-tree。
-    bool chooseBranchEdge(const PartialSol& node,
-                          const OneTree& one_tree,
-                          const std::vector<Edge>& candidates,
-                          Edge& edge) const;
     // 判断当前节点的下界是否已经不优于已知最优可行解，可以直接剪枝。
     bool shouldPrune(double bound, double best_cost) const;
-    // 最近邻 + 2-opt，生成一个可行上界，帮助早剪枝。
-    bool findInitialTour(std::vector<int>& tour, double& cost) const;
+    // 最近邻 + 2-opt + LK，生成一个可行上界，帮助早剪枝。
+    bool findInitialTour(std::vector<int>& tour, double& cost);
     // 计算一个 tour 的总成本。
     double tourCost(const std::vector<int>& tour) const;
     // 2-opt 局部优化：如果交换 tour 中的两条边能降低成本，就执行交换。
     void twoOpt(std::vector<int>& tour, double& cost) const;
+    // 构建位置映射：pos[v] = v 在 tour 中的下标。
+    std::vector<int> buildPositionMap(const std::vector<int>& tour) const;
+    // 预计算每个顶点的 K 近邻候选集，供 LK 搜索使用。
+    void buildCandidateSets() const;
+    // LK 核心：从边 (t1,t2) 出发进行顺序 k-opt 搜索，返回是否找到改进。
+    // next/prev 是 tour 的双向链表表示，active 是 don't-look 标记。
+    bool lkSearch(int t1, int t2, std::vector<int>& next, std::vector<int>& prev,
+                  std::vector<bool>& active) const;
+    // LK 改进主循环：遍历所有 tour 边作为起点，连续应用 k-opt 直到无改进。
+    bool linKernighanImprove(std::vector<int>& tour, double& cost) const;
+    // Double-bridge kick：非顺序 4-opt 扰动，帮助 LK 跳出局部最优。
+    void doubleBridgeKick(std::vector<int>& tour) const;
+    // Chained LK 总入口：多次 LK + double-bridge kick 迭代，取最优结果。
+    void linKernighan(std::vector<int>& tour, double& cost) const;
 
-    // 递归搜索：进入后在节点状态和候选集上计算 1-tree 下界，剪枝后选择分支边递归。
-    // pre_tree 非空时跳过 computeOneTree，直接复用；用于 forbid 分支优化。
-    void search(PartialSol& node, std::vector<Edge>& branch_candidates,
-                int depth, BranchStrategy strategy,
-                const OneTree* pre_tree = nullptr);
+    // ── BP (Branch Partitioning) 搜索 ──
+    // 在当前 1-tree 上执行 BP 划分：将候选边分为 A 集（安全边）和 B 集（关键边），
+    // 返回 B 集。forbid_trees[i] 存放禁止 B[i] 后重算的 1-tree，供分支时复用。
+    std::vector<Edge> bpPartition(const PartialSol& node,
+                                  const std::vector<Edge>& branch_candidates,
+                                  const OneTree& current_tree,
+                                  std::vector<OneTree>& forbid_trees);
+    // BP 递归搜索：在每个节点执行 BP 划分后链式分支。
+    void search(PartialSol& node, std::vector<Edge>& branch_candidates, int depth);
 
     // 顶点数。
     int n_ = 0;
@@ -176,6 +183,13 @@ private:
     // 在 computeOneTree 中取前 2 条未被禁止的边作为 1-tree 的 root edges。
     std::vector<Edge> root_candidates_sorted_;
     DebugOptions debug_;
+
+    // LK 候选集：每个顶点的 K 近邻，惰性初始化。
+    static constexpr int kLkCandidateSize = 8;
+    static constexpr int kLkMaxDepth = 5;
+    static constexpr int kLkMaxKicks = 10;
+    mutable std::vector<std::vector<int>> candidate_set_;
+    mutable bool candidate_set_built_ = false;
 
     // 搜索过程中的状态。
     double best_cost_ = std::numeric_limits<double>::infinity();

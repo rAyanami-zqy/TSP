@@ -20,7 +20,6 @@ struct CliOptions {
     std::size_t exact_max_n = 10000;
     bool debug = false;
     std::size_t debug_interval = 10000;
-    tsp::BranchStrategy branch_strategy = tsp::BranchStrategy::Smart;
 };
 
 struct RunResult {
@@ -130,7 +129,7 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
     if (options.debug) {
         solver.setDebugOutput(std::cerr, options.debug_interval);
     }
-    output.result = solver.solve(options.branch_strategy);
+    output.result = solver.solve();
     return output;
 }
 
@@ -290,7 +289,6 @@ void printUsage(const char* program)
               << "  " << program << " [options] [matrix-or-tsplib-file]\n"
               << "  " << program << " [options] --batch <list-file>\n"
               << "\nOptions:\n"
-              << "  --branch-strategy <smart|simple>\n"
               << "  --exact-max-n <n>\n"
               << "  --debug\n"
               << "  --debug-interval <n>\n";
@@ -323,15 +321,6 @@ CliOptions parseArgs(int argc, char** argv)
             std::exit(0);
         } else if (arg == "--batch") {
             options.batch_path = require_value(arg);
-        } else if (arg == "--branch-strategy") {
-            const std::string value = require_value(arg);
-            if (value == "smart") {
-                options.branch_strategy = tsp::BranchStrategy::Smart;
-            } else if (value == "simple") {
-                options.branch_strategy = tsp::BranchStrategy::Simple;
-            } else {
-                throw std::runtime_error("--branch-strategy must be smart or simple");
-            }
         } else if (arg == "--exact-max-n") {
             options.exact_max_n = parseSizeOption(require_value(arg), arg);
         } else if (arg == "--debug") {

@@ -1,0 +1,59 @@
+# 版本概览
+1.BP（Branch Partitioning）为唯一分支策略，不再支持策略选择：
+    - 移除 --branch-strategy 命令行参数，BP 为内置唯一方法
+    - 移除 BranchStrategy 枚举及 Smart/Simple/Exhaustive 旧策略代码
+    分支选择规则：
+        - 在当前节点 1-tree 上执行 BP 划分，将候选边分为 A 集（安全边）和 B 集（关键边）
+        - BP 划分规则：每次取出 1-tree 中非固定的最小权重边放入 B 集，临时禁止该边后重算 1-tree，
+          若新下界不超过当前最优解则继续，否则停止并将剩余候选边归入 A 集
+        - 分支仅在 B 集中进行，A 集边不参与分支
+    链式分支：
+        - 对 B={e1,e2,...,ek} 按序进行链式分支
+        - force 分支：强制选择 ei，进入完整 BP 递归（重新划分 A/B）
+        - forbid 分支：禁止 ei，沿链继续处理 e_{i+1}
+        - forbid 链走到底（所有 B 边均被禁止）即死胡同，直接返回
+    空 B 剪枝：
+        - B 集为空时（禁止任意 1-tree 边均超上界）等价于 bound 剪枝，直接返回
+
+2.命令行入口：
+    ./tsp_bb [options] <instance-file>    （无需 --branch-strategy 参数）
+
+3.代码清理：
+    - 移除 search() 旧版（Smart/Simple 二分支）
+    - 移除 chooseBranchEdge()
+    - 移除 BranchStrategy 枚举
+    - searchBP() 重命名为 search() 作为唯一搜索入口
+
+4.继承自前一版本（tsp_bb_26_07_02）的优化：
+    - 复用强制边的 MST 数据结构
+    - 全局边预排序
+    - forbid 分支快速迭代候选集
+
+5.2026-07-06 修复与性能优化（两轮）：
+    【编译修复】
+    - 修复 bpPartition() 签名不匹配编译错误：添加缺失的第4参数 std::vector<OneTree>& forbid_trees
+    - bpPartition() 现填充 forbid_trees，记录每次禁止 B 集边后重算的 1-tree
+    - 添加 #include <functional> 以支持 std::function
+    【关键性能修复 — forbid 分支消除冗余 1-tree 计算】
+    - chain_branch 的 forbid 分支现直接复用 forbid_trees[idx]，不再调用 computeOneTree
+    - 根因：旧 reuse 逻辑存在缺陷 — B 集边必定存在于父 1-tree 中（BP 划分选取的就是
+      1-tree 中最小非固定边），因此 reuse 检查永远失败，每个 forbid 分支都强制执行
+      完整的 computeOneTree，且计算结果的 1-tree 直接被丢弃未下传
+    - 修复后 forbid 分支直接使用 bpPartition 预计算的 forbid_trees[idx]，
+      该 1-tree 已准确反映 B_set[0..idx] 全被禁止后的状态
+    - 移除 chain_branch 中已无用的 pre_tree 参数
+    【性能对比（修复前 → 修复后）】
+    - burma14 (n=14):  42ms → 40ms
+    - ulysses16 (n=16): 16.0s → 13.8s (-13.5%)
+    - gr17 (n=17):     2.5s → 2.2s (-11%)
+    【BP 策略性能分析】
+    - BP 在每个展开节点调用 |B| 次 computeOneTree（bpPartition 内部循环），
+      这是 BP 策略的根本代价：以更重的单节点开销换取大幅减少的分支数
+    - burma14：分支减少 ~7%，但 bpPartition 的 |B|×computeOneTree 开销抵销了收益
+    - ulysses16：分支减少 40%，修复后时间从 16.0s → 13.8s，优势开始显现
+    - 进一步提速方向：
+      1. 增量 1-tree 更新（MST 敏感度分析）：当禁止的边不在 MST 中时，
+         仅需重选 root edges，避免完整 Kruskal
+      2. unfixed_edges 预排序：利用 OneTree.unfixed_edges 字段（已定义未使用），
+         在 computeOneTree 中填充，bpPartition 直接取用
+      3. candidate 移除优化：用 swap-pop 替代 vector::erase 避免 O(n) 移位
