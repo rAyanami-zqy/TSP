@@ -470,12 +470,10 @@ std::vector<BranchBoundSolver::Edge> BranchBoundSolver::bpPartition(
     OneTree work_tree = current_tree;
 
     while (true) {
-        // ── 选边：度数优先（仅取最小权重的一条），然后全局最小 fallback ──
-        // 每轮最多测试 2 条边，控制 bpPartition 的 per-iteration 成本。
+        // ── 选边：从度数违规顶点取最小权重未决边 ──
+        // 若没有度数 > 2 的顶点，则当前可行 1-tree 已由 isTour() 处理。
         const Edge* deg_best = nullptr;
-        const Edge* global_best = nullptr;
 
-        // 度数优先：max-degree 顶点的最小权重未决边。
         int branch_vertex = -1;
         int max_deg = 2;
         for (int v = 0; v < n_; ++v) {
@@ -494,16 +492,7 @@ std::vector<BranchBoundSolver::Edge> BranchBoundSolver::bpPartition(
             }
         }
 
-        // 全局最小权重未决边（不含度数边，避免重复）。
-        for (const Edge& e : work_tree.edges) {
-            const std::size_t eid = edgeId(e.u, e.v);
-            if (work_node.forced[eid]) continue;
-            if (work_node.forbidden[eid]) continue;
-            if (deg_best && e.u == deg_best->u && e.v == deg_best->v) continue;
-            if (!global_best || e.w < global_best->w) global_best = &e;
-        }
-
-        if (!deg_best && !global_best) break;
+        if (!deg_best) break;
 
         // 测试函数：选中的边先进入 B；若 forbid 后仍可行且未被 bound 剪枝，则继续划分。
         auto test = [&](const Edge& e) -> bool {
@@ -533,7 +522,21 @@ std::vector<BranchBoundSolver::Edge> BranchBoundSolver::bpPartition(
             B_set.push_back(e);
             forbid_trees.push_back(std::move(t));
             const OneTree& saved_tree = forbid_trees.back();
-            if (!saved_tree.feasible || shouldPrune(saved_tree.cost, best_cost_)) {
+            if (!saved_tree.feasible) {
+                return false;
+            }
+            if (isTour(saved_tree)) {
+                std::vector<int> candidate = buildTour(saved_tree.edges);
+                if (!candidate.empty() && saved_tree.cost + kEps < best_cost_) {
+                    best_cost_ = saved_tree.cost;
+                    best_tour_ = std::move(candidate);
+                    writeDebugLine(debug_,
+                                   "new incumbent: cost=" + formatDebugDouble(best_cost_)
+                                       + " source=bp-partition");
+                }
+                return false;
+            }
+            if (shouldPrune(saved_tree.cost, best_cost_)) {
                 return false;
             }
 
@@ -543,17 +546,7 @@ std::vector<BranchBoundSolver::Edge> BranchBoundSolver::bpPartition(
             return true;
         };
 
-        // 先测度数边。
-        if (deg_best) {
-            if (test(*deg_best)) continue;
-            break;
-        }
-
-        // 测全局最小边。
-        if (global_best) {
-            if (test(*global_best)) continue;
-        }
-
+        if (test(*deg_best)) continue;
         break;
     }
 
@@ -800,6 +793,21 @@ void BranchBoundSolver::search(PartialSol& node, std::vector<Edge>& branch_candi
                         node.candidate_mask = std::move(original_mask);
                         revert_flag(flag_changes);
                         ++result_.stats.nodes_pruned_infeasible;
+                        return;
+                    }
+                    if (isTour(forbid_tree)) {
+                        std::vector<int> candidate = buildTour(forbid_tree.edges);
+                        if (!candidate.empty() && forbid_tree.cost + kEps < best_cost_) {
+                            best_cost_ = forbid_tree.cost;
+                            best_tour_ = std::move(candidate);
+                            writeDebugLine(debug_,
+                                           "new incumbent: cost=" + formatDebugDouble(best_cost_)
+                                               + " source=bp-forbid depth="
+                                               + std::to_string(depth + 1));
+                        }
+                        branch_candidates = std::move(original_candidates);
+                        node.candidate_mask = std::move(original_mask);
+                        revert_flag(flag_changes);
                         return;
                     }
                     if (shouldPrune(forbid_tree.cost, best_cost_)) {
