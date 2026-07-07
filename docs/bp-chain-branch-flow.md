@@ -53,16 +53,17 @@ bpPartition(node, branch_candidates, current_tree):
        │
        ├─ 2. 测试 deg_best（若存在）：
        │      forbid → computeOneTree → 检查下界
-       │      ├─ 关键 (cost ≤ best_cost) → 加入 B_set, forbid_trees
-       │      │   更新 work_tree = 新树, work_candidates = 移除该边
-       │      │   → continue（下一轮，新树）
-       │      └─ 安全/不可行 → restore forbidden
+       │      ├─ 先加入 B_set, forbid_trees
+       │      ├─ 若不可行或 bound 可剪 → 停止划分
+       │      └─ 否则更新 work_tree = 新树, work_candidates = 移除该边
+       │         → continue（下一轮，新树）
        │
        ├─ 3. 测试 global_best（若存在）：
        │      forbid → computeOneTree → 检查下界
-       │      ├─ 关键 → 加入 B_set, forbid_trees, 更新 work_tree
-       │      │   → continue
-       │      └─ 安全 → break（MST 单调性：全局最小安全 ⇒ 全部安全）
+       │      ├─ 先加入 B_set, forbid_trees
+       │      ├─ 若不可行或 bound 可剪 → 停止划分
+       │      └─ 否则更新 work_tree = 新树, work_candidates = 移除该边
+       │         → continue
        │
        └─ 4. break（无边可加入 B）
 

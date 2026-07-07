@@ -505,9 +505,8 @@ std::vector<BranchBoundSolver::Edge> BranchBoundSolver::bpPartition(
 
         if (!deg_best && !global_best) break;
 
-        // 测试函数：禁止边 e，重算 1-tree，返回是否关键（cost ≤ best_cost_）。
-        auto test = [&](const Edge& e) -> int {
-            // 返回 1=关键, 0=不可行, -1=安全
+        // 测试函数：选中的边先进入 B；若 forbid 后仍可行且未被 bound 剪枝，则继续划分。
+        auto test = [&](const Edge& e) -> bool {
             const std::size_t eid = edgeId(e.u, e.v);
             work_node.forbidden[eid] = 1;
 
@@ -531,29 +530,28 @@ std::vector<BranchBoundSolver::Edge> BranchBoundSolver::bpPartition(
                 work_node.candidate_mask[eid] = sm;
             }
 
-            if (!t.feasible) { work_node.forbidden[eid] = 0; return 0; }
-            if (t.cost > best_cost_ + kEps) { work_node.forbidden[eid] = 0; return -1; }
-
-            // 关键边：保留 forbidden，更新持久状态。
             B_set.push_back(e);
             forbid_trees.push_back(std::move(t));
-            work_tree = forbid_trees.back();
+            const OneTree& saved_tree = forbid_trees.back();
+            if (!saved_tree.feasible || shouldPrune(saved_tree.cost, best_cost_)) {
+                return false;
+            }
+
+            // forbid 后仍可能包含改进解：保留 forbidden，更新持久状态后继续划分。
+            work_tree = saved_tree;
             work_candidates = std::move(wc);
-            return 1;
+            return true;
         };
 
         // 先测度数边。
         if (deg_best) {
-            int r = test(*deg_best);
-            if (r == 1) continue;      // 关键 → 继续下一轮
-            // r==0 或 -1：度数边不可用，测全局边
+            if (test(*deg_best)) continue;
+            break;
         }
 
         // 测全局最小边。
         if (global_best) {
-            int r = test(*global_best);
-            if (r == 1) continue;      // 关键 → 继续下一轮
-            // 全局最小边安全 → 所有更重的边也安全 → 停止
+            if (test(*global_best)) continue;
         }
 
         break;
@@ -797,6 +795,13 @@ void BranchBoundSolver::search(PartialSol& node, std::vector<Edge>& branch_candi
 
                     // 用 bpPartition 预计算的 forbid_trees[idx] 做下界剪枝。
                     const OneTree& forbid_tree = forbid_trees[static_cast<std::size_t>(idx)];
+                    if (!forbid_tree.feasible) {
+                        branch_candidates = std::move(original_candidates);
+                        node.candidate_mask = std::move(original_mask);
+                        revert_flag(flag_changes);
+                        ++result_.stats.nodes_pruned_infeasible;
+                        return;
+                    }
                     if (shouldPrune(forbid_tree.cost, best_cost_)) {
                         branch_candidates = std::move(original_candidates);
                         node.candidate_mask = std::move(original_mask);
