@@ -27,7 +27,7 @@
 | Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
 |---|---|---|---|---|---|---|---|
 | tsp_bb_26_07_02 | 45 | 3ms | 5 | 2 | 3 | 0 | :white_check_mark: |
-| tsp_bb_26_07_06 | 45 | 3ms | 3 | 2 | 2 | 0 | :white_check_mark: |
+| tsp_bb_26_07_06 | 45 | 3ms | 5 | 2 | 2 | 0 | :white_check_mark: |
 
 **Tours found:**
 - **Concorde (reference):** `0 -> 3 -> 2 -> 1 -> 0` cost=45
@@ -69,7 +69,7 @@
 | Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
 |---|---|---|---|---|---|---|---|
 | tsp_bb_26_07_02 | 26 | 3ms | 13 | 6 | 7 | 0 | :white_check_mark: |
-| tsp_bb_26_07_06 | 26 | 4ms | 1 | 1 | 1 | 0 | :white_check_mark: |
+| tsp_bb_26_07_06 | 26 | 3ms | 17 | 4 | 8 | 0 | :white_check_mark: |
 
 **Tours found:**
 - **Concorde (reference):** `0 -> 4 -> 2 -> 3 -> 1 -> 0` cost=26
@@ -90,7 +90,7 @@
 | Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
 |---|---|---|---|---|---|---|---|
 | tsp_bb_26_07_02 | 26 | 2ms | 13 | 6 | 7 | 0 | :white_check_mark: |
-| tsp_bb_26_07_06 | 26 | 3ms | 1 | 1 | 1 | 0 | :white_check_mark: |
+| tsp_bb_26_07_06 | 26 | 3ms | 17 | 4 | 8 | 0 | :white_check_mark: |
 
 **Tours found:**
 - **Concorde (reference):** `0 -> 4 -> 2 -> 3 -> 1 -> 0` cost=26
@@ -111,7 +111,7 @@
 | Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
 |---|---|---|---|---|---|---|---|
 | tsp_bb_26_07_02 | 8 | 3ms | 15 | 7 | 8 | 0 | :white_check_mark: |
-| tsp_bb_26_07_06 | 8 | 3ms | 11 | 3 | 6 | 0 | :white_check_mark: |
+| tsp_bb_26_07_06 | 8 | 3ms | 15 | 4 | 8 | 0 | :white_check_mark: |
 
 **Tours found:**
 - **Concorde (reference):** `0 -> 4 -> 1 -> 2 -> 3 -> 0` cost=8
@@ -132,7 +132,7 @@
 | Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
 |---|---|---|---|---|---|---|---|
 | tsp_bb_26_07_02 | 26 | 3ms | 13 | 6 | 7 | 0 | :white_check_mark: |
-| tsp_bb_26_07_06 | 26 | 3ms | 1 | 1 | 1 | 0 | :white_check_mark: |
+| tsp_bb_26_07_06 | 26 | 3ms | 17 | 4 | 8 | 0 | :white_check_mark: |
 
 **Tours found:**
 - **Concorde (reference):** `0 -> 4 -> 2 -> 3 -> 1 -> 0` cost=26
@@ -247,7 +247,7 @@
 | Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
 |---|---|---|---|---|---|---|---|
 | tsp_bb_26_07_02 | 100 | 3ms | 30 | 22 | 8 | 15 | - |
-| tsp_bb_26_07_06 | 100 | 3ms | 15 | 8 | 3 | 4 | - |
+| tsp_bb_26_07_06 | 100 | 3ms | 19 | 9 | 5 | 4 | - |
 
 **Tours found:**
 - **tsp_bb_26_07_02:** `0 -> 5 -> 2 -> 1 -> 4 -> 3 -> 0` cost=100
@@ -264,7 +264,7 @@
 | Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
 |---|---|---|---|---|---|---|---|
 | tsp_bb_26_07_02 | 196 | 4ms | 19 | 13 | 6 | 8 | - |
-| tsp_bb_26_07_06 | 196 | 3ms | 13 | 6 | 3 | 2 | - |
+| tsp_bb_26_07_06 | 196 | 3ms | 10 | 3 | 1 | 3 | - |
 
 **Tours found:**
 - **tsp_bb_26_07_02:** `1 -> 5 -> 3 -> 0 -> 4 -> 2 -> 6 -> 1` cost=196
@@ -281,7 +281,7 @@
 | Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
 |---|---|---|---|---|---|---|---|
 | tsp_bb_26_07_02 | 86 | 4ms | 7 | 4 | 3 | 2 | - |
-| tsp_bb_26_07_06 | 86 | 3ms | 1 | 1 | 1 | 0 | - |
+| tsp_bb_26_07_06 | 86 | 4ms | 4 | 2 | 1 | 1 | - |
 
 **Tours found:**
 - **tsp_bb_26_07_02:** `1 -> 6 -> 3 -> 4 -> 5 -> 2 -> 0 -> 1` cost=86
@@ -301,7 +301,7 @@
 | Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
 |---|---|---|---|---|---|---|---|
 | tsp_bb_26_07_02 | 74 | 3ms | 23 | 11 | 12 | 0 | :white_check_mark: |
-| tsp_bb_26_07_06 | 74 | 4ms | 8 | 4 | 1 | 1 | :white_check_mark: |
+| tsp_bb_26_07_06 | 74 | 3ms | 7 | 4 | 2 | 0 | :white_check_mark: |
 
 **Tours found:**
 - **Concorde (reference):** `0 -> 3 -> 6 -> 5 -> 1 -> 4 -> 2 -> 0` cost=74
@@ -319,7 +319,7 @@
 | Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
 |---|---|---|---|---|---|---|---|
 | tsp_bb_26_07_02 | 199 | 4ms | 28 | 21 | 7 | 15 | - |
-| tsp_bb_26_07_06 | 199 | 4ms | 7 | 4 | 1 | 0 | - |
+| tsp_bb_26_07_06 | 199 | 3ms | 16 | 7 | 2 | 5 | - |
 
 **Tours found:**
 - **tsp_bb_26_07_02:** `4 -> 1 -> 5 -> 3 -> 2 -> 6 -> 0 -> 4` cost=199
@@ -339,7 +339,7 @@
 | Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
 |---|---|---|---|---|---|---|---|
 | tsp_bb_26_07_02 | 73 | 4ms | 21 | 10 | 11 | 0 | :white_check_mark: |
-| tsp_bb_26_07_06 | 73 | 3ms | 3 | 2 | 1 | 0 | :white_check_mark: |
+| tsp_bb_26_07_06 | 73 | 3ms | 7 | 3 | 2 | 0 | :white_check_mark: |
 
 **Tours found:**
 - **Concorde (reference):** `0 -> 6 -> 3 -> 2 -> 1 -> 4 -> 5 -> 0` cost=73
@@ -360,7 +360,7 @@
 | Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
 |---|---|---|---|---|---|---|---|
 | tsp_bb_26_07_02 | 49 | 3ms | 13 | 6 | 7 | 0 | :white_check_mark: |
-| tsp_bb_26_07_06 | 49 | 3ms | 5 | 3 | 1 | 0 | :white_check_mark: |
+| tsp_bb_26_07_06 | 49 | 4ms | 5 | 3 | 1 | 0 | :white_check_mark: |
 
 **Tours found:**
 - **Concorde (reference):** `0 -> 6 -> 4 -> 5 -> 3 -> 2 -> 1 -> 0` cost=49
@@ -381,7 +381,7 @@
 | Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
 |---|---|---|---|---|---|---|---|
 | tsp_bb_26_07_02 | 64 | 4ms | 23 | 11 | 12 | 0 | :white_check_mark: |
-| tsp_bb_26_07_06 | 64 | 4ms | 7 | 4 | 2 | 0 | :white_check_mark: |
+| tsp_bb_26_07_06 | 64 | 4ms | 7 | 3 | 2 | 0 | :white_check_mark: |
 
 **Tours found:**
 - **Concorde (reference):** `0 -> 7 -> 4 -> 3 -> 2 -> 1 -> 6 -> 5 -> 0` cost=64
@@ -423,7 +423,7 @@
 | Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
 |---|---|---|---|---|---|---|---|
 | tsp_bb_26_07_02 | 3323 | 38ms | 18111 | 9162 | 8949 | 214 | :white_check_mark: |
-| tsp_bb_26_07_06 | 3323 | 43ms | 16816 | 6016 | 4640 | 21 | :white_check_mark: |
+| tsp_bb_26_07_06 | 3323 | 44ms | 14252 | 5043 | 3706 | 113 | :white_check_mark: |
 
 **Tours found:**
 - **Concorde (reference):** `0 -> 1 -> 13 -> 2 -> 3 -> 4 -> 5 -> 11 -> 6 -> 12 -> 7 -> 10 -> 8 -> 9 -> 0` cost=3323
@@ -444,7 +444,7 @@
 | Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
 |---|---|---|---|---|---|---|---|
 | tsp_bb_26_07_02 | 6859 | 16.1s | 15447419 | 7797474 | 7649945 | 147530 | :white_check_mark: |
-| tsp_bb_26_07_06 | 6859 | 13.8s | 9328699 | 2855266 | 2796120 | 45196 | :white_check_mark: |
+| tsp_bb_26_07_06 | 6859 | 14.7s | 7661012 | 2637820 | 2090400 | 89559 | :white_check_mark: |
 
 **Tours found:**
 - **Concorde (reference):** `0 -> 13 -> 12 -> 11 -> 6 -> 5 -> 14 -> 4 -> 10 -> 8 -> 9 -> 15 -> 2 -> 1 -> 3 -> 7 -> 0` cost=6859
@@ -465,7 +465,7 @@
 | Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
 |---|---|---|---|---|---|---|---|
 | tsp_bb_26_07_02 | 2085 | 2.2s | 1817688 | 920131 | 897557 | 22575 | :white_check_mark: |
-| tsp_bb_26_07_06 | 2085 | 2.1s | 1237494 | 443475 | 343503 | 19611 | :white_check_mark: |
+| tsp_bb_26_07_06 | 2085 | 2.1s | 959753 | 354212 | 257007 | 10826 | :white_check_mark: |
 
 **Tours found:**
 - **Concorde (reference):** `0 -> 3 -> 12 -> 6 -> 7 -> 5 -> 16 -> 13 -> 14 -> 2 -> 10 -> 9 -> 1 -> 4 -> 8 -> 11 -> 15 -> 0` cost=2085
@@ -486,7 +486,7 @@
 | Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
 |---|---|---|---|---|---|---|---|
 | tsp_bb_26_07_02 | 2707 | 78ms | 34213 | 17314 | 16899 | 416 | :white_check_mark: |
-| tsp_bb_26_07_06 | 2707 | 75ms | 21386 | 8915 | 4966 | 301 | :white_check_mark: |
+| tsp_bb_26_07_06 | 2707 | 63ms | 13034 | 5506 | 2841 | 187 | :white_check_mark: |
 
 **Tours found:**
 - **Concorde (reference):** `0 -> 6 -> 7 -> 5 -> 15 -> 4 -> 8 -> 2 -> 1 -> 20 -> 14 -> 13 -> 12 -> 17 -> 9 -> 16 -> 18 -> 19 -> 10 -> 3 -> 11 -> 0` cost=2707
@@ -494,3 +494,361 @@
 - **tsp_bb_26_07_06:** `2 -> 8 -> 4 -> 15 -> 5 -> 7 -> 6 -> 0 -> 11 -> 3 -> 10 -> 19 -> 18 -> 16 -> 9 -> 17 -> 12 -> 13 -> 14 -> 20 -> 1 -> 2` cost=2707 (=ref, different tour)
 
 ---
+
+## 25. `data/classic/tsplib/ulysses22.tsp` (n=22)
+
+**Concorde optimal cost:** 7013  
+**Concorde time:** 67ms  
+
+**Concorde (reference) tour:** `0 -> 13 -> 12 -> 11 -> 6 -> 5 -> 14 -> 4 -> 10 -> 8 -> 9 -> 18 -> 19 -> 20 -> 15 -> 2 -> 1 -> 16 -> 21 -> 3 -> 17 -> 7 -> 0`  
+
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | TIMEOUT | 30.0m | - | - | - | - | - |
+| tsp_bb_26_07_06 | TIMEOUT | 30.0m | - | - | - | - | - |
+
+**Tours found:**
+- **Concorde (reference):** `0 -> 13 -> 12 -> 11 -> 6 -> 5 -> 14 -> 4 -> 10 -> 8 -> 9 -> 18 -> 19 -> 20 -> 15 -> 2 -> 1 -> 16 -> 21 -> 3 -> 17 -> 7 -> 0` cost=7013
+
+---
+
+## 26. `data/classic/tsplib/gr24.tsp` (n=24)
+
+**Concorde optimal cost:** 1272  
+**Concorde time:** 22ms  
+
+**Concorde (reference) tour:** `0 -> 11 -> 3 -> 22 -> 8 -> 12 -> 13 -> 19 -> 1 -> 14 -> 18 -> 21 -> 17 -> 16 -> 9 -> 4 -> 20 -> 7 -> 23 -> 5 -> 6 -> 2 -> 10 -> 15 -> 0`  
+
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 1272 | 1.2s | 571607 | 287023 | 284584 | 2440 | :white_check_mark: |
+| tsp_bb_26_07_06 | 1272 | 810ms | 231105 | 90932 | 61408 | 90 | :white_check_mark: |
+
+**Tours found:**
+- **Concorde (reference):** `0 -> 11 -> 3 -> 22 -> 8 -> 12 -> 13 -> 19 -> 1 -> 14 -> 18 -> 21 -> 17 -> 16 -> 9 -> 4 -> 20 -> 7 -> 23 -> 5 -> 6 -> 2 -> 10 -> 15 -> 0` cost=1272
+- **tsp_bb_26_07_02:** `3 -> 11 -> 0 -> 15 -> 10 -> 2 -> 6 -> 5 -> 23 -> 7 -> 20 -> 4 -> 9 -> 16 -> 17 -> 21 -> 18 -> 14 -> 1 -> 19 -> 13 -> 12 -> 8 -> 22 -> 3` cost=1272 (=ref, different tour)
+- **tsp_bb_26_07_06:** `3 -> 11 -> 0 -> 15 -> 10 -> 2 -> 6 -> 5 -> 23 -> 7 -> 20 -> 4 -> 9 -> 16 -> 17 -> 21 -> 18 -> 14 -> 1 -> 19 -> 13 -> 12 -> 8 -> 22 -> 3` cost=1272 (=ref, different tour)
+
+---
+
+## 27. `data/classic/tsplib/fri26.tsp` (n=26)
+
+**Concorde optimal cost:** 937  
+**Concorde time:** 28ms  
+
+**Concorde (reference) tour:** `0 -> 1 -> 2 -> 3 -> 5 -> 4 -> 6 -> 7 -> 8 -> 9 -> 13 -> 14 -> 12 -> 11 -> 10 -> 15 -> 18 -> 19 -> 17 -> 16 -> 20 -> 21 -> 25 -> 22 -> 23 -> 24 -> 0`  
+
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 937 | 1.9s | 984246 | 492159 | 492087 | 73 | :white_check_mark: |
+| tsp_bb_26_07_06 | 937 | 2.1s | 575467 | 228573 | 148803 | 0 | :white_check_mark: |
+
+**Tours found:**
+- **Concorde (reference):** `0 -> 1 -> 2 -> 3 -> 5 -> 4 -> 6 -> 7 -> 8 -> 9 -> 13 -> 14 -> 12 -> 11 -> 10 -> 15 -> 18 -> 19 -> 17 -> 16 -> 20 -> 21 -> 25 -> 22 -> 23 -> 24 -> 0` cost=937
+- **tsp_bb_26_07_02:** `16 -> 20 -> 21 -> 25 -> 22 -> 23 -> 24 -> 0 -> 1 -> 2 -> 3 -> 5 -> 4 -> 6 -> 7 -> 8 -> 9 -> 13 -> 14 -> 11 -> 12 -> 10 -> 15 -> 18 -> 19 -> 17 -> 16` cost=937 (=ref, different tour)
+- **tsp_bb_26_07_06:** `16 -> 20 -> 21 -> 25 -> 22 -> 23 -> 24 -> 0 -> 1 -> 2 -> 3 -> 5 -> 4 -> 6 -> 7 -> 8 -> 9 -> 13 -> 14 -> 11 -> 12 -> 10 -> 15 -> 18 -> 19 -> 17 -> 16` cost=937 (=ref, different tour)
+
+---
+
+## 28. `data/classic/tsplib/bayg29.tsp` (n=29)
+
+**Concorde optimal cost:** 1610  
+**Concorde time:** 24ms  
+
+**Concorde (reference) tour:** `0 -> 27 -> 5 -> 11 -> 8 -> 25 -> 2 -> 28 -> 4 -> 20 -> 1 -> 19 -> 9 -> 3 -> 14 -> 17 -> 13 -> 16 -> 21 -> 10 -> 18 -> 24 -> 6 -> 22 -> 7 -> 26 -> 15 -> 12 -> 23 -> 0`  
+
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 1610 | 27.8s | 12732970 | 6376947 | 6356023 | 20925 | :white_check_mark: |
+| tsp_bb_26_07_06 | 1610 | 20.6s | 5254425 | 2147600 | 1369125 | 6894 | :white_check_mark: |
+
+**Tours found:**
+- **Concorde (reference):** `0 -> 27 -> 5 -> 11 -> 8 -> 25 -> 2 -> 28 -> 4 -> 20 -> 1 -> 19 -> 9 -> 3 -> 14 -> 17 -> 13 -> 16 -> 21 -> 10 -> 18 -> 24 -> 6 -> 22 -> 7 -> 26 -> 15 -> 12 -> 23 -> 0` cost=1610
+- **tsp_bb_26_07_02:** `0 -> 27 -> 5 -> 11 -> 8 -> 25 -> 2 -> 28 -> 4 -> 20 -> 1 -> 19 -> 9 -> 3 -> 14 -> 17 -> 13 -> 16 -> 21 -> 10 -> 18 -> 24 -> 6 -> 22 -> 7 -> 26 -> 15 -> 12 -> 23 -> 0` cost=1610 (=ref, same tour)
+- **tsp_bb_26_07_06:** `0 -> 27 -> 5 -> 11 -> 8 -> 25 -> 2 -> 28 -> 4 -> 20 -> 1 -> 19 -> 9 -> 3 -> 14 -> 17 -> 13 -> 16 -> 21 -> 10 -> 18 -> 24 -> 6 -> 22 -> 7 -> 26 -> 15 -> 12 -> 23 -> 0` cost=1610 (=ref, same tour)
+
+---
+
+## 29. `data/classic/tsplib/bays29.tsp` (n=29)
+
+**Concorde optimal cost:** 2020  
+**Concorde time:** 33ms  
+
+**Concorde (reference) tour:** `0 -> 27 -> 5 -> 11 -> 8 -> 4 -> 25 -> 28 -> 2 -> 1 -> 19 -> 9 -> 3 -> 14 -> 17 -> 16 -> 13 -> 21 -> 10 -> 18 -> 24 -> 6 -> 22 -> 26 -> 7 -> 23 -> 15 -> 12 -> 20 -> 0`  
+
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 2020 | 5.7m | 162609801 | 81440628 | 81169173 | 271456 | :white_check_mark: |
+| tsp_bb_26_07_06 | 2020 | 4.3m | 70575486 | 26997572 | 18956858 | 64265 | :white_check_mark: |
+
+**Tours found:**
+- **Concorde (reference):** `0 -> 27 -> 5 -> 11 -> 8 -> 4 -> 25 -> 28 -> 2 -> 1 -> 19 -> 9 -> 3 -> 14 -> 17 -> 16 -> 13 -> 21 -> 10 -> 18 -> 24 -> 6 -> 22 -> 26 -> 7 -> 23 -> 15 -> 12 -> 20 -> 0` cost=2020
+- **tsp_bb_26_07_02:** `7 -> 26 -> 22 -> 6 -> 24 -> 18 -> 10 -> 21 -> 13 -> 16 -> 17 -> 14 -> 3 -> 9 -> 19 -> 1 -> 2 -> 28 -> 25 -> 4 -> 8 -> 11 -> 5 -> 27 -> 0 -> 20 -> 12 -> 15 -> 23 -> 7` cost=2020 (=ref, different tour)
+- **tsp_bb_26_07_06:** `7 -> 26 -> 22 -> 6 -> 24 -> 18 -> 10 -> 21 -> 13 -> 16 -> 17 -> 14 -> 3 -> 9 -> 19 -> 1 -> 2 -> 28 -> 25 -> 4 -> 8 -> 11 -> 5 -> 27 -> 0 -> 20 -> 12 -> 15 -> 23 -> 7` cost=2020 (=ref, different tour)
+
+---
+
+## 30. `data/classic/national/wi29.tsp` (n=29)
+
+**Concorde optimal cost:** 27603  
+**Concorde time:** 38ms  
+
+**Concorde (reference) tour:** `0 -> 4 -> 7 -> 3 -> 2 -> 6 -> 8 -> 12 -> 13 -> 15 -> 23 -> 26 -> 24 -> 19 -> 25 -> 27 -> 28 -> 22 -> 21 -> 20 -> 16 -> 17 -> 18 -> 14 -> 11 -> 10 -> 9 -> 5 -> 1 -> 0`  
+
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 27603 | 201ms | 77709 | 38866 | 38843 | 24 | :white_check_mark: |
+| tsp_bb_26_07_06 | 27603 | 666ms | 161579 | 67141 | 40781 | 4 | :white_check_mark: |
+
+**Tours found:**
+- **Concorde (reference):** `0 -> 4 -> 7 -> 3 -> 2 -> 6 -> 8 -> 12 -> 13 -> 15 -> 23 -> 26 -> 24 -> 19 -> 25 -> 27 -> 28 -> 22 -> 21 -> 20 -> 16 -> 17 -> 18 -> 14 -> 11 -> 10 -> 9 -> 5 -> 1 -> 0` cost=27603
+- **tsp_bb_26_07_02:** `21 -> 22 -> 28 -> 27 -> 25 -> 19 -> 24 -> 26 -> 23 -> 15 -> 13 -> 12 -> 8 -> 6 -> 2 -> 3 -> 7 -> 4 -> 0 -> 1 -> 5 -> 9 -> 10 -> 11 -> 14 -> 18 -> 17 -> 16 -> 20 -> 21` cost=27603 (=ref, different tour)
+- **tsp_bb_26_07_06:** `21 -> 22 -> 28 -> 27 -> 25 -> 19 -> 24 -> 26 -> 23 -> 15 -> 13 -> 12 -> 8 -> 6 -> 2 -> 3 -> 7 -> 4 -> 0 -> 1 -> 5 -> 9 -> 10 -> 11 -> 14 -> 18 -> 17 -> 16 -> 20 -> 21` cost=27603 (=ref, different tour)
+
+---
+
+## 31. `data/classic/national/dj38.tsp` (n=38)
+
+**Concorde optimal cost:** 6656  
+**Concorde time:** 37ms  
+
+**Concorde (reference) tour:** `0 -> 9 -> 13 -> 20 -> 28 -> 29 -> 31 -> 34 -> 36 -> 37 -> 32 -> 33 -> 35 -> 30 -> 26 -> 27 -> 23 -> 21 -> 24 -> 25 -> 22 -> 19 -> 14 -> 12 -> 15 -> 16 -> 17 -> 18 -> 10 -> 11 -> 8 -> 7 -> 6 -> 5 -> 4 -> 2 -> 3 -> 1 -> 0`  
+
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 6656 | 115ms | 25733 | 12866 | 12867 | 0 | :white_check_mark: |
+| tsp_bb_26_07_06 | 6656 | 119ms | 14545 | 6751 | 3358 | 0 | :white_check_mark: |
+
+**Tours found:**
+- **Concorde (reference):** `0 -> 9 -> 13 -> 20 -> 28 -> 29 -> 31 -> 34 -> 36 -> 37 -> 32 -> 33 -> 35 -> 30 -> 26 -> 27 -> 23 -> 21 -> 24 -> 25 -> 22 -> 19 -> 14 -> 12 -> 15 -> 16 -> 17 -> 18 -> 10 -> 11 -> 8 -> 7 -> 6 -> 5 -> 4 -> 2 -> 3 -> 1 -> 0` cost=6656
+- **tsp_bb_26_07_02:** `1 -> 0 -> 9 -> 13 -> 20 -> 28 -> 29 -> 31 -> 34 -> 36 -> 37 -> 32 -> 33 -> 35 -> 30 -> 26 -> 27 -> 23 -> 21 -> 24 -> 25 -> 22 -> 19 -> 14 -> 12 -> 15 -> 16 -> 17 -> 18 -> 10 -> 11 -> 8 -> 7 -> 6 -> 5 -> 4 -> 2 -> 3 -> 1` cost=6656 (=ref, different tour)
+- **tsp_bb_26_07_06:** `1 -> 0 -> 9 -> 13 -> 20 -> 28 -> 29 -> 31 -> 34 -> 36 -> 37 -> 32 -> 33 -> 35 -> 30 -> 26 -> 27 -> 23 -> 21 -> 24 -> 25 -> 22 -> 19 -> 14 -> 12 -> 15 -> 16 -> 17 -> 18 -> 10 -> 11 -> 8 -> 7 -> 6 -> 5 -> 4 -> 2 -> 3 -> 1` cost=6656 (=ref, different tour)
+
+---
+
+## 32. `data/classic/tsplib/dantzig42.tsp` (n=42)
+
+**Concorde optimal cost:** 699  
+**Concorde time:** 40ms  
+
+**Concorde (reference) tour:** `0 -> 41 -> 40 -> 39 -> 38 -> 37 -> 36 -> 35 -> 34 -> 33 -> 32 -> 31 -> 30 -> 29 -> 28 -> 27 -> 26 -> 25 -> 24 -> 23 -> 22 -> 21 -> 20 -> 19 -> 18 -> 17 -> 16 -> 15 -> 14 -> 13 -> 12 -> 11 -> 10 -> 9 -> 8 -> 7 -> 6 -> 5 -> 4 -> 3 -> 2 -> 1 -> 0`  
+
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | TIMEOUT | 30.0m | - | - | - | - | - |
+| tsp_bb_26_07_06 | TIMEOUT | 30.0m | - | - | - | - | - |
+
+**Tours found:**
+- **Concorde (reference):** `0 -> 41 -> 40 -> 39 -> 38 -> 37 -> 36 -> 35 -> 34 -> 33 -> 32 -> 31 -> 30 -> 29 -> 28 -> 27 -> 26 -> 25 -> 24 -> 23 -> 22 -> 21 -> 20 -> 19 -> 18 -> 17 -> 16 -> 15 -> 14 -> 13 -> 12 -> 11 -> 10 -> 9 -> 8 -> 7 -> 6 -> 5 -> 4 -> 3 -> 2 -> 1 -> 0` cost=699
+
+---
+
+## 33. `data/classic/tsplib/swiss42.tsp` (n=42)
+
+**Concorde optimal cost:** 1273  
+**Concorde time:** 29ms  
+
+**Concorde (reference) tour:** `0 -> 1 -> 6 -> 4 -> 3 -> 2 -> 27 -> 28 -> 29 -> 30 -> 38 -> 22 -> 39 -> 21 -> 24 -> 40 -> 23 -> 41 -> 9 -> 8 -> 10 -> 25 -> 11 -> 12 -> 18 -> 26 -> 5 -> 13 -> 19 -> 14 -> 16 -> 15 -> 37 -> 7 -> 17 -> 31 -> 36 -> 35 -> 20 -> 33 -> 34 -> 32 -> 0`  
+
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | TIMEOUT | 30.0m | - | - | - | - | - |
+| tsp_bb_26_07_06 | TIMEOUT | 30.0m | - | - | - | - | - |
+
+**Tours found:**
+- **Concorde (reference):** `0 -> 1 -> 6 -> 4 -> 3 -> 2 -> 27 -> 28 -> 29 -> 30 -> 38 -> 22 -> 39 -> 21 -> 24 -> 40 -> 23 -> 41 -> 9 -> 8 -> 10 -> 25 -> 11 -> 12 -> 18 -> 26 -> 5 -> 13 -> 19 -> 14 -> 16 -> 15 -> 37 -> 7 -> 17 -> 31 -> 36 -> 35 -> 20 -> 33 -> 34 -> 32 -> 0` cost=1273
+
+---
+
+## 34. `data/classic/tsplib/att48.tsp` (n=48)
+
+**Concorde optimal cost:** 10628  
+**Concorde time:** 83ms  
+
+**Concorde (reference) tour:** `0 -> 8 -> 39 -> 14 -> 11 -> 10 -> 12 -> 24 -> 13 -> 22 -> 2 -> 21 -> 15 -> 40 -> 33 -> 28 -> 1 -> 25 -> 3 -> 34 -> 44 -> 9 -> 23 -> 41 -> 4 -> 47 -> 38 -> 31 -> 20 -> 46 -> 19 -> 32 -> 45 -> 35 -> 29 -> 42 -> 16 -> 26 -> 18 -> 36 -> 5 -> 27 -> 6 -> 17 -> 43 -> 30 -> 37 -> 7 -> 0`  
+
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | TIMEOUT | 30.0m | - | - | - | - | - |
+| tsp_bb_26_07_06 | TIMEOUT | 30.0m | - | - | - | - | - |
+
+**Tours found:**
+- **Concorde (reference):** `0 -> 8 -> 39 -> 14 -> 11 -> 10 -> 12 -> 24 -> 13 -> 22 -> 2 -> 21 -> 15 -> 40 -> 33 -> 28 -> 1 -> 25 -> 3 -> 34 -> 44 -> 9 -> 23 -> 41 -> 4 -> 47 -> 38 -> 31 -> 20 -> 46 -> 19 -> 32 -> 45 -> 35 -> 29 -> 42 -> 16 -> 26 -> 18 -> 36 -> 5 -> 27 -> 6 -> 17 -> 43 -> 30 -> 37 -> 7 -> 0` cost=10628
+
+---
+
+## 35. `data/classic/tsplib/gr48.tsp` (n=48)
+
+**Concorde optimal cost:** 5046  
+**Concorde time:** 90ms  
+
+**Concorde (reference) tour:** `0 -> 12 -> 47 -> 15 -> 10 -> 35 -> 25 -> 5 -> 13 -> 8 -> 31 -> 26 -> 16 -> 20 -> 21 -> 7 -> 32 -> 4 -> 30 -> 11 -> 9 -> 14 -> 23 -> 36 -> 46 -> 42 -> 44 -> 1 -> 39 -> 38 -> 41 -> 34 -> 19 -> 37 -> 29 -> 3 -> 18 -> 2 -> 24 -> 22 -> 33 -> 17 -> 45 -> 40 -> 43 -> 27 -> 6 -> 28 -> 0`  
+
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | TIMEOUT | 30.0m | - | - | - | - | - |
+| tsp_bb_26_07_06 | TIMEOUT | 30.0m | - | - | - | - | - |
+
+**Tours found:**
+- **Concorde (reference):** `0 -> 12 -> 47 -> 15 -> 10 -> 35 -> 25 -> 5 -> 13 -> 8 -> 31 -> 26 -> 16 -> 20 -> 21 -> 7 -> 32 -> 4 -> 30 -> 11 -> 9 -> 14 -> 23 -> 36 -> 46 -> 42 -> 44 -> 1 -> 39 -> 38 -> 41 -> 34 -> 19 -> 37 -> 29 -> 3 -> 18 -> 2 -> 24 -> 22 -> 33 -> 17 -> 45 -> 40 -> 43 -> 27 -> 6 -> 28 -> 0` cost=5046
+
+---
+
+## 36. `data/classic/tsplib/hk48.tsp` (n=48)
+
+**Concorde optimal cost:** 11461  
+**Concorde time:** 37ms  
+
+**Concorde (reference) tour:** `0 -> 1 -> 47 -> 14 -> 42 -> 20 -> 32 -> 29 -> 22 -> 8 -> 9 -> 39 -> 35 -> 33 -> 5 -> 7 -> 46 -> 6 -> 37 -> 13 -> 17 -> 11 -> 21 -> 12 -> 27 -> 31 -> 24 -> 2 -> 4 -> 28 -> 25 -> 40 -> 23 -> 34 -> 16 -> 30 -> 19 -> 10 -> 15 -> 41 -> 3 -> 45 -> 44 -> 38 -> 43 -> 26 -> 36 -> 18 -> 0`  
+
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | TIMEOUT | 30.0m | - | - | - | - | - |
+| tsp_bb_26_07_06 | TIMEOUT | 30.0m | - | - | - | - | - |
+
+**Tours found:**
+- **Concorde (reference):** `0 -> 1 -> 47 -> 14 -> 42 -> 20 -> 32 -> 29 -> 22 -> 8 -> 9 -> 39 -> 35 -> 33 -> 5 -> 7 -> 46 -> 6 -> 37 -> 13 -> 17 -> 11 -> 21 -> 12 -> 27 -> 31 -> 24 -> 2 -> 4 -> 28 -> 25 -> 40 -> 23 -> 34 -> 16 -> 30 -> 19 -> 10 -> 15 -> 41 -> 3 -> 45 -> 44 -> 38 -> 43 -> 26 -> 36 -> 18 -> 0` cost=11461
+
+---
+
+## 37. `data/classic/tsplib/eil51.tsp` (n=51)
+
+**Concorde optimal cost:** 426  
+**Concorde time:** 54ms  
+
+**Concorde (reference) tour:** `0 -> 21 -> 7 -> 25 -> 30 -> 27 -> 2 -> 35 -> 34 -> 19 -> 1 -> 28 -> 20 -> 15 -> 49 -> 33 -> 29 -> 8 -> 48 -> 9 -> 38 -> 32 -> 44 -> 14 -> 43 -> 41 -> 39 -> 18 -> 40 -> 12 -> 24 -> 13 -> 23 -> 42 -> 6 -> 22 -> 47 -> 5 -> 26 -> 50 -> 45 -> 11 -> 46 -> 17 -> 3 -> 16 -> 36 -> 4 -> 37 -> 10 -> 31 -> 0`  
+
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | TIMEOUT | 30.0m | - | - | - | - | - |
+| tsp_bb_26_07_06 | TIMEOUT | 30.0m | - | - | - | - | - |
+
+**Tours found:**
+- **Concorde (reference):** `0 -> 21 -> 7 -> 25 -> 30 -> 27 -> 2 -> 35 -> 34 -> 19 -> 1 -> 28 -> 20 -> 15 -> 49 -> 33 -> 29 -> 8 -> 48 -> 9 -> 38 -> 32 -> 44 -> 14 -> 43 -> 41 -> 39 -> 18 -> 40 -> 12 -> 24 -> 13 -> 23 -> 42 -> 6 -> 22 -> 47 -> 5 -> 26 -> 50 -> 45 -> 11 -> 46 -> 17 -> 3 -> 16 -> 36 -> 4 -> 37 -> 10 -> 31 -> 0` cost=426
+
+---
+
+## 38. `data/classic/tsplib/berlin52.tsp` (n=52)
+
+**Concorde optimal cost:** 7542  
+**Concorde time:** 52ms  
+
+**Concorde (reference) tour:** `0 -> 48 -> 31 -> 44 -> 18 -> 40 -> 7 -> 8 -> 9 -> 42 -> 32 -> 50 -> 10 -> 51 -> 13 -> 12 -> 46 -> 25 -> 26 -> 27 -> 11 -> 24 -> 3 -> 5 -> 14 -> 4 -> 23 -> 47 -> 37 -> 36 -> 39 -> 38 -> 35 -> 34 -> 33 -> 43 -> 45 -> 15 -> 28 -> 49 -> 19 -> 22 -> 29 -> 1 -> 6 -> 41 -> 20 -> 16 -> 2 -> 17 -> 30 -> 21 -> 0`  
+
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | TIMEOUT | 30.0m | - | - | - | - | - |
+| tsp_bb_26_07_06 | TIMEOUT | 30.0m | - | - | - | - | - |
+
+**Tours found:**
+- **Concorde (reference):** `0 -> 48 -> 31 -> 44 -> 18 -> 40 -> 7 -> 8 -> 9 -> 42 -> 32 -> 50 -> 10 -> 51 -> 13 -> 12 -> 46 -> 25 -> 26 -> 27 -> 11 -> 24 -> 3 -> 5 -> 14 -> 4 -> 23 -> 47 -> 37 -> 36 -> 39 -> 38 -> 35 -> 34 -> 33 -> 43 -> 45 -> 15 -> 28 -> 49 -> 19 -> 22 -> 29 -> 1 -> 6 -> 41 -> 20 -> 16 -> 2 -> 17 -> 30 -> 21 -> 0` cost=7542
+
+---
+
+## 39. `data/classic/tsplib/brazil58.tsp` (n=58)
+
+**Concorde optimal cost:** 25395  
+**Concorde time:** 88ms  
+
+**Concorde (reference) tour:** `0 -> 29 -> 12 -> 39 -> 24 -> 8 -> 31 -> 19 -> 52 -> 49 -> 3 -> 7 -> 21 -> 15 -> 41 -> 37 -> 30 -> 6 -> 10 -> 38 -> 20 -> 35 -> 16 -> 25 -> 18 -> 5 -> 27 -> 13 -> 36 -> 14 -> 33 -> 45 -> 55 -> 44 -> 32 -> 28 -> 2 -> 47 -> 54 -> 53 -> 1 -> 40 -> 34 -> 9 -> 51 -> 50 -> 46 -> 48 -> 42 -> 26 -> 4 -> 22 -> 11 -> 56 -> 23 -> 57 -> 43 -> 17 -> 0`  
+
+### Results
+
+| Solver | Cost | Time | Nodes Created | Nodes Expanded | Pruned(Bound) | Pruned(Infeas) | Match Ref |
+|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | TIMEOUT | 30.0m | - | - | - | - | - |
+| tsp_bb_26_07_06 | TIMEOUT | 30.0m | - | - | - | - | - |
+
+**Tours found:**
+- **Concorde (reference):** `0 -> 29 -> 12 -> 39 -> 24 -> 8 -> 31 -> 19 -> 52 -> 49 -> 3 -> 7 -> 21 -> 15 -> 41 -> 37 -> 30 -> 6 -> 10 -> 38 -> 20 -> 35 -> 16 -> 25 -> 18 -> 5 -> 27 -> 13 -> 36 -> 14 -> 33 -> 45 -> 55 -> 44 -> 32 -> 28 -> 2 -> 47 -> 54 -> 53 -> 1 -> 40 -> 34 -> 9 -> 51 -> 50 -> 46 -> 48 -> 42 -> 26 -> 4 -> 22 -> 11 -> 56 -> 23 -> 57 -> 43 -> 17 -> 0` cost=25395
+
+---
+
+
+## Summary
+
+| Solver | Solved | Timeout | Error | Wrong Cost | Total Time | Avg Time | Avg Nodes | Total Nodes |
+|---|---|---|---|---|---|---|---|---|
+| tsp_bb_26_07_02 | 30 | 9 | 0 | 0 | 6.6m | 13.1s | 6477328 | 194319825 |
+| tsp_bb_26_07_06 | 30 | 9 | 0 | 0 | 5.0m | 9.9s | 2848695 | 85460847 |
+
+### Cross-Version Speedup
+
+Speedup of each solver relative to the first (baseline) solver, computed from total solve time over all instances.
+
+| Solver | Total Time | Speedup vs Baseline | Avg Nodes | Node Ratio |
+|---|---|---|---|---|
+| tsp_bb_26_07_02 | 6.6m | 1.00x | 6477328 | 1.00x |
+| tsp_bb_26_07_06 | 5.0m | 1.32x | 2848695 | 0.44x |
+
+### Per-Instance Results Matrix
+
+| # | Instance | n | Concorde Cost | tsp_bb_26_07_02 Cost | tsp_bb_26_07_02 Time | tsp_bb_26_07_06 Cost | tsp_bb_26_07_06 Time |
+|---|---|---|---|---|---|---|---|
+| 1 | `examples/random/complete/rnd-01-complete-n4.txt` | 4 | 45 | 45 | 3ms | 45 | 3ms |
+| 2 | `examples/random/complete/rnd-03-complete-n4.txt` | 4 | 102 | 102 | 3ms | 102 | 3ms |
+| 3 | `examples/five-city.tsp` | 5 | 26 | 26 | 3ms | 26 | 3ms |
+| 4 | `examples/five-city.txt` | 5 | 26 | 26 | 2ms | 26 | 3ms |
+| 5 | `examples/converted/five-node-euc.txt` | 5 | 8 | 8 | 3ms | 8 | 3ms |
+| 6 | `examples/converted/five-node-explicit.txt` | 5 | 26 | 26 | 3ms | 26 | 3ms |
+| 7 | `examples/random/sparse/rnd-01-sparse-n5.txt` | 5 | - | 110 | 3ms | 110 | 3ms |
+| 8 | `examples/random/complete/rnd-02-complete-n5.txt` | 5 | 136 | 136 | 3ms | 136 | 3ms |
+| 9 | `examples/random/complete/rnd-04-complete-n5.txt` | 5 | 88 | 88 | 3ms | 88 | 3ms |
+| 10 | `examples/random/complete/rnd-06-complete-n5.txt` | 5 | 51 | 51 | 3ms | 51 | 3ms |
+| 11 | `examples/random/sparse/rnd-04-sparse-n6.txt` | 6 | - | 115 | 3ms | 115 | 3ms |
+| 12 | `examples/random/sparse/rnd-05-sparse-n6.txt` | 6 | - | 100 | 3ms | 100 | 3ms |
+| 13 | `examples/random/sparse/rnd-02-sparse-n7.txt` | 7 | - | 196 | 4ms | 196 | 3ms |
+| 14 | `examples/random/sparse/rnd-03-sparse-n7.txt` | 7 | - | 86 | 4ms | 86 | 4ms |
+| 15 | `examples/random/complete/rnd-05-complete-n7.txt` | 7 | 74 | 74 | 3ms | 74 | 3ms |
+| 16 | `examples/random/sparse/rnd-06-sparse-n7.txt` | 7 | - | 199 | 4ms | 199 | 3ms |
+| 17 | `examples/random/complete/rnd-08-complete-n7.txt` | 7 | 73 | 73 | 4ms | 73 | 3ms |
+| 18 | `examples/random/complete/rnd-10-complete-n7.txt` | 7 | 49 | 49 | 3ms | 49 | 4ms |
+| 19 | `examples/random/complete/rnd-07-complete-n8.txt` | 8 | 64 | 64 | 4ms | 64 | 4ms |
+| 20 | `examples/random/complete/rnd-09-complete-n8.txt` | 8 | 93 | 93 | 4ms | 93 | 4ms |
+| 21 | `data/classic/tsplib/burma14.tsp` | 14 | 3323 | 3323 | 38ms | 3323 | 44ms |
+| 22 | `data/classic/tsplib/ulysses16.tsp` | 16 | 6859 | 6859 | 16.1s | 6859 | 14.7s |
+| 23 | `data/classic/tsplib/gr17.tsp` | 17 | 2085 | 2085 | 2.2s | 2085 | 2.1s |
+| 24 | `data/classic/tsplib/gr21.tsp` | 21 | 2707 | 2707 | 78ms | 2707 | 63ms |
+| 25 | `data/classic/tsplib/ulysses22.tsp` | 22 | 7013 | TO | 30.0m | TO | 30.0m |
+| 26 | `data/classic/tsplib/gr24.tsp` | 24 | 1272 | 1272 | 1.2s | 1272 | 810ms |
+| 27 | `data/classic/tsplib/fri26.tsp` | 26 | 937 | 937 | 1.9s | 937 | 2.1s |
+| 28 | `data/classic/tsplib/bayg29.tsp` | 29 | 1610 | 1610 | 27.8s | 1610 | 20.6s |
+| 29 | `data/classic/tsplib/bays29.tsp` | 29 | 2020 | 2020 | 5.7m | 2020 | 4.3m |
+| 30 | `data/classic/national/wi29.tsp` | 29 | 27603 | 27603 | 201ms | 27603 | 666ms |
+| 31 | `data/classic/national/dj38.tsp` | 38 | 6656 | 6656 | 115ms | 6656 | 119ms |
+| 32 | `data/classic/tsplib/dantzig42.tsp` | 42 | 699 | TO | 30.0m | TO | 30.0m |
+| 33 | `data/classic/tsplib/swiss42.tsp` | 42 | 1273 | TO | 30.0m | TO | 30.0m |
+| 34 | `data/classic/tsplib/att48.tsp` | 48 | 10628 | TO | 30.0m | TO | 30.0m |
+| 35 | `data/classic/tsplib/gr48.tsp` | 48 | 5046 | TO | 30.0m | TO | 30.0m |
+| 36 | `data/classic/tsplib/hk48.tsp` | 48 | 11461 | TO | 30.0m | TO | 30.0m |
+| 37 | `data/classic/tsplib/eil51.tsp` | 51 | 426 | TO | 30.0m | TO | 30.0m |
+| 38 | `data/classic/tsplib/berlin52.tsp` | 52 | 7542 | TO | 30.0m | TO | 30.0m |
+| 39 | `data/classic/tsplib/brazil58.tsp` | 58 | 25395 | TO | 30.0m | TO | 30.0m |

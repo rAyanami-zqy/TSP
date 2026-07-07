@@ -465,56 +465,98 @@ std::vector<BranchBoundSolver::Edge> BranchBoundSolver::bpPartition(
     std::vector<Edge> B_set;
     forbid_trees.clear();
 
-    // 在临时副本上工作，不影响原始节点状态。
     PartialSol work_node = node;
     std::vector<Edge> work_candidates = branch_candidates;
     OneTree work_tree = current_tree;
 
     while (true) {
-        // 在当前 1-tree 中找权重最小且未固定的边。
-        // 当前可预排序1-tree中未定的边，且未定边可先单独存储，由每次1-tree计算得出不需再次遍历。
-        const Edge* best = nullptr;
+        // ── 选边：度数优先（仅取最小权重的一条），然后全局最小 fallback ──
+        // 每轮最多测试 2 条边，控制 bpPartition 的 per-iteration 成本。
+        const Edge* deg_best = nullptr;
+        const Edge* global_best = nullptr;
+
+        // 度数优先：max-degree 顶点的最小权重未决边。
+        int branch_vertex = -1;
+        int max_deg = 2;
+        for (int v = 0; v < n_; ++v) {
+            if (work_tree.degree[static_cast<std::size_t>(v)] > max_deg) {
+                max_deg = work_tree.degree[static_cast<std::size_t>(v)];
+                branch_vertex = v;
+            }
+        }
+        if (branch_vertex >= 0) {
+            for (const Edge& e : work_tree.edges) {
+                if (e.u != branch_vertex && e.v != branch_vertex) continue;
+                const std::size_t eid = edgeId(e.u, e.v);
+                if (work_node.forced[eid]) continue;
+                if (work_node.forbidden[eid]) continue;
+                if (!deg_best || e.w < deg_best->w) deg_best = &e;
+            }
+        }
+
+        // 全局最小权重未决边（不含度数边，避免重复）。
         for (const Edge& e : work_tree.edges) {
             const std::size_t eid = edgeId(e.u, e.v);
             if (work_node.forced[eid]) continue;
             if (work_node.forbidden[eid]) continue;
-            if (!best || e.w < best->w) best = &e;
+            if (deg_best && e.u == deg_best->u && e.v == deg_best->v) continue;
+            if (!global_best || e.w < global_best->w) global_best = &e;
         }
 
-        if (!best) break;
+        if (!deg_best && !global_best) break;
 
-        Edge chosen = *best;
-        const std::size_t eid = edgeId(chosen.u, chosen.v);
+        // 测试函数：禁止边 e，重算 1-tree，返回是否关键（cost ≤ best_cost_）。
+        auto test = [&](const Edge& e) -> int {
+            // 返回 1=关键, 0=不可行, -1=安全
+            const std::size_t eid = edgeId(e.u, e.v);
+            work_node.forbidden[eid] = 1;
 
-        // 临时禁止这条边。
-        work_node.forbidden[eid] = 1;
+            std::vector<Edge> wc = work_candidates;
+            auto it = std::find_if(wc.begin(), wc.end(),
+                [&](const Edge& x) {
+                    return (x.u == e.u && x.v == e.v)
+                        || (x.u == e.v && x.v == e.u);
+                });
+            if (it != wc.end()) wc.erase(it);
 
-        // 从候选集中移除。
-        auto it = std::find_if(work_candidates.begin(), work_candidates.end(),
-            [&](const Edge& e) {
-                return (e.u == chosen.u && e.v == chosen.v)
-                    || (e.u == chosen.v && e.v == chosen.u);
-            });
-        if (it != work_candidates.end()) {
-            work_candidates.erase(it);
+            unsigned char sm = 0;
+            if (!work_node.candidate_mask.empty()) {
+                sm = work_node.candidate_mask[eid];
+                work_node.candidate_mask[eid] = 0;
+            }
+
+            OneTree t = computeOneTree(work_node, wc);
+
+            if (!work_node.candidate_mask.empty()) {
+                work_node.candidate_mask[eid] = sm;
+            }
+
+            if (!t.feasible) { work_node.forbidden[eid] = 0; return 0; }
+            if (t.cost > best_cost_ + kEps) { work_node.forbidden[eid] = 0; return -1; }
+
+            // 关键边：保留 forbidden，更新持久状态。
+            B_set.push_back(e);
+            forbid_trees.push_back(std::move(t));
+            work_tree = forbid_trees.back();
+            work_candidates = std::move(wc);
+            return 1;
+        };
+
+        // 先测度数边。
+        if (deg_best) {
+            int r = test(*deg_best);
+            if (r == 1) continue;      // 关键 → 继续下一轮
+            // r==0 或 -1：度数边不可用，测全局边
         }
 
-        // 同步更新掩码（computeOneTree 依赖它过滤 root edges）。
-        if (!work_node.candidate_mask.empty()) {
-            work_node.candidate_mask[eid] = 0;
+        // 测全局最小边。
+        if (global_best) {
+            int r = test(*global_best);
+            if (r == 1) continue;      // 关键 → 继续下一轮
+            // 全局最小边安全 → 所有更重的边也安全 → 停止
         }
 
-        // 重算 1-tree。
-        OneTree new_tree = computeOneTree(work_node, work_candidates);
-
-        // 若下界超出当前最优，停止；该边及剩余候选边归入 A 集（隐式）。
-        if (!new_tree.feasible || new_tree.cost > best_cost_ + kEps) {
-            break;
-        }
-
-        B_set.push_back(chosen);
-        forbid_trees.push_back(new_tree);
-        work_tree = std::move(new_tree);
+        break;
     }
 
     return B_set;
@@ -680,15 +722,20 @@ void BranchBoundSolver::search(PartialSol& node, std::vector<Edge>& branch_candi
         }
     };
 
-    // 链式分支递归 lambda。
+    // Step 5: 链式分支 —— force 节点递归（重做 BP 划分），forbid 节点沿链走（免重算）。
+    //   完备性：BP 保证至少一条 B 集边属于最优解。
+    //     Force  B[i] → 覆盖 B[i] ∈ opt
+    //     Forbid B[i] → 覆盖 B[i] ∉ opt，但 B[i+1..k] 中至少一条 ∈ opt
+    //   Forbid 链到底（所有 B 边均被禁止）⇒ 与 BP 保证矛盾 ⇒ 死胡同。
+    //   forbid 节点不调用 search()，使用 bpPartition 预计算的 forbid_trees[i] 做剪枝。
     std::function<void(int)> chain_branch = [&](int idx) {
         if (idx >= static_cast<int>(B_set.size())) {
-            return;  // B 集所有边均被禁止，死胡同。
+            return;  // 所有 B 边均被禁止，死胡同
         }
 
         const Edge branch_edge = B_set[static_cast<std::size_t>(idx)];
 
-        // ── Force 分支：强制选择该边，进入完整 BP 递归 ──
+        // ── Force B[i]：强制选择，进入完整 BP 递归 ──
         {
             LevelChanges flag_changes;
             if (apply_flag(branch_edge, true, flag_changes)) {
@@ -713,7 +760,7 @@ void BranchBoundSolver::search(PartialSol& node, std::vector<Edge>& branch_candi
             }
         }
 
-        // ── Forbid 分支：禁止该边，沿 B 集链继续 ──
+        // ── Forbid B[i]：禁止，沿链继续（不重新 BP 划分）──
         {
             LevelChanges flag_changes;
             if (apply_flag(branch_edge, false, flag_changes)) {
@@ -748,9 +795,7 @@ void BranchBoundSolver::search(PartialSol& node, std::vector<Edge>& branch_candi
                 if (feasible) {
                     ++result_.stats.nodes_created;
 
-                    // 使用 bpPartition 预计算的 forbid_trees[idx]：
-                    // forbid_trees[idx] 就是在当前节点禁止 B_set[0..idx]
-                    // 后重算的 1-tree，无需再调用 computeOneTree。
+                    // 用 bpPartition 预计算的 forbid_trees[idx] 做下界剪枝。
                     const OneTree& forbid_tree = forbid_trees[static_cast<std::size_t>(idx)];
                     if (shouldPrune(forbid_tree.cost, best_cost_)) {
                         branch_candidates = std::move(original_candidates);
@@ -760,6 +805,7 @@ void BranchBoundSolver::search(PartialSol& node, std::vector<Edge>& branch_candi
                         return;
                     }
 
+                    // 沿链继续，不调用 search()（forbid 节点不做 BP 划分）。
                     chain_branch(idx + 1);
                 } else {
                     ++result_.stats.nodes_pruned_infeasible;
