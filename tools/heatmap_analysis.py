@@ -716,12 +716,14 @@ def plot_inclusive_time_share(profile: Profile, funcs: list[FunctionInfo],
     incl_pcts = [f.inclusive_pct for f in reversed(top)]
     y = list(range(len(names)))
     height = 0.38
+    y_lower = [yi - height / 2 for yi in y]
+    y_upper = [yi + height / 2 for yi in y]
 
     fig_h = max(6.0, len(top) * 0.36)
     fig, ax = plt.subplots(figsize=(13.5, fig_h))
-    ax.barh(y - height / 2, incl_pcts, height=height, color="#9ecae1",
+    ax.barh(y_lower, incl_pcts, height=height, color="#9ecae1",
             edgecolor="#333333", linewidth=0.25, label="inclusive")
-    ax.barh(y + height / 2, self_pcts, height=height, color="#fb6a4a",
+    ax.barh(y_upper, self_pcts, height=height, color="#fb6a4a",
             edgecolor="#333333", linewidth=0.25, label="self")
     ax.set_yticks(y)
     ax.set_yticklabels(names, fontfamily="monospace", fontsize=8)
