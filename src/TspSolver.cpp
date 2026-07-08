@@ -463,11 +463,13 @@ std::vector<BranchBoundSolver::Edge> BranchBoundSolver::bpPartition(
     std::vector<OneTree>& forbid_trees)
 {
     std::vector<Edge> B_set;
+    B_set.reserve(current_tree.edges.size());
     forbid_trees.clear();
+    forbid_trees.reserve(current_tree.edges.size());
 
     PartialSol work_node = node;
     std::vector<Edge> work_candidates = branch_candidates;
-    OneTree work_tree = current_tree;
+    const OneTree* work_tree = &current_tree;
 
     while (true) {
         // ── 选边：从度数违规顶点取最小权重未决边 ──
@@ -477,13 +479,13 @@ std::vector<BranchBoundSolver::Edge> BranchBoundSolver::bpPartition(
         int branch_vertex = -1;
         int max_deg = 2;
         for (int v = 0; v < n_; ++v) {
-            if (work_tree.degree[static_cast<std::size_t>(v)] > max_deg) {
-                max_deg = work_tree.degree[static_cast<std::size_t>(v)];
+            if (work_tree->degree[static_cast<std::size_t>(v)] > max_deg) {
+                max_deg = work_tree->degree[static_cast<std::size_t>(v)];
                 branch_vertex = v;
             }
         }
         if (branch_vertex >= 0) {
-            for (const Edge& e : work_tree.edges) {
+            for (const Edge& e : work_tree->edges) {
                 if (e.u != branch_vertex && e.v != branch_vertex) continue;
                 const std::size_t eid = edgeId(e.u, e.v);
                 if (work_node.forced[eid]) continue;
@@ -495,17 +497,16 @@ std::vector<BranchBoundSolver::Edge> BranchBoundSolver::bpPartition(
         if (!deg_best) break;
 
         // 测试函数：选中的边先进入 B；若 forbid 后仍可行且未被 bound 剪枝，则继续划分。
-        auto test = [&](const Edge& e) -> bool {
+        auto test = [&](Edge e) -> bool {
             const std::size_t eid = edgeId(e.u, e.v);
             work_node.forbidden[eid] = 1;
 
-            std::vector<Edge> wc = work_candidates;
-            auto it = std::find_if(wc.begin(), wc.end(),
+            auto it = std::find_if(work_candidates.begin(), work_candidates.end(),
                 [&](const Edge& x) {
                     return (x.u == e.u && x.v == e.v)
                         || (x.u == e.v && x.v == e.u);
                 });
-            if (it != wc.end()) wc.erase(it);
+            if (it != work_candidates.end()) work_candidates.erase(it);
 
             unsigned char sm = 0;
             if (!work_node.candidate_mask.empty()) {
@@ -513,7 +514,7 @@ std::vector<BranchBoundSolver::Edge> BranchBoundSolver::bpPartition(
                 work_node.candidate_mask[eid] = 0;
             }
 
-            OneTree t = computeOneTree(work_node, wc);
+            OneTree t = computeOneTree(work_node, work_candidates);
 
             if (!work_node.candidate_mask.empty()) {
                 work_node.candidate_mask[eid] = sm;
@@ -541,8 +542,7 @@ std::vector<BranchBoundSolver::Edge> BranchBoundSolver::bpPartition(
             }
 
             // forbid 后仍可能包含改进解：保留 forbidden，更新持久状态后继续划分。
-            work_tree = saved_tree;
-            work_candidates = std::move(wc);
+            work_tree = &saved_tree;
             return true;
         };
 
@@ -733,8 +733,7 @@ void BranchBoundSolver::search(PartialSol& node, std::vector<Edge>& branch_candi
                 std::vector<Edge> original_candidates = branch_candidates;
                 std::vector<unsigned char> original_mask = node.candidate_mask;
 
-                std::vector<Edge> removed;
-                bool ok = buildBranchCandidates(node, branch_candidates, removed);
+                bool ok = buildBranchCandidates(node, branch_candidates);
                 if (ok) {
                     rebuild_mask(branch_candidates);
                     ++result_.stats.nodes_created;
@@ -1011,8 +1010,7 @@ std::vector<int> BranchBoundSolver::buildTour(const std::vector<Edge>& edges) co
     return tour;
 }
 
-bool BranchBoundSolver::buildBranchCandidates(const PartialSol& node,std::vector<Edge>& branch_candidates,
-                                             std::vector<Edge>& removed) const
+bool BranchBoundSolver::buildBranchCandidates(const PartialSol& node,std::vector<Edge>& branch_candidates) const
 {
     // 利用节点中缓存的 forced_degree 和 forced 并查集，避免 O(n²) 扫描。
     // apply_flag 已保证：无 forced/forbidden 冲突、度数 ≤ 2、无子回路，
@@ -1029,8 +1027,7 @@ bool BranchBoundSolver::buildBranchCandidates(const PartialSol& node,std::vector
         dsu_root[static_cast<std::size_t>(v)] = r;
     }
 
-    // 过滤候选集：将被移除的边收集到 removed，保留的边压缩到 vector 前端。
-    removed.clear();
+    // 过滤候选集：将保留的边压缩到 vector 前端。
     std::size_t write = 0;
     for (std::size_t read = 0; read < branch_candidates.size(); ++read) {
         const Edge& e = branch_candidates[read];
@@ -1055,9 +1052,7 @@ bool BranchBoundSolver::buildBranchCandidates(const PartialSol& node,std::vector
             }
         }
 
-        if (remove) {
-            removed.push_back(e);
-        } else {
+        if (!remove) {
             if (write != read) {
                 branch_candidates[write] = branch_candidates[read];
             }

@@ -140,8 +140,7 @@ private:
     // 从 1-tree 的边集合构造访问顺序的顶点序列；如果无法构成合法回路则返回空。
     std::vector<int> buildTour(const std::vector<Edge>& edges) const;
     // 收集当前节点尚未决定且实际存在的边，作为本节点分支候选集。
-    bool buildBranchCandidates(const PartialSol& node,std::vector<Edge>& branch_candidates,
-                               std::vector<Edge>& removed) const;
+    bool buildBranchCandidates(const PartialSol& node,std::vector<Edge>& branch_candidates) const;
     // 判断当前节点的下界是否已经不优于已知最优可行解，可以直接剪枝。
     bool shouldPrune(double bound, double best_cost) const;
     // 最近邻 + 2-opt + LK，生成一个可行上界，帮助早剪枝。

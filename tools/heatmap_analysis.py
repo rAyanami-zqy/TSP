@@ -1,90 +1,259 @@
 #!/usr/bin/env python3
 """
-Function runtime overhead chart for the tsp_bb solver.
+Function time-share analysis for the tsp_bb solver.
 
-Runs the solver under valgrind callgrind, parses the profile, and generates
-a function overhead bar chart — showing which functions consume the most CPU time.
+The profiler uses valgrind/callgrind to get deterministic instruction counts
+per function. Because callgrind does not measure native per-function seconds,
+this script optionally runs the solver once without valgrind, then scales each
+function's callgrind percentage by that native elapsed time. The reported
+seconds are therefore estimated native wall-time contributions; the percentages
+come directly from callgrind Ir counts.
 
-Usage:
+Typical usage:
   python3 tools/heatmap_analysis.py data/classic/tsplib/burma14.tsp --profile
+  python3 tools/heatmap_analysis.py data/classic/tsplib/burma14.tsp \
+      --load-profile docs/heatmap/burma14
 
-Output: docs/heatmap/<instance>/function_overhead.png
-
-Dependencies: pip install matplotlib numpy (valgrind required for profiling)
+Outputs:
+  docs/heatmap/<instance>/function_time_breakdown.csv
+  docs/heatmap/<instance>/report.md
+  docs/heatmap/<instance>/01_self_time_share.png
+  docs/heatmap/<instance>/02_inclusive_time_share.png
+  docs/heatmap/<instance>/03_function_metric_heatmap.png
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
+import json
 import os
 import re
+import shutil
 import subprocess
 import sys
-from collections import defaultdict
-from typing import Optional
+import time
+from dataclasses import dataclass, field
+from typing import Iterable
 
-import numpy as np
-
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 
 # ---------------------------------------------------------------------------
-# Project paths
+# Project paths and output names
 # ---------------------------------------------------------------------------
+
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DEFAULT_SOLVER = os.path.join(PROJECT_ROOT, "build", "tsp_bb")
-OUT_DIR = os.path.join(PROJECT_ROOT, "docs", "heatmap")
+DEFAULT_OUT_ROOT = os.path.join(PROJECT_ROOT, "docs", "heatmap")
 
 CALLGRIND_OUT = "callgrind.out"
-CALLGRIND_ANNOTATE = "callgrind_annotate.txt"
-CALLGRIND_FLAT = "callgrind_flat.txt"
+CALLGRIND_SELF = "callgrind_self.txt"
+CALLGRIND_INCLUSIVE = "callgrind_inclusive.txt"
+CALLGRIND_TREE = "callgrind_tree.txt"
+METADATA_JSON = "profile_metadata.json"
+BREAKDOWN_CSV = "function_time_breakdown.csv"
+REPORT_MD = "report.md"
+
+# Legacy names from older versions of this tool.
+LEGACY_CALLGRIND_ANNOTATE = "callgrind_annotate.txt"
+LEGACY_CALLGRIND_FLAT = "callgrind_flat.txt"
 
 
 # ---------------------------------------------------------------------------
 # Data structures
 # ---------------------------------------------------------------------------
 
-class CallEdge:
-    """A directed edge in the call graph: caller → callee."""
-    __slots__ = ("caller", "callee", "ir_count")
-    def __init__(self, caller: str, callee: str, ir_count: int = 0):
-        self.caller = caller
-        self.callee = callee
-        self.ir_count = ir_count
+@dataclass
+class SolverRun:
+    elapsed_sec: float | None = None
+    returncode: int | None = None
+    stdout: str = ""
+    stderr: str = ""
+    stats: dict[str, str] = field(default_factory=dict)
 
 
+@dataclass
 class FunctionInfo:
-    """Summary info for one function."""
-    __slots__ = ("name", "file", "total_ir", "self_ir", "pct")
-    def __init__(self, name: str = "", file: str = "",
-                 total_ir: int = 0, self_ir: int = 0, pct: float = 0.0):
-        self.name = name
-        self.file = file
-        self.total_ir = total_ir   # inclusive Ir (incl. children)
-        self.self_ir = self_ir     # exclusive Ir (self only)
-        self.pct = pct
+    name: str
+    file: str = "???"
+    kind: str = "other"
+    self_ir: int = 0
+    inclusive_ir: int = 0
+    self_pct: float = 0.0
+    inclusive_pct: float = 0.0
+    calls: int = 0
+
+    def display_name(self, max_len: int = 72) -> str:
+        return shorten_func(self.name, max_len)
 
 
-class CallGraph:
-    """Parsed call graph from callgrind."""
-    def __init__(self):
-        self.edges: list[CallEdge] = []
-        self.functions: dict[str, FunctionInfo] = {}
-        self.total_ir: int = 0
-        self.program_total_ir: int = 0  # from PROGRAM TOTALS line
+@dataclass
+class Profile:
+    functions: dict[str, FunctionInfo] = field(default_factory=dict)
+    program_total_ir: int = 0
+    native_elapsed_sec: float | None = None
+    callgrind_elapsed_sec: float | None = None
+    solver_stats: dict[str, str] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
-# Profiling collection
+# Small helpers
 # ---------------------------------------------------------------------------
 
-def run_solver_callgrind(instance_path: str, solver_binary: str,
-                         strategy: str, timeout: int, out_dir: str) -> str:
-    """Run tsp_bb under valgrind callgrind. Returns stderr (debug log)."""
+def eprint(*args, **kwargs) -> None:
+    print(*args, file=sys.stderr, **kwargs)
+
+
+def fmt_seconds(value: float | None) -> str:
+    if value is None:
+        return "-"
+    if value < 0.001:
+        return f"{value * 1_000_000:.1f}us"
+    if value < 1:
+        return f"{value * 1000:.1f}ms"
+    if value < 60:
+        return f"{value:.3f}s"
+    return f"{value / 60:.2f}m"
+
+
+def fmt_ir(value: int) -> str:
+    if value >= 1_000_000_000:
+        return f"{value / 1_000_000_000:.2f}B"
+    if value >= 1_000_000:
+        return f"{value / 1_000_000:.2f}M"
+    if value >= 1_000:
+        return f"{value / 1_000:.1f}K"
+    return str(value)
+
+
+def pct_to_seconds(percent: float, native_elapsed: float | None) -> float | None:
+    if native_elapsed is None:
+        return None
+    return native_elapsed * percent / 100.0
+
+
+def safe_pct(ir_count: int, total_ir: int) -> float:
+    return (ir_count / total_ir * 100.0) if total_ir > 0 else 0.0
+
+
+def read_instance_dimension(path: str) -> int | None:
+    try:
+        with open(path) as f:
+            text = f.read(8192)
+    except OSError:
+        return None
+
+    m = re.search(r"(?im)^\s*DIMENSION\s*:?\s*(\d+)\s*$", text)
+    if m:
+        return int(m.group(1))
+
+    tokens = text.split()
+    if tokens and tokens[0].isdigit():
+        return int(tokens[0])
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Solver command and profiling collection
+# ---------------------------------------------------------------------------
+
+def solver_help_text(solver_binary: str) -> str:
+    try:
+        result = subprocess.run(
+            [solver_binary, "--help"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except Exception:
+        return ""
+    return (result.stdout or "") + (result.stderr or "")
+
+
+def build_solver_cmd(instance_path: str, solver_binary: str, exact_max_n: int,
+                     strategy: str | None, debug: bool = False) -> list[str]:
+    help_text = solver_help_text(solver_binary)
+    cmd = [solver_binary]
+    if "--branch-strategy" in help_text and strategy:
+        cmd += ["--branch-strategy", strategy]
+    if "--exact-max-n" in help_text:
+        cmd += ["--exact-max-n", str(exact_max_n)]
+    if debug and "--debug" in help_text:
+        cmd += ["--debug", "--debug-interval", "1000000"]
+    cmd.append(instance_path)
+    return cmd
+
+
+def parse_solver_stats(stdout: str, stderr: str) -> dict[str, str]:
+    text = stdout + "\n" + stderr
+    stats: dict[str, str] = {}
+    patterns = {
+        "cost": r"Optimal cost:\s*([^\n]+)",
+        "nodes_created": r"Nodes created:\s*([^\n]+)",
+        "nodes_expanded": r"Nodes expanded:\s*([^\n]+)",
+        "pruned_bound": r"Pruned by bound:\s*([^\n]+)",
+        "pruned_infeasible": r"Pruned infeasible:\s*([^\n]+)",
+        "root_lower_bound": r"Root lower bound:\s*([^\n]+)",
+        "initial_upper_bound": r"Initial upper bound:\s*([^\n]+)",
+        "method": r"Method:\s*([^\n]+)",
+    }
+    for key, pattern in patterns.items():
+        m = re.search(pattern, text)
+        if m:
+            stats[key] = m.group(1).strip()
+    return stats
+
+
+def run_native_solver(instance_path: str, solver_binary: str, exact_max_n: int,
+                      strategy: str | None, timeout: int) -> SolverRun:
+    cmd = build_solver_cmd(instance_path, solver_binary, exact_max_n, strategy)
+    eprint("  native timing ...", end=" ", flush=True)
+    started = time.perf_counter()
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        elapsed = time.perf_counter() - started
+        eprint(f"TIMEOUT after {fmt_seconds(elapsed)}")
+        return SolverRun(
+            elapsed_sec=elapsed,
+            returncode=None,
+            stdout=exc.stdout or "",
+            stderr=exc.stderr or "",
+        )
+    elapsed = time.perf_counter() - started
+    eprint(f"done ({fmt_seconds(elapsed)})")
+    if result.returncode != 0:
+        tail = (result.stderr or result.stdout)[-800:]
+        raise SystemExit(f"native solver failed with exit {result.returncode}:\n{tail}")
+    return SolverRun(
+        elapsed_sec=elapsed,
+        returncode=result.returncode,
+        stdout=result.stdout,
+        stderr=result.stderr,
+        stats=parse_solver_stats(result.stdout, result.stderr),
+    )
+
+
+def require_tool(name: str) -> str:
+    path = shutil.which(name)
+    if not path:
+        raise SystemExit(f"required tool not found on PATH: {name}")
+    return path
+
+
+def run_callgrind(instance_path: str, solver_binary: str, exact_max_n: int,
+                  strategy: str | None, timeout: int, out_dir: str) -> float:
+    require_tool("valgrind")
+    require_tool("callgrind_annotate")
+
     os.makedirs(out_dir, exist_ok=True)
     cg_out = os.path.join(out_dir, CALLGRIND_OUT)
-
+    solver_cmd = build_solver_cmd(instance_path, solver_binary, exact_max_n,
+                                  strategy, debug=False)
     cmd = [
         "valgrind",
         "--tool=callgrind",
@@ -92,687 +261,661 @@ def run_solver_callgrind(instance_path: str, solver_binary: str,
         "--dump-instr=yes",
         "--collect-jumps=yes",
         "--",
-        solver_binary,
-        "--branch-strategy", strategy,
-        "--exact-max-n", "100",
-        "--debug",
-        "--debug-interval", "1",
-        instance_path,
+        *solver_cmd,
     ]
-    print(f"  callgrind running ...", file=sys.stderr, end=" ", flush=True)
+
+    eprint("  callgrind profiling ...", end=" ", flush=True)
+    started = time.perf_counter()
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True,
-                                timeout=timeout * 3)
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout * 3,
+        )
     except subprocess.TimeoutExpired:
-        print("TIMEOUT", file=sys.stderr)
-        return ""
+        elapsed = time.perf_counter() - started
+        eprint(f"TIMEOUT after {fmt_seconds(elapsed)}")
+        raise SystemExit("callgrind profiling timed out")
+    elapsed = time.perf_counter() - started
     if result.returncode != 0:
-        tail = result.stderr[-400:] if result.stderr else "(no output)"
-        print(f"FAILED (exit {result.returncode})", file=sys.stderr)
-        raise SystemExit(f"valgrind callgrind failed:\n{tail}")
-    print("done", file=sys.stderr)
+        tail = (result.stderr or result.stdout)[-1200:]
+        eprint(f"FAILED ({fmt_seconds(elapsed)})")
+        raise SystemExit(f"callgrind failed with exit {result.returncode}:\n{tail}")
+    eprint(f"done ({fmt_seconds(elapsed)})")
 
-    annotate_path = os.path.join(out_dir, CALLGRIND_ANNOTATE)
-    print(f"  callgrind_annotate (tree) ...", file=sys.stderr, end=" ", flush=True)
-    with open(annotate_path, "w") as af:
-        subprocess.run(
-            ["callgrind_annotate", "--auto=yes", "--inclusive=yes",
-             "--tree=both", cg_out],
-            stdout=af, stderr=subprocess.DEVNULL, timeout=60,
-        )
-    print("done", file=sys.stderr)
+    annotate_jobs = [
+        (CALLGRIND_SELF, ["callgrind_annotate", "--auto=yes", cg_out]),
+        (CALLGRIND_INCLUSIVE,
+         ["callgrind_annotate", "--auto=yes", "--inclusive=yes", cg_out]),
+        (CALLGRIND_TREE,
+         ["callgrind_annotate", "--auto=yes", "--inclusive=yes", "--tree=both", cg_out]),
+    ]
+    for filename, annotate_cmd in annotate_jobs:
+        eprint(f"  writing {filename} ...", end=" ", flush=True)
+        with open(os.path.join(out_dir, filename), "w") as out:
+            subprocess.run(
+                annotate_cmd,
+                stdout=out,
+                stderr=subprocess.DEVNULL,
+                timeout=120,
+                check=False,
+            )
+        eprint("done")
 
-    # Also generate a flat profile with self (exclusive) Ir
-    flat_path = os.path.join(out_dir, CALLGRIND_FLAT)
-    print(f"  callgrind_annotate (flat) ...", file=sys.stderr, end=" ", flush=True)
-    with open(flat_path, "w") as af:
-        subprocess.run(
-            ["callgrind_annotate", "--auto=yes", cg_out],
-            stdout=af, stderr=subprocess.DEVNULL, timeout=60,
-        )
-    print("done", file=sys.stderr)
+    return elapsed
 
-    return result.stderr if result.stderr else ""
+
+def save_metadata(out_dir: str, instance_path: str, solver_binary: str,
+                  strategy: str | None, exact_max_n: int,
+                  native_run: SolverRun | None,
+                  callgrind_elapsed_sec: float | None) -> None:
+    data = {
+        "instance": os.path.abspath(instance_path),
+        "solver": os.path.abspath(solver_binary),
+        "strategy": strategy,
+        "exact_max_n": exact_max_n,
+        "native_elapsed_sec": native_run.elapsed_sec if native_run else None,
+        "callgrind_elapsed_sec": callgrind_elapsed_sec,
+        "solver_stats": native_run.stats if native_run else {},
+    }
+    with open(os.path.join(out_dir, METADATA_JSON), "w") as f:
+        json.dump(data, f, indent=2, sort_keys=True)
+
+
+def load_metadata(profile_dir: str) -> dict:
+    path = os.path.join(profile_dir, METADATA_JSON)
+    if not os.path.exists(path):
+        return {}
+    with open(path) as f:
+        return json.load(f)
 
 
 # ---------------------------------------------------------------------------
-# Function name cleaning
+# Callgrind annotate parsing
 # ---------------------------------------------------------------------------
 
-def _clean_func_name(raw: str) -> str:
-    """Clean up callgrind-annotated function names.
-
-    Removes callgrind cycle markers ('2), ??? prefixes, and normalizes whitespace.
-    Also strips the leading '<' or '>' marker prefix if present.
-    """
+def clean_func_name(raw: str) -> str:
     name = raw.strip()
-    # Remove callgrind brace markers: *  func, < func, >   func  →  func
-    name = re.sub(r'^[<>]\s+', '', name)
-    # Remove leading ???: prefix (unknown ELF source indicator)
-    name = re.sub(r'^\?\?\?:', '', name)
-    # Remove cycle-number suffix like '2, '3 etc.
-    name = re.sub(r"'[0-9]+$", '', name)
-    # Collapse whitespace
-    name = re.sub(r'\s+', ' ', name).strip()
-    # Remove leading/trailing whitespace around colons
+    name = re.sub(r"^[<>*]\s+", "", name)
+    name = re.sub(r"^\?\?\?:", "", name)
+    name = re.sub(r"'[0-9]+$", "", name)
+    name = re.sub(r"\s+", " ", name).strip()
     return name
 
 
-def _clean_file(raw: str) -> str:
-    """Extract and shorten file path."""
-    raw = raw.strip()
-    # Remove square brackets if present
-    raw = re.sub(r'^\[|\]$', '', raw)
-    # Keep only the filename and line number
-    parts = raw.split("/")
-    if len(parts) >= 2:
-        return "/".join(parts[-2:])
-    return raw
+def clean_file(raw: str) -> str:
+    file_loc = raw.strip()
+    file_loc = re.sub(r"^\[|\]$", "", file_loc)
+    if not file_loc or file_loc == "???":
+        return "???"
+    parts = file_loc.split("/")
+    if len(parts) >= 3:
+        return "/".join(parts[-3:])
+    return file_loc
 
 
-def _shorten_func(name: str, max_len: int = 40) -> str:
-    """Shorten C++ qualified names for display.
-
-    Handles long template signatures by keeping the key method/function name
-    and collapsing type parameters.
-    """
+def shorten_func(name: str, max_len: int = 72) -> str:
     if len(name) <= max_len:
         return name
-
-    # Remove call count suffixes like " (18,322x)" — should already be
-    # stripped by _parse_func_info, but be defensive
-    name = re.sub(r'\s+\(\d[\d,]*x\)\s*$', '', name)
-
-    # Collapse all template arguments to <>
-    name = re.sub(r'<[^<>]*>', '<>', name)
-    # Handle nested templates
-    for _ in range(3):
-        name = re.sub(r'<[^<>]*<[^<>]*>[^<>]*>', '<>', name)
-
-    # Collapse parameter lists within lambdas
-    name = re.sub(r'\{lambda\([^)]*\)', '{lambda', name)
-
-    if len(name) <= max_len:
-        return name
-
-    # Try to find the most meaningful short name
-    parts = name.split("::")
+    short = re.sub(r"<[^<>]*>", "<>", name)
+    for _ in range(4):
+        short = re.sub(r"<[^<>]*<[^<>]*>[^<>]*>", "<>", short)
+    short = re.sub(r"\([^)]{30,}\)", "(...)", short)
+    if len(short) <= max_len:
+        return short
+    parts = short.split("::")
     if len(parts) >= 2:
-        # Look for a function-like name at the end (contains parentheses)
-        for i in range(len(parts) - 1, -1, -1):
-            if '(' in parts[i]:
-                short = "::".join(parts[max(0, i-1):])
-                if len(short) <= max_len:
-                    return short
-                short = parts[i]
-                if len(short) <= max_len:
-                    return short
-                return short[:max_len - 3] + "..."
-
-        # Fallback: last 2 segments
-        short = "::".join(parts[-2:])
-        if len(short) <= max_len:
-            return short
-        short = parts[-1]
-        if len(short) <= max_len:
-            return short
-        return parts[-1][:max_len - 3] + "..."
-
-    return name[:max_len - 3] + "..."
+        candidate = "::".join(parts[-2:])
+        if len(candidate) <= max_len:
+            return candidate
+        candidate = parts[-1]
+        if len(candidate) <= max_len:
+            return candidate
+    return short[:max_len - 3] + "..."
 
 
-# ---------------------------------------------------------------------------
-# Call tree parsing
-# ---------------------------------------------------------------------------
-
-def _parse_ir_pct(line: str) -> tuple[int, float]:
-    """Extract Ir count and percentage from a callgrind line.
-
-    e.g. '1,234,567  ( 12.34%)  ...' → (1234567, 12.34)
-    """
-    m = re.match(r'^\s*([\d,]+)\s+\(\s*([\d.]+)%\)', line)
-    if m:
-        return int(m.group(1).replace(",", "")), float(m.group(2))
-    return 0, 0.0
-
-
-def _parse_func_info(rest: str) -> tuple[str, str, int]:
-    """Parse function name, file, and call count from the remainder of a
-    callgrind tree line (after the marker).
-
-    Returns (func_name, file, call_count).
-    """
+def parse_func_tail(rest: str) -> tuple[str, str, int]:
     rest = rest.strip()
-
-    # Step 1: extract file path [...] at the end
     file_loc = "???"
-    m = re.search(r'\[(.+?)\]\s*$', rest)
+    calls = 0
+
+    m = re.search(r"\[(.+?)\]\s*$", rest)
     if m:
         file_loc = m.group(1).strip()
         rest = rest[:m.start()].strip()
 
-    # Step 2: extract call count (Nx) at the end (now file path is gone)
-    call_count = 1
-    m = re.search(r'\(([\d,]+)x\)\s*$', rest)
+    m = re.search(r"\(([\d,]+)x\)\s*$", rest)
     if m:
-        call_count = int(m.group(1).replace(",", ""))
+        calls = int(m.group(1).replace(",", ""))
         rest = rest[:m.start()].strip()
 
-    func_name = _clean_func_name(rest)
-    file_loc = _clean_file(file_loc)
-
-    return func_name, file_loc, call_count
+    return clean_func_name(rest), clean_file(file_loc), calls
 
 
-def parse_callgrind_call_tree(annotate_path: str) -> CallGraph:
-    """Parse the call-tree section of callgrind_annotate --tree=both output.
+def parse_annotate_flat(path: str) -> tuple[dict[str, tuple[int, float, str, int]], int]:
+    """Return name -> (Ir, pct, file, calls), plus PROGRAM TOTALS Ir."""
+    entries: dict[str, tuple[int, float, str, int]] = {}
+    total_ir = 0
+    if not os.path.exists(path):
+        return entries, total_ir
 
-    The format encodes a call tree via markers and indentation:
-
-        Ir  file:function
-        -------------------------------------------------------
-        <ir> (<pct>%)  < caller_name (Nx) [file]     ← caller of * below
-        <ir> (<pct>%)  * function_name (Nx) [file]   ← function itself
-        <ir> (<pct>%)  > callee_name (Nx) [file]     ← callee of * above
-            <ir> (<pct>%)  > sub_callee (Nx) [file]  ← callee of > above
-
-    Indentation (leading spaces before Ir count) indicates call depth.
-    """
-    cg = CallGraph()
-    if not os.path.exists(annotate_path):
-        return cg
-
-    with open(annotate_path) as f:
-        lines = f.readlines()
-
-    # Find the start of the profiled functions section
-    start_idx = -1
-    for i, line in enumerate(lines):
-        if re.match(r'^\s*Ir\s+file:function', line):
-            start_idx = i + 1
-            break
-    if start_idx < 0:
-        return cg
-
-    # Skip separator line
-    if start_idx < len(lines) and '---' in lines[start_idx]:
-        start_idx += 1
-
-    # Parse PROGRAM TOTALS before the tree
-    for line in lines[:start_idx]:
-        m = re.match(r'^\s*([\d,]+)\s+\(\s*([\d.]+)%\)\s+PROGRAM TOTALS', line)
-        if m:
-            cg.program_total_ir = int(m.group(1).replace(",", ""))
-            break
-
-    # Stack tracks the current call chain: list of (depth, func_name, marker)
-    # marker is '*', '>', or '<' — used to distinguish same-depth siblings
-    stack: list[tuple[int, str, str]] = []
-    # Pending callers ('<' lines) that will call the next '*'
-    pending_callers: list[tuple[int, str, int]] = []  # (depth, name, ir)
-
-    for i in range(start_idx, len(lines)):
-        line = lines[i]
-        if not line.strip():
-            continue
-
-        # Compute depth from leading whitespace
-        depth = len(line) - len(line.lstrip(' '))
-
-        # Find the marker character after the "%)  " pattern
-        marker_m = re.search(r'%\)\s+(<|\*|>)\s+', line)
-        if not marker_m:
-            continue
-
-        marker = marker_m.group(1)
-        rest = line[marker_m.end():]
-
-        ir_count, pct = _parse_ir_pct(line)
-        func_name, file_loc, call_count = _parse_func_info(rest)
-
-        if not func_name:
-            continue
-
-        if marker == '*':
-            # --- Function definition ---
-            # If no pending callers, this is a new call-tree root → clear stack
-            if not pending_callers:
-                stack.clear()
-
-            # Pop deeper entries (including same-depth '>') to make room
-            while stack and stack[-1][0] >= depth:
-                stack.pop()
-
-            # All pending callers are direct callers of this function
-            for pdepth, pname, pir in pending_callers:
-                cg.edges.append(CallEdge(caller=pname, callee=func_name,
-                                         ir_count=pir))
-            pending_callers.clear()
-
-            # If there's a parent in the stack, it also calls this function
-            if stack:
-                cg.edges.append(CallEdge(caller=stack[-1][1], callee=func_name,
-                                         ir_count=ir_count))
-
-            stack.append((depth, func_name, marker))
-            _record_function(cg, func_name, file_loc, ir_count, pct)
-
-        elif marker == '<':
-            # --- Caller entry (calls the next '*' seen) ---
-            pending_callers.append((depth, func_name, ir_count))
-            _record_function(cg, func_name, file_loc, ir_count, pct)
-
-        elif marker == '>':
-            # --- Callee entry ---
-            # Pop deeper entries AND same-depth '>' siblings (but not same-depth '*')
-            while stack and stack[-1][0] >= depth and stack[-1][2] != '*':
-                stack.pop()
-
-            if stack:
-                caller = stack[-1][1]
-                cg.edges.append(CallEdge(caller=caller, callee=func_name,
-                                         ir_count=ir_count))
-
-            stack.append((depth, func_name, marker))
-            _record_function(cg, func_name, file_loc, ir_count, pct)
-
-    # Compute total Ir
-    if cg.functions:
-        cg.total_ir = max(f.total_ir for f in cg.functions.values())
-
-    return cg
-
-
-def _record_function(cg: CallGraph, name: str, file_loc: str,
-                     ir_count: int, pct: float) -> None:
-    """Record or update function info, keeping the entry with highest Ir."""
-    if name not in cg.functions or ir_count > cg.functions[name].total_ir:
-        cg.functions[name] = FunctionInfo(
-            name=name, file=file_loc, total_ir=ir_count, self_ir=0, pct=pct)
-
-
-def merge_flat_self_ir(cg: CallGraph, flat_path: str) -> None:
-    """Parse the flat callgrind annotate output (without --inclusive) to
-    extract self (exclusive) Ir for each function, and merge into the
-    existing CallGraph function entries.
-
-    Flat profile format:
-        Ir  file:function
-        -------------------------------------------------------
-        1,234,567 (12.34%)  ns::func()  [file:line]
-    """
-    if not os.path.exists(flat_path):
-        return
-
-    with open(flat_path) as f:
-        text = f.read()
-
-    # Also parse PROGRAM TOTALS from the flat profile if not already set
-    if cg.program_total_ir == 0:
-        m = re.search(r'^\s*([\d,]+)\s+\(\s*[\d.]+\s*%\)\s+PROGRAM TOTALS', text, re.MULTILINE)
-        if m:
-            cg.program_total_ir = int(m.group(1).replace(",", ""))
-
-    # Parse each function line from the flat profile
-    for line in text.splitlines():
-        # Match: <ir> (<pct>%)  <func_name>  [<file>]
-        m = re.match(
-            r'^\s*([\d,]+)\s+\(\s*([\d.]+)%\)\s+(.+?)\s+\[(.+?)\]\s*$', line)
-        if not m:
-            continue
-
-        self_ir = int(m.group(1).replace(",", ""))
-        pct = float(m.group(2))
-        raw_name = m.group(3).strip()
-        file_loc = m.group(4).strip()
-
-        func_name = _clean_func_name(raw_name)
-        file_loc = _clean_file(file_loc)
-
-        # Merge: update self_ir for matching functions
-        if func_name in cg.functions:
-            cg.functions[func_name].self_ir = self_ir
-            # Use the flat profile's percentage (self % of program total)
-            cg.functions[func_name].pct = pct
-        else:
-            cg.functions[func_name] = FunctionInfo(
-                name=func_name, file=file_loc, total_ir=self_ir,
-                self_ir=self_ir, pct=pct)
-
-
-# ---------------------------------------------------------------------------
-# Distance matrix loading (kept for TSPLIB support)
-# ---------------------------------------------------------------------------
-
-def _is_tsplib(content: str) -> bool:
-    upper = content[:4096].upper()
-    for marker in ("EDGE_WEIGHT_SECTION", "NODE_COORD_SECTION",
-                   "EDGE_WEIGHT_TYPE", "TYPE:", "NAME:"):
-        if marker in upper:
-            return True
-    return False
-
-
-def load_distance_matrix(filepath: str) -> tuple[np.ndarray, int]:
-    """Load a TSP distance matrix from file."""
-    with open(filepath) as f:
-        content = f.read()
-
-    if not _is_tsplib(content):
-        tokens = content.split()
-        n = int(tokens[0])
-        matrix = np.zeros((n, n))
-        idx = 1
-        for i in range(n):
-            for j in range(n):
-                token = tokens[idx].lower()
-                idx += 1
-                if token in ("x", "-", "inf", "infinity"):
-                    matrix[i, j] = np.nan
-                else:
-                    matrix[i, j] = float(token)
-        return matrix, n
-
-    return _load_tsplib_coords(content)
-
-
-def _load_tsplib_coords(content: str) -> tuple[np.ndarray, int]:
-    lines = content.splitlines()
-    coords = []
-    dimension = 0
-    edge_weight_type = "EUC_2D"
-    in_section = False
-    for line in lines:
-        line = line.strip()
-        upper = line.upper()
-        if upper == "NODE_COORD_SECTION":
-            in_section = True
-            continue
-        if in_section:
-            if upper in ("EOF", "DISPLAY_DATA_SECTION", "TOUR_SECTION",
-                         "EDGE_WEIGHT_SECTION", "DEPOT_SECTION"):
-                break
-            parts = line.split()
-            if len(parts) >= 3:
-                coords.append((float(parts[1]), float(parts[2])))
-        else:
-            if upper.startswith("DIMENSION"):
-                line = line.replace(" ", "")
-                parts = line.split(":")
-                dimension = int(parts[1]) if len(parts) == 2 else int(line.split()[1])
-            elif upper.startswith("EDGE_WEIGHT_TYPE"):
-                line = line.replace(" ", "")
-                parts = line.split(":")
-                edge_weight_type = (parts[1].strip().upper() if len(parts) == 2
-                                    else line.split()[1].upper())
-    n = dimension if dimension > 0 else len(coords)
-    matrix = np.zeros((n, n))
-    for i in range(n):
-        for j in range(n):
-            if i == j:
+    with open(path, errors="replace") as f:
+        for line in f:
+            m_total = re.match(
+                r"^\s*([\d,]+)\s+\(\s*[\d.]+%\)\s+PROGRAM TOTALS",
+                line,
+            )
+            if m_total:
+                total_ir = int(m_total.group(1).replace(",", ""))
                 continue
-            dx = coords[i][0] - coords[j][0]
-            dy = coords[i][1] - coords[j][1]
-            if edge_weight_type == "GEO":
-                import math
-                PI = math.pi
-                def to_rad(deg_val):
-                    d = int(deg_val); m = deg_val - d
-                    return PI * (d + 5.0 * m / 3.0) / 180.0
-                lat_a = to_rad(coords[i][0]); lon_a = to_rad(coords[i][1])
-                lat_b = to_rad(coords[j][0]); lon_b = to_rad(coords[j][1])
-                q1 = math.cos(lon_a - lon_b); q2 = math.cos(lat_a - lat_b)
-                q3 = math.cos(lat_a + lat_b)
-                arg = 0.5 * ((1.0 + q1) * q2 - (1.0 - q1) * q3)
-                arg = max(-1.0, min(1.0, arg))
-                matrix[i, j] = int(6378.388 * math.acos(arg) + 1.0)
-            else:
-                matrix[i, j] = np.sqrt(dx * dx + dy * dy)
-    return matrix, n
+
+            m = re.match(r"^\s*([\d,]+)\s+\(\s*([\d.]+)%\)\s+(.+?)\s*$", line)
+            if not m:
+                continue
+
+            ir_count = int(m.group(1).replace(",", ""))
+            pct = float(m.group(2))
+            rest = m.group(3).strip()
+            if not rest or rest.startswith("PROGRAM TOTALS") or set(rest) == {"-"}:
+                continue
+
+            name, file_loc, calls = parse_func_tail(rest)
+            if not name or name == "PROGRAM TOTALS":
+                continue
+
+            old = entries.get(name)
+            if old is None or ir_count > old[0]:
+                entries[name] = (ir_count, pct, file_loc, calls)
+
+    return entries, total_ir
+
+
+def classify_function(name: str, file_loc: str) -> str:
+    low_name = name.lower()
+    low_file = file_loc.lower()
+
+    solver_markers = (
+        "tsp::", "branchboundsolver", "tspproblem", "solveinput",
+        "runsinglefile", "runbatch", "main",
+    )
+    solver_files = ("tspsolver.cpp", "tspsolver.hpp", "main.cpp", "/src/", "/include/")
+    if any(marker in low_name for marker in solver_markers):
+        return "solver"
+    if any(marker in low_file for marker in solver_files):
+        return "solver"
+
+    runtime_markers = (
+        "std::", "operator new", "operator delete", "malloc", "free",
+        "memmove", "memcpy", "memset", "libc++", "vector<",
+        "__uninitialized", "__tree", "dyld-stub",
+    )
+    if any(marker in low_name for marker in runtime_markers):
+        return "runtime"
+    if any(marker in low_file for marker in ("libc++", "libsystem_malloc", "libsystem_platform")):
+        return "runtime"
+
+    return "system"
+
+
+def load_profile(profile_dir: str) -> Profile:
+    self_path = os.path.join(profile_dir, CALLGRIND_SELF)
+    incl_path = os.path.join(profile_dir, CALLGRIND_INCLUSIVE)
+
+    if not os.path.exists(self_path):
+        self_path = os.path.join(profile_dir, LEGACY_CALLGRIND_FLAT)
+    if not os.path.exists(incl_path):
+        incl_path = os.path.join(profile_dir, LEGACY_CALLGRIND_ANNOTATE)
+
+    self_entries, self_total = parse_annotate_flat(self_path)
+    incl_entries, incl_total = parse_annotate_flat(incl_path)
+
+    metadata = load_metadata(profile_dir)
+    profile = Profile()
+    profile.program_total_ir = incl_total or self_total
+    profile.native_elapsed_sec = metadata.get("native_elapsed_sec")
+    profile.callgrind_elapsed_sec = metadata.get("callgrind_elapsed_sec")
+    profile.solver_stats = metadata.get("solver_stats") or {}
+
+    names = set(self_entries) | set(incl_entries)
+    for name in names:
+        self_ir, self_pct, self_file, self_calls = self_entries.get(name, (0, 0.0, "???", 0))
+        incl_ir, incl_pct, incl_file, incl_calls = incl_entries.get(name, (0, 0.0, self_file, 0))
+        file_loc = incl_file if incl_file != "???" else self_file
+        if profile.program_total_ir > 0:
+            if self_pct == 0.0 and self_ir:
+                self_pct = safe_pct(self_ir, profile.program_total_ir)
+            if incl_pct == 0.0 and incl_ir:
+                incl_pct = safe_pct(incl_ir, profile.program_total_ir)
+        profile.functions[name] = FunctionInfo(
+            name=name,
+            file=file_loc,
+            kind=classify_function(name, file_loc),
+            self_ir=self_ir,
+            inclusive_ir=incl_ir,
+            self_pct=self_pct,
+            inclusive_pct=incl_pct,
+            calls=max(self_calls, incl_calls),
+        )
+
+    return profile
 
 
 # ---------------------------------------------------------------------------
-# Solver function filter
+# Filtering and tables
 # ---------------------------------------------------------------------------
 
-def _is_solver_func(f: FunctionInfo) -> bool:
-    """Check if a function belongs to the solver (not system library)."""
-    # Must come from the solver binary
-    if "tsp_bb" not in f.file:
-        return False
-    # Exclude system-library-like entries
-    if f.name.startswith("0x") or f.name.startswith("???"):
-        return False
-    if "below main" in f.name.lower():
-        return False
-    if re.match(r'^[0-9a-fA-Fx]+$', f.name[:10]):
-        return False
-    return True
+def select_functions(profile: Profile, scope: str) -> list[FunctionInfo]:
+    funcs = list(profile.functions.values())
+    if scope == "solver":
+        funcs = [f for f in funcs if f.kind == "solver"]
+    elif scope == "solver-runtime":
+        funcs = [f for f in funcs if f.kind in {"solver", "runtime"}]
+    elif scope == "all":
+        pass
+    else:
+        raise ValueError(f"unknown scope: {scope}")
+    funcs = [f for f in funcs if f.self_ir > 0 or f.inclusive_ir > 0]
+    return sorted(funcs, key=lambda f: (-f.self_ir, -f.inclusive_ir, f.name))
+
+
+def write_breakdown_csv(profile: Profile, funcs: list[FunctionInfo],
+                        out_dir: str) -> str:
+    path = os.path.join(out_dir, BREAKDOWN_CSV)
+    native_elapsed = profile.native_elapsed_sec
+    with open(path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            "rank", "kind", "function", "file", "calls",
+            "self_ir", "self_pct_total", "self_est_sec",
+            "inclusive_ir", "inclusive_pct_total", "inclusive_est_sec",
+        ])
+        for rank, func in enumerate(funcs, start=1):
+            writer.writerow([
+                rank,
+                func.kind,
+                func.name,
+                func.file,
+                func.calls,
+                func.self_ir,
+                f"{func.self_pct:.6f}",
+                "" if native_elapsed is None else f"{pct_to_seconds(func.self_pct, native_elapsed):.9f}",
+                func.inclusive_ir,
+                f"{func.inclusive_pct:.6f}",
+                "" if native_elapsed is None else f"{pct_to_seconds(func.inclusive_pct, native_elapsed):.9f}",
+            ])
+    return path
+
+
+def write_report(profile: Profile, funcs: list[FunctionInfo], out_dir: str,
+                 instance_name: str, scope: str, top_n: int) -> str:
+    path = os.path.join(out_dir, REPORT_MD)
+    native_elapsed = profile.native_elapsed_sec
+    top = funcs[:top_n]
+
+    with open(path, "w") as f:
+        f.write(f"# Function Time Share - {instance_name}\n\n")
+        f.write("## Measurement\n\n")
+        f.write("- Cost basis: callgrind `Ir` instruction counts.\n")
+        f.write("- Time estimate: native elapsed time multiplied by each function percentage.\n")
+        f.write("- Self time is exclusive and additive. Inclusive time includes callees and is not additive.\n")
+        f.write(f"- Scope: `{scope}`.\n")
+        f.write(f"- Program total: `{profile.program_total_ir:,}` Ir.\n")
+        f.write(f"- Native elapsed: `{fmt_seconds(native_elapsed)}`.\n")
+        f.write(f"- Callgrind elapsed: `{fmt_seconds(profile.callgrind_elapsed_sec)}`.\n")
+        if profile.solver_stats:
+            f.write("\n## Solver Stats\n\n")
+            for key, value in profile.solver_stats.items():
+                f.write(f"- `{key}`: `{value}`\n")
+
+        f.write("\n## Top Functions By Self Time\n\n")
+        f.write("| # | Kind | Function | Self | Inclusive | Calls |\n")
+        f.write("|---:|---|---|---:|---:|---:|\n")
+        for rank, func in enumerate(top, start=1):
+            self_sec = fmt_seconds(pct_to_seconds(func.self_pct, native_elapsed))
+            incl_sec = fmt_seconds(pct_to_seconds(func.inclusive_pct, native_elapsed))
+            f.write(
+                f"| {rank} | {func.kind} | `{func.display_name(68)}` "
+                f"| {func.self_pct:.2f}% / {self_sec} "
+                f"| {func.inclusive_pct:.2f}% / {incl_sec} "
+                f"| {func.calls or ''} |\n"
+            )
+
+        total_self_pct = sum(func.self_pct for func in funcs)
+        f.write("\n## Scope Total\n\n")
+        f.write(f"- Selected function self share: `{total_self_pct:.2f}%` of program Ir.\n")
+        f.write(f"- Selected function estimated self time: `{fmt_seconds(pct_to_seconds(total_self_pct, native_elapsed))}`.\n")
+        f.write(f"- Full CSV: `{BREAKDOWN_CSV}`.\n")
+
+    return path
+
+
+def print_summary(profile: Profile, funcs: list[FunctionInfo], top_n: int) -> None:
+    eprint("")
+    eprint("=" * 96)
+    eprint("Function time-share summary")
+    eprint(f"Program total: {profile.program_total_ir:,} Ir")
+    eprint(f"Native elapsed: {fmt_seconds(profile.native_elapsed_sec)}")
+    eprint(f"Callgrind elapsed: {fmt_seconds(profile.callgrind_elapsed_sec)}")
+    eprint("-" * 96)
+    eprint(f"{'#':>2} {'Kind':<8} {'Self':>17} {'Inclusive':>17}  Function")
+    eprint("-" * 96)
+    for rank, func in enumerate(funcs[:top_n], start=1):
+        self_sec = fmt_seconds(pct_to_seconds(func.self_pct, profile.native_elapsed_sec))
+        incl_sec = fmt_seconds(pct_to_seconds(func.inclusive_pct, profile.native_elapsed_sec))
+        eprint(
+            f"{rank:>2} {func.kind:<8} "
+            f"{func.self_pct:>6.2f}%/{self_sec:>9} "
+            f"{func.inclusive_pct:>6.2f}%/{incl_sec:>9}  "
+            f"{func.display_name(44)}"
+        )
+    eprint("=" * 96)
 
 
 # ---------------------------------------------------------------------------
-# Function overhead chart
+# Plotting
 # ---------------------------------------------------------------------------
 
-def function_overhead_chart(cg: CallGraph, instance_name: str,
-                            out_dir: str, top_n: int = 30) -> str:
-    """Generate a function runtime overhead chart.
+def annotate_barh(ax, values: Iterable[float], labels: Iterable[str],
+                  pad: float) -> None:
+    for i, (value, label) in enumerate(zip(values, labels)):
+        ax.text(value + pad, i, label, va="center", ha="left", fontsize=8)
 
-    Vertical bars (with an overlaid line) showing the top-N solver functions
-    by Ir (instruction fetch) overhead percentage — effectively CPU time share.
 
-    X-axis: function names (shortened)
-    Y-axis: % of total Ir
-    """
-    out_path = os.path.join(out_dir, "function_overhead.png")
-    os.makedirs(out_dir, exist_ok=True)
+def kind_color(kind: str) -> str:
+    return {
+        "solver": "#386cb0",
+        "runtime": "#fdb462",
+        "system": "#b3b3b3",
+        "other": "#8dd3c7",
+    }.get(kind, "#8dd3c7")
 
-    # Sort by self Ir (exclusive cost — function's own instructions only)
-    solver_funcs = sorted(
-        [f for f in cg.functions.values() if _is_solver_func(f)],
-        key=lambda f: -f.self_ir)
 
-    if not solver_funcs:
-        fig, ax = plt.subplots(figsize=(10, 4))
-        ax.text(0.5, 0.5, "No solver function data — run with --profile",
-                ha="center", va="center", transform=ax.transAxes,
-                fontsize=14, color="gray")
-        fig.tight_layout()
-        fig.savefig(out_path, dpi=150, bbox_inches="tight")
+def load_pyplot():
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ModuleNotFoundError as exc:
+        raise SystemExit(
+            "matplotlib is required to generate heatmaps. "
+            "Install it with: pip install matplotlib"
+        ) from exc
+    return plt
+
+
+def plot_self_time_share(profile: Profile, funcs: list[FunctionInfo],
+                         out_dir: str, instance_name: str, top_n: int) -> str:
+    plt = load_pyplot()
+    path = os.path.join(out_dir, "01_self_time_share.png")
+    legacy_path = os.path.join(out_dir, "function_overhead.png")
+    top = funcs[:top_n]
+
+    if not top:
+        fig, ax = plt.subplots(figsize=(10, 3))
+        ax.text(0.5, 0.5, "No function data", ha="center", va="center")
+        ax.axis("off")
+        fig.savefig(path, dpi=180, bbox_inches="tight")
+        fig.savefig(legacy_path, dpi=180, bbox_inches="tight")
         plt.close(fig)
-        return out_path
+        return path
 
-    # ── Select top-N and compute self-Ir percentages ──
-    funcs = solver_funcs[:top_n]
-    # Normalize by program total Ir: each function's SELF cost / total * 100
-    # Self cost is always ≤ program total, so percentages are always ≤ 100%
-    base_ir = cg.program_total_ir if cg.program_total_ir > 0 else max(1, sum(f.self_ir for f in funcs))
-    names = [_shorten_func(f.name, 45) for f in funcs]
-    pcts = np.array([f.self_ir / base_ir * 100.0 for f in funcs])
-    irs = np.array([f.self_ir for f in funcs])
+    names = [f.display_name(58) for f in reversed(top)]
+    pcts = [f.self_pct for f in reversed(top)]
+    secs = [pct_to_seconds(f.self_pct, profile.native_elapsed_sec) for f in reversed(top)]
+    colors = [kind_color(f.kind) for f in reversed(top)]
+    y = list(range(len(names)))
 
-    # ── Plot ──
-    fig_w = max(14, top_n * 0.35)
-    fig_h = max(7, top_n * 0.25)
-    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+    fig_h = max(6.0, len(top) * 0.34)
+    fig, ax = plt.subplots(figsize=(13.5, fig_h))
+    ax.barh(y, pcts, color=colors, edgecolor="#333333", linewidth=0.35)
+    ax.set_yticks(y)
+    ax.set_yticklabels(names, fontfamily="monospace", fontsize=8)
+    ax.set_xlabel("Self cost (% of total program Ir)")
+    ax.set_title(
+        f"Top {len(top)} Self Time Share - {instance_name}\n"
+        f"Native elapsed {fmt_seconds(profile.native_elapsed_sec)}, "
+        f"program total {profile.program_total_ir:,} Ir",
+        fontsize=12,
+        fontweight="bold",
+    )
+    ax.grid(axis="x", alpha=0.25, linestyle="--")
+    max_pct = max(pcts) if pcts else 1.0
+    labels = [
+        f"{pct:.2f}%"
+        + (f" / {fmt_seconds(sec)}" if sec is not None else "")
+        for pct, sec in zip(pcts, secs)
+    ]
+    annotate_barh(ax, pcts, labels, max(0.02, max_pct * 0.015))
+    ax.set_xlim(0, max_pct * 1.24 + 0.05)
 
-    x = np.arange(len(names))
-    colors = plt.cm.YlOrRd(0.2 + pcts / pcts.max() * 0.8)
-
-    # Bars
-    bars = ax.bar(x, pcts, color=colors, edgecolor="#555", linewidth=0.4, zorder=3)
-
-    # Line overlay connecting bar tops
-    ax.plot(x, pcts, "o-", color="#c0392b", linewidth=1.8, markersize=5,
-            markerfacecolor="white", markeredgecolor="#c0392b",
-            markeredgewidth=1.5, zorder=4)
-
-    # Annotate each bar with % and Ir count
-    for i, (pct, ir) in enumerate(zip(pcts, irs)):
-        if ir >= 1_000_000_000:
-            ir_label = f"{ir / 1_000_000_000:.1f}B"
-        elif ir >= 1_000_000:
-            ir_label = f"{ir / 1_000_000:.1f}M"
-        elif ir >= 1_000:
-            ir_label = f"{ir / 1_000:.0f}K"
-        else:
-            ir_label = str(int(ir))
-        ax.text(i, pct + pcts.max() * 0.015, f"{pct:.1f}%",
-                ha="center", va="bottom", fontsize=7, fontweight="bold",
-                color="#333")
-        ax.text(i, pct - pcts.max() * 0.03, ir_label,
-                ha="center", va="top", fontsize=6, color="#666",
-                rotation=90)
-
-    ax.set_xticks(x)
-    ax.set_xticklabels(names, rotation=60, ha="right", fontsize=7,
-                       fontfamily="monospace")
-    ax.set_ylabel("Ir Overhead (%)", fontsize=12)
-    ax.set_xlim(-0.6, top_n - 0.4)
-    ax.set_ylim(0, pcts.max() * 1.18)
-    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.0f}%"))
-    ax.grid(axis="y", alpha=0.3, linestyle="--", linewidth=0.5)
-
-    ax.set_title(f"Function Runtime Overhead (Self Cost) — {instance_name}\n"
-                 f"({len(solver_funcs)} solver functions, "
-                 f"program total {cg.program_total_ir:,} Ir, "
-                 f"top {top_n} shown)",
-                 fontsize=13, fontweight="bold")
+    legend_handles = [
+        plt.Line2D([0], [0], color=kind_color("solver"), lw=6, label="solver"),
+        plt.Line2D([0], [0], color=kind_color("runtime"), lw=6, label="runtime"),
+        plt.Line2D([0], [0], color=kind_color("system"), lw=6, label="system"),
+    ]
+    ax.legend(handles=legend_handles, loc="lower right")
 
     fig.tight_layout()
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    fig.savefig(path, dpi=180, bbox_inches="tight")
+    fig.savefig(legacy_path, dpi=180, bbox_inches="tight")
     plt.close(fig)
+    return path
 
-    return out_path
+
+def plot_inclusive_time_share(profile: Profile, funcs: list[FunctionInfo],
+                              out_dir: str, instance_name: str, top_n: int) -> str:
+    plt = load_pyplot()
+    path = os.path.join(out_dir, "02_inclusive_time_share.png")
+    top = sorted(funcs, key=lambda f: (-f.inclusive_ir, -f.self_ir, f.name))[:top_n]
+    if not top:
+        return path
+
+    names = [f.display_name(58) for f in reversed(top)]
+    self_pcts = [f.self_pct for f in reversed(top)]
+    incl_pcts = [f.inclusive_pct for f in reversed(top)]
+    y = list(range(len(names)))
+    height = 0.38
+
+    fig_h = max(6.0, len(top) * 0.36)
+    fig, ax = plt.subplots(figsize=(13.5, fig_h))
+    ax.barh(y - height / 2, incl_pcts, height=height, color="#9ecae1",
+            edgecolor="#333333", linewidth=0.25, label="inclusive")
+    ax.barh(y + height / 2, self_pcts, height=height, color="#fb6a4a",
+            edgecolor="#333333", linewidth=0.25, label="self")
+    ax.set_yticks(y)
+    ax.set_yticklabels(names, fontfamily="monospace", fontsize=8)
+    ax.set_xlabel("% of total program Ir")
+    ax.set_title(
+        f"Inclusive vs Self Cost - {instance_name}\n"
+        "Inclusive includes callees and is not additive",
+        fontsize=12,
+        fontweight="bold",
+    )
+    ax.grid(axis="x", alpha=0.25, linestyle="--")
+    ax.legend(loc="lower right")
+
+    max_pct = max(max(incl_pcts), max(self_pcts)) if top else 1.0
+    for i, (sp, ip, func) in enumerate(zip(self_pcts, incl_pcts, reversed(top))):
+        self_sec = fmt_seconds(pct_to_seconds(sp, profile.native_elapsed_sec))
+        incl_sec = fmt_seconds(pct_to_seconds(ip, profile.native_elapsed_sec))
+        ax.text(ip + max_pct * 0.01, i - height / 2,
+                f"{ip:.1f}% / {incl_sec}", va="center", fontsize=7)
+        ax.text(sp + max_pct * 0.01, i + height / 2,
+                f"{sp:.1f}% / {self_sec}", va="center", fontsize=7)
+    ax.set_xlim(0, max_pct * 1.28 + 0.05)
+
+    fig.tight_layout()
+    fig.savefig(path, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+    return path
 
 
-# ---------------------------------------------------------------------------
-# Text summary
-# ---------------------------------------------------------------------------
+def plot_metric_heatmap(profile: Profile, funcs: list[FunctionInfo],
+                        out_dir: str, instance_name: str, top_n: int) -> str:
+    plt = load_pyplot()
+    path = os.path.join(out_dir, "03_function_metric_heatmap.png")
+    top = funcs[:top_n]
+    if not top:
+        return path
 
-def print_call_summary(cg: CallGraph, top_n: int = 20) -> None:
-    """Print a readable text summary of the call graph to stderr."""
-    if not cg.functions:
-        print("\n(no function data)", file=sys.stderr)
-        return
+    native = profile.native_elapsed_sec
+    rows = [f.display_name(60) for f in top]
+    self_ms = [
+        (pct_to_seconds(f.self_pct, native) or 0.0) * 1000.0 for f in top
+    ]
+    incl_ms = [
+        (pct_to_seconds(f.inclusive_pct, native) or 0.0) * 1000.0 for f in top
+    ]
+    raw = [
+        [func.self_pct, func.inclusive_pct, self_ms[i], incl_ms[i]]
+        for i, func in enumerate(top)
+    ]
+    columns = ["Self %", "Incl %", "Self ms", "Incl ms"]
 
-    # Filter to solver functions only
-    solver_names = {f.name for f in cg.functions.values()
-                    if _is_solver_func(f)}
-    if not solver_names:
-        print("\n(no solver functions)", file=sys.stderr)
-        return
+    # Normalize each column independently so both percent and ms columns are readable.
+    column_max = [
+        max((row[col] for row in raw), default=0.0)
+        for col in range(len(columns))
+    ]
+    normalized = [
+        [
+            (row[col] / column_max[col]) if column_max[col] > 0 else 0.0
+            for col in range(len(columns))
+        ]
+        for row in raw
+    ]
 
-    solver_edges = [(e.caller, e.callee, e.ir_count) for e in cg.edges
-                    if e.caller in solver_names and e.callee in solver_names]
+    fig_h = max(6.0, len(top) * 0.34)
+    fig, ax = plt.subplots(figsize=(11.5, fig_h))
+    im = ax.imshow(normalized, aspect="auto", cmap="YlOrRd", vmin=0, vmax=1)
+    ax.set_yticks(list(range(len(rows))))
+    ax.set_yticklabels(rows, fontfamily="monospace", fontsize=8)
+    ax.set_xticks(list(range(len(columns))))
+    ax.set_xticklabels(columns, fontsize=9)
+    ax.set_title(
+        f"Function Metric Heatmap - {instance_name}\n"
+        "Cells are column-normalized; text shows actual values",
+        fontsize=12,
+        fontweight="bold",
+    )
 
-    sep = "=" * 80
-    print(f"\n{sep}", file=sys.stderr)
-    print(f"  Solver Call Graph: {len(solver_names)} functions, "
-          f"{len(solver_edges)} call edges",
-          file=sys.stderr)
-    if cg.program_total_ir > 0:
-        print(f"  Program total: {cg.program_total_ir:,} Ir",
-              file=sys.stderr)
-    print(sep, file=sys.stderr)
+    for i, row in enumerate(raw):
+        for j, value in enumerate(row):
+            if j < 2:
+                label = f"{value:.2f}%"
+            else:
+                label = f"{value:.1f}"
+            color = "white" if normalized[i][j] > 0.55 else "#222222"
+            ax.text(j, i, label, ha="center", va="center", fontsize=7, color=color)
 
-    solver_funcs = sorted(
-        [f for f in cg.functions.values() if f.name in solver_names],
-        key=lambda f: -f.self_ir)
+    cbar = fig.colorbar(im, ax=ax, shrink=0.7)
+    cbar.set_label("Column-normalized intensity")
+    fig.tight_layout()
+    fig.savefig(path, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+    return path
 
-    print(f"\n  Top Functions by Self Ir (exclusive):", file=sys.stderr)
-    print(f"  {'Function':<50} {'Self Ir':>14}  {'File':<25}",
-          file=sys.stderr)
-    print(f"  {'-'*48}  {'-'*12}  {'-'*23}", file=sys.stderr)
-    for func in solver_funcs[:top_n]:
-        fname = _shorten_func(func.name, 49)
-        print(f"  {fname:<50} {func.self_ir:>14,}  {func.file}",
-              file=sys.stderr)
 
-    # Deduplicate edges for display
-    edge_agg: dict[tuple[str, str], int] = defaultdict(int)
-    for caller, callee, ir in solver_edges:
-        edge_agg[(caller, callee)] += ir
-    sorted_edges = sorted(edge_agg.items(), key=lambda x: -x[1])
-
-    print(f"\n  Top Call Edges by Ir:", file=sys.stderr)
-    print(f"  {'Caller':<38} → {'Callee':<38} {'Ir':>14}",
-          file=sys.stderr)
-    print(f"  {'-'*36}   {'-'*36} {'-'*12}", file=sys.stderr)
-    for (caller, callee), ir_count in sorted_edges[:top_n]:
-        c1 = _shorten_func(caller, 37)
-        c2 = _shorten_func(callee, 37)
-        print(f"  {c1:<38} → {c2:<38} {ir_count:>14,}",
-              file=sys.stderr)
+def generate_plots(profile: Profile, funcs: list[FunctionInfo], out_dir: str,
+                   instance_name: str, top_n: int) -> list[str]:
+    paths: list[str] = []
+    plotters = [
+        lambda: plot_self_time_share(profile, funcs, out_dir, instance_name, top_n),
+        lambda: plot_inclusive_time_share(profile, funcs, out_dir, instance_name, top_n),
+        lambda: plot_metric_heatmap(profile, funcs, out_dir, instance_name, min(top_n, 25)),
+    ]
+    for plotter in plotters:
+        try:
+            paths.append(plotter())
+        except SystemExit as exc:
+            eprint(f"Plot generation skipped: {exc}")
+            break
+    return paths
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Function runtime overhead chart for tsp_bb solver")
-    parser.add_argument("instance", help="Path to TSP instance file")
+        description="Generate clear function time-share heatmaps for tsp_bb")
+    parser.add_argument("instance", help="Path to TSP instance")
     parser.add_argument("--solver", default=DEFAULT_SOLVER,
                         help=f"Path to tsp_bb binary (default: {DEFAULT_SOLVER})")
-    parser.add_argument("--strategy", choices=["smart", "simple"],
-                        default="smart", help="Branch strategy")
-    parser.add_argument("--timeout", type=int, default=1800,
-                        help="Solver timeout in seconds")
-    parser.add_argument("--profile", action="store_true",
-                        help="Collect callgrind profiling data (requires valgrind)")
-    parser.add_argument("--load-profile",
-                        help="Replay saved profiling data directory")
     parser.add_argument("--out-dir",
                         help="Output directory (default: docs/heatmap/<instance>)")
+    parser.add_argument("--profile", action="store_true",
+                        help="Run native timing and collect callgrind data")
+    parser.add_argument("--load-profile",
+                        help="Load an existing profile directory")
+    parser.add_argument("--timeout", type=int, default=1800,
+                        help="Native solver timeout in seconds")
+    parser.add_argument("--exact-max-n", type=int, default=100,
+                        help="Pass --exact-max-n to solvers that support it")
+    parser.add_argument("--strategy", default="smart",
+                        help="Pass --branch-strategy to legacy solvers that support it")
     parser.add_argument("--top-n", type=int, default=30,
-                        help="Number of top functions in heatmap (default: 30)")
+                        help="Number of functions shown in charts/tables")
+    parser.add_argument("--scope", choices=["solver", "solver-runtime", "all"],
+                        default="solver-runtime",
+                        help="Function scope to display")
+    parser.add_argument("--no-native-timing", action="store_true",
+                        help="Skip native timing; report percentages without estimated seconds")
     args = parser.parse_args()
 
     instance_path = os.path.abspath(args.instance)
     instance_name = os.path.splitext(os.path.basename(instance_path))[0]
-
-    if args.out_dir:
-        out_dir = args.out_dir
-    else:
-        out_dir = os.path.join(OUT_DIR, instance_name)
-
-    print(f"Instance: {instance_path}", file=sys.stderr)
-    print(f"Output:  {out_dir}", file=sys.stderr)
+    out_dir = args.out_dir or os.path.join(DEFAULT_OUT_ROOT, instance_name)
     os.makedirs(out_dir, exist_ok=True)
 
-    # ── Load distance matrix ──
-    matrix, n = load_distance_matrix(instance_path)
-    print(f"Matrix:  {n}×{n}", file=sys.stderr)
+    eprint(f"Instance: {instance_path}")
+    eprint(f"Output:   {out_dir}")
+    dim = read_instance_dimension(instance_path)
+    if dim is not None:
+        eprint(f"Dimension: {dim}")
 
-    # ── Obtain call graph ──
     if args.load_profile:
-        print(f"Loading profile from: {args.load_profile}", file=sys.stderr)
-        cg = parse_callgrind_call_tree(
-            os.path.join(args.load_profile, CALLGRIND_ANNOTATE))
-        merge_flat_self_ir(cg, os.path.join(args.load_profile, CALLGRIND_FLAT))
+        profile_dir = os.path.abspath(args.load_profile)
+        eprint(f"Loading profile: {profile_dir}")
+        profile = load_profile(profile_dir)
     elif args.profile:
-        print(f"Profiling solver ({args.strategy})...", file=sys.stderr)
-        run_solver_callgrind(instance_path, args.solver, args.strategy,
-                             args.timeout, out_dir)
-        cg = parse_callgrind_call_tree(
-            os.path.join(out_dir, CALLGRIND_ANNOTATE))
-        merge_flat_self_ir(cg, os.path.join(out_dir, CALLGRIND_FLAT))
+        native_run = None
+        if not args.no_native_timing:
+            native_run = run_native_solver(
+                instance_path, args.solver, args.exact_max_n,
+                args.strategy, args.timeout)
+        callgrind_elapsed = run_callgrind(
+            instance_path, args.solver, args.exact_max_n,
+            args.strategy, args.timeout, out_dir)
+        save_metadata(out_dir, instance_path, args.solver, args.strategy,
+                      args.exact_max_n, native_run, callgrind_elapsed)
+        profile = load_profile(out_dir)
     else:
-        print("Error: --profile flag required", file=sys.stderr)
-        print("Usage: python3 tools/heatmap_analysis.py <instance> --profile",
-              file=sys.stderr)
-        sys.exit(1)
+        raise SystemExit("Use --profile to collect data or --load-profile DIR to reuse data.")
 
-    # ── Text summary ──
-    print_call_summary(cg, top_n=15)
+    if not profile.functions:
+        raise SystemExit("No function data found. Check callgrind_annotate output.")
 
-    # ── Heatmap ──
-    print(f"\nGenerating function overhead chart...", file=sys.stderr)
-    path = function_overhead_chart(cg, instance_name, out_dir, top_n=args.top_n)
-    print(f"  → {path}", file=sys.stderr)
-    print("Done.", file=sys.stderr)
+    funcs = select_functions(profile, args.scope)
+    if not funcs:
+        raise SystemExit(f"No functions matched scope: {args.scope}")
+
+    print_summary(profile, funcs, args.top_n)
+
+    csv_path = write_breakdown_csv(profile, funcs, out_dir)
+    report_path = write_report(profile, funcs, out_dir, instance_name,
+                               args.scope, args.top_n)
+    plot_paths = generate_plots(profile, funcs, out_dir, instance_name,
+                                args.top_n)
+
+    eprint("")
+    eprint("Generated:")
+    eprint(f"  {csv_path}")
+    eprint(f"  {report_path}")
+    for path in plot_paths:
+        eprint(f"  {path}")
 
 
 if __name__ == "__main__":
