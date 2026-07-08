@@ -1,0 +1,58 @@
+--------------------------------------------------------------------------------
+Profile data file '/home/wj/code/TSP/docs/heatmap/gr24_260702/callgrind.out' (creator: callgrind-3.22.0)
+--------------------------------------------------------------------------------
+I1 cache: 
+D1 cache: 
+LL cache: 
+Timerange: Basic block 0 - 1617233893
+Trigger: Program termination
+Profiled target:  /home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb --branch-strategy smart --exact-max-n 100 /home/wj/code/TSP/data/classic/tsplib/gr24.tsp (PID 166572, part 1)
+Events recorded:  Ir
+Events shown:     Ir
+Event sort order: Ir
+Thresholds:       99
+Include dirs:     
+User annotated:   
+Auto-annotation:  on
+
+--------------------------------------------------------------------------------
+Ir                     
+--------------------------------------------------------------------------------
+8,119,979,565 (100.0%)  PROGRAM TOTALS
+
+--------------------------------------------------------------------------------
+Ir                      file:function
+--------------------------------------------------------------------------------
+2,664,982,112 (32.82%)  ???:tsp::BranchBoundSolver::buildBranchCandidates(tsp::BranchBoundSolver::PartialSol const&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> >&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> >&) const [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+1,751,574,871 (21.57%)  ???:tsp::BranchBoundSolver::search(tsp::BranchBoundSolver::PartialSol&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> >&, int, tsp::BranchStrategy, tsp::BranchBoundSolver::OneTree const*)::{lambda(bool)#1}::operator()(bool) const'2 [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+1,553,468,833 (19.13%)  ???:tsp::BranchBoundSolver::computeOneTree(tsp::BranchBoundSolver::PartialSol const&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> >&) const [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+  370,668,488 ( 4.56%)  ./malloc/./malloc/malloc.c:_int_free [/usr/lib/x86_64-linux-gnu/libc.so.6]
+  309,223,744 ( 3.81%)  ./malloc/./malloc/malloc.c:malloc [/usr/lib/x86_64-linux-gnu/libc.so.6]
+  229,162,098 ( 2.82%)  ???:void std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> >::_M_realloc_insert<tsp::BranchBoundSolver::Edge const&>(__gnu_cxx::__normal_iterator<tsp::BranchBoundSolver::Edge*, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> > >, tsp::BranchBoundSolver::Edge const&) [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+  200,018,807 ( 2.46%)  ./malloc/./malloc/malloc.c:_int_malloc [/usr/lib/x86_64-linux-gnu/libc.so.6]
+  193,490,640 ( 2.38%)  ./malloc/./malloc/malloc.c:free [/usr/lib/x86_64-linux-gnu/libc.so.6]
+  167,636,699 ( 2.06%)  ./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:__memcpy_avx_unaligned_erms [/usr/lib/x86_64-linux-gnu/libc.so.6]
+  158,353,853 ( 1.95%)  ???:tsp::BranchBoundSolver::chooseBranchEdge(tsp::BranchBoundSolver::PartialSol const&, tsp::BranchBoundSolver::OneTree const&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> > const&, tsp::BranchBoundSolver::Edge&) const [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+  110,566,064 ( 1.36%)  ???:operator new(unsigned long) [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+   70,392,868 ( 0.87%)  ???:tsp::BranchBoundSolver::search(tsp::BranchBoundSolver::PartialSol&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> >&, int, tsp::BranchStrategy, tsp::BranchBoundSolver::OneTree const*)'2 [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+   45,992,175 ( 0.57%)  ./malloc/./malloc/malloc.c:_int_free_merge_chunk [/usr/lib/x86_64-linux-gnu/libc.so.6]
+   38,869,548 ( 0.48%)  ???:std::vector<int, std::allocator<int> >::_M_fill_assign(unsigned long, int const&) [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+   31,221,584 ( 0.38%)  ./malloc/./malloc/malloc.c:unlink_chunk.isra.0 [/usr/lib/x86_64-linux-gnu/libc.so.6]
+   20,731,140 ( 0.26%)  ./malloc/./malloc/arena.c:free
+   19,956,202 ( 0.25%)  ./malloc/./malloc/malloc.c:malloc_consolidate [/usr/lib/x86_64-linux-gnu/libc.so.6]
+   19,650,097 ( 0.24%)  ./string/../sysdeps/x86_64/multiarch/memset-vec-unaligned-erms.S:__memset_avx2_unaligned_erms [/usr/lib/x86_64-linux-gnu/libc.so.6]
+   18,315,552 ( 0.23%)  ???:tsp::BranchBoundSolver::search(tsp::BranchBoundSolver::PartialSol&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> >&, int, tsp::BranchStrategy, tsp::BranchBoundSolver::OneTree const*)::{lambda(tsp::BranchBoundSolver::search(tsp::BranchBoundSolver::PartialSol&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> >&, int, tsp::BranchStrategy, tsp::BranchBoundSolver::OneTree const*)::LevelChanges const&)#1}::operator()(tsp::BranchBoundSolver::search(tsp::BranchBoundSolver::PartialSol&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> >&, int, tsp::BranchStrategy, tsp::BranchBoundSolver::OneTree const*)::LevelChanges const&) const [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+   16,283,216 ( 0.20%)  ./malloc/./malloc/malloc.c:_int_free_maybe_consolidate [/usr/lib/x86_64-linux-gnu/libc.so.6]
+   13,820,765 ( 0.17%)  ???:0x00000000048f0210 [???]
+   13,820,763 ( 0.17%)  ???:0x00000000048f0430 [???]
+   13,820,763 ( 0.17%)  ???:0x00000000048f0c60 [???]
+   13,820,758 ( 0.17%)  ???:operator delete(void*) [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+
+--------------------------------------------------------------------------------
+The following files chosen for auto-annotation could not be found:
+--------------------------------------------------------------------------------
+  ./malloc/./malloc/arena.c
+  ./malloc/./malloc/malloc.c
+  ./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+  ./string/../sysdeps/x86_64/multiarch/memset-vec-unaligned-erms.S
+

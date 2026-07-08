@@ -8,7 +8,6 @@ tsplib/
 __pycache__/
 *.pyc
 TS/
-docs/heatmap/
 docs/comparison-cache.json
 *.sol
 *.sav
