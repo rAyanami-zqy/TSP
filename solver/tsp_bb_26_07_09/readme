@@ -1,0 +1,63 @@
+# tsp_bb 2026-07-09 版本说明
+
+本目录中的 `tsp_bb` 对应 Git 提交附近的二进制，文件类型是
+Linux x86-64 ELF 可执行文件。
+
+该版本基于 2026-07-08 BP-chain 分支定界版本，BP 划分中的选边策略改为
+从 1-tree 所有未决边中直接选择最小权重边，不再按度数违规顶点筛选。
+
+## 命令行
+
+```bash
+./tsp_bb [options] [matrix-or-tsplib-file]
+./tsp_bb [options] --batch <list-file>
+```
+
+支持的选项：
+
+- `--batch <list-file>`：批处理清单，每行一个实例路径，空行和 `#` 开头的行会被忽略。
+- `--exact-max-n <n>`：转换成稠密矩阵前的规模上限，默认 `10000`。
+- `--debug`：向 stderr 输出求解过程调试信息。
+- `--debug-interval <n>`：调试进度输出间隔，默认 `10000`。
+- `--help` / `-h`：打印帮助。
+
+## 输入与输出
+
+支持两类输入：
+
+1. 本项目矩阵格式：第一项是顶点数 `n`，后面是 `n*n` 个距离。
+   缺边可以写成 `inf`、`infinity`、`-` 或 `x`。
+2. TSPLIB `TSP` 格式：支持坐标型 `NODE_COORD_SECTION` 和显式矩阵
+   `EDGE_WEIGHT_SECTION`。
+
+坐标距离类型和显式矩阵格式与 07-06/07-07/07-08 版本一致，见项目 README。
+
+## 相对于 07-08 版本的改动
+
+### BP 划分选边策略简化
+
+`bpPartition()` 中的选边逻辑改为：直接从 1-tree 的所有未决边（未被 forced
+或 forbidden 的边）中选择最小权重边作为 B 集候选边。
+
+原策略（保留在 `if (false)` 分支中）：先找度数最大的顶点（度数 > 2），
+再从该顶点的关联边中选最小未决边。
+
+新策略更简洁：不再关心度数为几，直接取 1-tree 中最小权重的未决边。
+
+选边策略由代码中的 `kUseMinEdgeFromOneTree` 常量控制（当前为 `true`），
+设为 `false` 可切回原策略。
+
+### 其他
+
+07-08 版本的其他特性（BP 划分中的 tour 终止检测、forbid 链 tour 检测、
+BP 状态复用优化、buildBranchCandidates 简化）均保持不变。
+
+## 性能特征
+
+新选边策略可能影响搜索树的形状和剪枝效率，具体性能差异待测试验证。
+
+## 已知限制
+
+- 二进制是 Linux x86-64 ELF，不是 macOS arm64 可执行文件。
+- CLI 没有启发式模式。
+- 1-tree 下界质量仍是瓶颈；ulysses22 (n=22) 等 gap 较大的实例仍会超时。

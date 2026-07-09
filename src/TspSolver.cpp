@@ -472,25 +472,37 @@ std::vector<BranchBoundSolver::Edge> BranchBoundSolver::bpPartition(
     const OneTree* work_tree = &current_tree;
 
     while (true) {
-        // ── 选边：从度数违规顶点取最小权重未决边 ──
-        // 若没有度数 > 2 的顶点，则当前可行 1-tree 已由 isTour() 处理。
         const Edge* deg_best = nullptr;
 
-        int branch_vertex = -1;
-        int max_deg = 2;
-        for (int v = 0; v < n_; ++v) {
-            if (work_tree->degree[static_cast<std::size_t>(v)] > max_deg) {
-                max_deg = work_tree->degree[static_cast<std::size_t>(v)];
-                branch_vertex = v;
-            }
-        }
-        if (branch_vertex >= 0) {
+        constexpr bool kUseMinEdgeFromOneTree = true;
+
+        if (kUseMinEdgeFromOneTree) {
+            // ── 新选边策略：从 1-tree 所有未决边中直接选最小权重边 ──
             for (const Edge& e : work_tree->edges) {
-                if (e.u != branch_vertex && e.v != branch_vertex) continue;
                 const std::size_t eid = edgeId(e.u, e.v);
                 if (work_node.forced[eid]) continue;
                 if (work_node.forbidden[eid]) continue;
                 if (!deg_best || e.w < deg_best->w) deg_best = &e;
+            }
+        } else {
+            // ── 原选边策略：从度数违规顶点取最小权重未决边 ──
+            // 若没有度数 > 2 的顶点，则当前可行 1-tree 已由 isTour() 处理。
+            int branch_vertex = -1;
+            int max_deg = 2;
+            for (int v = 0; v < n_; ++v) {
+                if (work_tree->degree[static_cast<std::size_t>(v)] > max_deg) {
+                    max_deg = work_tree->degree[static_cast<std::size_t>(v)];
+                    branch_vertex = v;
+                }
+            }
+            if (branch_vertex >= 0) {
+                for (const Edge& e : work_tree->edges) {
+                    if (e.u != branch_vertex && e.v != branch_vertex) continue;
+                    const std::size_t eid = edgeId(e.u, e.v);
+                    if (work_node.forced[eid]) continue;
+                    if (work_node.forbidden[eid]) continue;
+                    if (!deg_best || e.w < deg_best->w) deg_best = &e;
+                }
             }
         }
 

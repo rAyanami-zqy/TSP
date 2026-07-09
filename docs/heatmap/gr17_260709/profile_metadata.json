@@ -1,0 +1,18 @@
+{
+  "callgrind_elapsed_sec": 181.41047447361052,
+  "exact_max_n": 100,
+  "instance": "/home/wj/code/TSP/data/classic/tsplib/gr17.tsp",
+  "native_elapsed_sec": 3.485755478963256,
+  "solver": "/home/wj/code/TSP/solver/tsp_bb_26_07_09/tsp_bb",
+  "solver_stats": {
+    "cost": "2085",
+    "initial_upper_bound": "2085",
+    "method": "exact",
+    "nodes_created": "2653019",
+    "nodes_expanded": "676329",
+    "pruned_bound": "1305260",
+    "pruned_infeasible": "41758",
+    "root_lower_bound": "1501"
+  },
+  "strategy": "smart"
+}
