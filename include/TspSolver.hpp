@@ -68,7 +68,7 @@ struct HeuristicOptions {
 
 // 分支定界 TSP 求解器，使用 BP (Branch Partitioning) 策略。
 // 当前实现面向对称 TSP：dist[i][j] 必须等于 dist[j][i]。
-// BP 策略：在 1-tree 上执行候选边划分（A 集/B 集），仅在 B 集上链式分支。
+// BP 策略：在 1-tree 上执行候选边划分（A 集/B 集），直接枚举 B 集的 force 子节点。
 
 class BranchBoundSolver {
 public:
@@ -140,7 +140,9 @@ private:
     // 从 1-tree 的边集合构造访问顺序的顶点序列；如果无法构成合法回路则返回空。
     std::vector<int> buildTour(const std::vector<Edge>& edges) const;
     // 收集当前节点尚未决定且实际存在的边，作为本节点分支候选集。
-    bool buildBranchCandidates(const PartialSol& node,std::vector<Edge>& branch_candidates) const;
+    bool buildBranchCandidates(const PartialSol& node,
+                               std::vector<Edge>& branch_candidates,
+                               std::vector<std::size_t>* removed_edge_ids = nullptr) const;
     // 判断当前节点的下界是否已经不优于已知最优可行解，可以直接剪枝。
     bool shouldPrune(double bound, double best_cost) const;
     // 最近邻 + 2-opt + LK，生成一个可行上界，帮助早剪枝。
@@ -165,13 +167,11 @@ private:
     void linKernighan(std::vector<int>& tour, double& cost) const;
 
     // ── BP (Branch Partitioning) 搜索 ──
-    // 在当前 1-tree 上执行 BP 划分：将候选边分为 A 集（安全边）和 B 集（关键边），
-    // 返回 B 集。forbid_trees[i] 存放禁止 B[i] 后重算的 1-tree，供分支时复用。
-    std::vector<Edge> bpPartition(const PartialSol& node,
+    // 在当前 1-tree 上执行 BP 划分：依次测试前缀禁止约束并返回关键边集合 B。
+    std::vector<Edge> bpPartition(PartialSol& node,
                                   const std::vector<Edge>& branch_candidates,
-                                  const OneTree& current_tree,
-                                  std::vector<OneTree>& forbid_trees);
-    // BP 递归搜索：在每个节点执行 BP 划分后链式分支。
+                                  const OneTree& current_tree);
+    // BP 递归搜索：在每个节点执行 BP 划分后枚举“前缀 forbid + 当前 force”子节点。
     void search(PartialSol& node, std::vector<Edge>& branch_candidates, int depth);
 
     // 顶点数。
