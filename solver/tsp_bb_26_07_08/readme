@@ -1,0 +1,83 @@
+# tsp_bb 2026-07-08 版本说明
+
+本目录中的 `tsp_bb` 对应 Git 提交 `d79052e` 附近的最新二进制，文件类型是
+Linux x86-64 ELF 可执行文件。
+
+该版本基于 2026-07-07 BP-chain 分支定界版本，主要改动包括 BP 划分中的 tour 终止检测、
+BP 复用优化、以及候选集构建的简化。
+
+## 命令行
+
+```bash
+./tsp_bb [options] [matrix-or-tsplib-file]
+./tsp_bb [options] --batch <list-file>
+```
+
+支持的选项：
+
+- `--batch <list-file>`：批处理清单，每行一个实例路径，空行和 `#` 开头的行会被忽略。
+- `--exact-max-n <n>`：转换成稠密矩阵前的规模上限，默认 `10000`。
+- `--debug`：向 stderr 输出求解过程调试信息。
+- `--debug-interval <n>`：调试进度输出间隔，默认 `10000`。
+- `--help` / `-h`：打印帮助。
+
+## 输入与输出
+
+支持两类输入：
+
+1. 本项目矩阵格式：第一项是顶点数 `n`，后面是 `n*n` 个距离。
+   缺边可以写成 `inf`、`infinity`、`-` 或 `x`。
+2. TSPLIB `TSP` 格式：支持坐标型 `NODE_COORD_SECTION` 和显式矩阵
+   `EDGE_WEIGHT_SECTION`。
+
+坐标距离类型和显式矩阵格式与 07-06/07-07 版本一致，见项目 README。
+
+## 相对于 07-07 版本的改动
+
+### 1. BP 划分中的 tour 终止检测
+
+在 `bpPartition()` 内部，禁止一条边后重算的 1-tree 如果本身已经是合法 Hamilton 回路，
+则直接更新 incumbent 并停止当前 BP 划分，不再继续处理剩余候选边。
+这避免了已找到最优解后仍进行无效划分的开销。
+
+### 2. forbid 链中的 tour 检测
+
+在 `search()` 的 forbid 链分支中，对 forbid 后得到的预计算 1-tree
+增加了 `isTour()` 检查。若 forbid_tree 已是回路，更新 incumbent 后直接返回，
+不再沿 forbid 链继续处理后续 B 边。
+
+### 3. BP 状态复用优化
+
+`bpPartition()` 内部使用 `const OneTree* work_tree` 指针引用当前工作树，
+避免每次迭代拷贝 `OneTree` 对象。同时对 `B_set` 和 `forbid_trees` 预分配
+容量（`reserve(current_tree.edges.size())`），减少循环中的 vector 扩容。
+
+### 4. buildBranchCandidates 简化
+
+移除了 `buildBranchCandidates()` 的 `removed` 输出参数。
+当前 BP 算法不再需要收集被过滤掉的边列表，候选集直接在原地压缩。
+
+### 5. bpPartition 选边逻辑精简
+
+移除了 `global_best` fallback 选边路径。`bpPartition()` 现在只从度数为 ≥ 3
+的顶点中选择最小权重未决边进入 B 集；若没有度数违规顶点（此时 1-tree 应为 Hamilton
+回路，由上层 `isTour()` 处理），则划分终止。
+
+## 性能特征
+
+相对于 07-02 版本：
+
+- 运行开销（runtime overhead）上升约 6-13%，主要由 malloc 和 BP 划分中的
+  vector 操作贡献。
+- Solver 内核（`search()`）占比从 ~80% 下降至 ~73%，核心搜索部分更紧凑。
+- BP 划分中的 `bpPartition` 自身因指针优化和 reserve 而略有收益，被
+  `computeOneTree` 额外调用抵消。
+
+整体而言，07-08 版本在正确性上比 07-07 更完备（tour 终止检测覆盖更全面），
+运行时间略高但代码更简洁，适合作为 BP-chain 策略的稳定基线。
+
+## 已知限制
+
+- 二进制是 Linux x86-64 ELF，不是 macOS arm64 可执行文件。
+- CLI 没有启发式模式。
+- 1-tree 下界质量仍是瓶颈；ulysses22 (n=22) 等 gap 较大的实例仍会超时。

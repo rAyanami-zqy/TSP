@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cctype>
 #include <cstdint>
+#include <functional>
 #include <iomanip>
 #include <iterator>
 #include <limits>

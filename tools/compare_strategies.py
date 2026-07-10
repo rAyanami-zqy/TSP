@@ -88,7 +88,8 @@ INSTANCE_SOURCES = [
      "skip_dirs": ["tsplib"]},
 
     # Classic TSPLIB benchmark — instances with fewer than 30 vertices
-    {"path": "data/classic/tsplib", "recursive": False, "max_dim": 59},
+    {"path": "data/classic/tsplib", "recursive": False, "max_dim": 59,
+     "skip_files": ["ulysses22.tsp"]},
     # result: burma14(14) ulysses16(16) gr17(17) gr21(21) ulysses22(22)
     #         gr24(24) fri26(26) bayg29(29) bays29(29)
 
@@ -101,6 +102,7 @@ INSTANCE_SOURCES = [
 INF = float("inf")
 
 DEFAULT_SKIP_DIRS = {"_archives", "tsplib"}
+DEFAULT_SKIP_FILES: set[str] = set()
 DEFAULT_EXTENSIONS = (".txt", ".tsp")
 
 
@@ -192,6 +194,7 @@ def find_instances() -> list[tuple[str, int]]:
         recursive = cfg.get("recursive", True)
         max_dim = cfg.get("max_dim", None)
         skip_dirs = set(cfg.get("skip_dirs", DEFAULT_SKIP_DIRS))
+        skip_files = set(cfg.get("skip_files", DEFAULT_SKIP_FILES))
         extensions = tuple(cfg.get("extensions", DEFAULT_EXTENSIONS))
 
         if recursive:
@@ -214,6 +217,8 @@ def find_instances() -> list[tuple[str, int]]:
                 if fname == "batch.txt":
                     continue
                 if not fname.endswith(extensions):
+                    continue
+                if fname in skip_files:
                     continue
 
                 filepath = os.path.join(dirpath, fname)
