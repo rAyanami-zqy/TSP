@@ -66,6 +66,8 @@ struct HeuristicOptions {
     DebugOptions debug;
 };
 
+struct BranchBoundSolverTestAccess;
+
 // 分支定界 TSP 求解器，使用 BP (Branch Partitioning) 策略。
 // 当前实现面向对称 TSP：dist[i][j] 必须等于 dist[j][i]。
 // BP 策略：在 1-tree 上执行候选边划分（A 集/B 集），直接枚举 B 集的 force 子节点。
@@ -80,6 +82,8 @@ public:
     SolveResult solve();
 
 private:
+    friend struct BranchBoundSolverTestAccess;
+
     struct Edge {
         int u = 0;
         int v = 0;
@@ -93,8 +97,6 @@ private:
         // 1-tree 的边集合和度数统计，避免在分支节点中重复计算。
         std::vector<Edge> edges;
         std::vector<int> degree;
-        // 1-tree 中非 forced 的边，按权重升序排列，供 bpPartition 直接取用。
-        std::vector<Edge> unfixed_edges;
     };
 
     // 分支定界节点（部分解 P）：
@@ -134,7 +136,14 @@ private:
     bool isForbidden(const std::vector<unsigned char>& forbidden, int u, int v) const;
 
     // 在 forced / forbidden 约束下构造最小 1-tree，作为该节点的下界。
-    OneTree computeOneTree(const PartialSol& node_,std::vector<Edge>& branch_candidates)const;
+    OneTree computeOneTree(const PartialSol& node,
+                           const std::vector<Edge>& branch_candidates) const;
+    // 禁用当前 1-tree 中的一条未强制边后，使用 MST replacement edge 增量更新。
+    // node.candidate_mask 必须与 branch_candidates 保持同步，根边可用性由该 mask 判定。
+    bool updateOneTreeAfterForbid(const PartialSol& node,
+                                  const std::vector<Edge>& branch_candidates,
+                                  OneTree& tree,
+                                  const Edge& forbidden_edge) const;
     // 判断一个 1-tree 是否已经是一条合法的 Hamilton 回路。
     bool isTour(const OneTree& one_tree) const;
     // 从 1-tree 的边集合构造访问顺序的顶点序列；如果无法构成合法回路则返回空。
@@ -172,7 +181,10 @@ private:
                                   const std::vector<Edge>& branch_candidates,
                                   const OneTree& current_tree);
     // BP 递归搜索：在每个节点执行 BP 划分后枚举“前缀 forbid + 当前 force”子节点。
-    void search(PartialSol& node, std::vector<Edge>& branch_candidates, int depth);
+    void search(PartialSol& node,
+                std::vector<Edge>& branch_candidates,
+                int depth,
+                const OneTree* precomputed_tree = nullptr);
 
     // 顶点数。
     int n_ = 0;

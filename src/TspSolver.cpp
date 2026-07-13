@@ -434,7 +434,7 @@ SolveResult BranchBoundSolver::solve()
         writeDebugLine(debug_, line.str());
     }
 
-    search(root, branch_candidates, 0);
+    search(root, branch_candidates, 0, &root_tree);
 
     // 搜索结束后，best_cost_ 有限且 best_tour_ 非空才算找到可行最优解。
     if (isFinite(best_cost_) && !best_tour_.empty()) {
@@ -469,9 +469,7 @@ std::vector<BranchBoundSolver::Edge> BranchBoundSolver::bpPartition(
     const std::size_t reserve_hint = std::min<std::size_t>(current_tree.edges.size(), 4);
     B_set.reserve(reserve_hint);
 
-    std::vector<Edge> work_candidates = branch_candidates;
-    OneTree work_tree_storage;
-    const OneTree* work_tree = &current_tree;
+    OneTree work_tree = current_tree;
     std::vector<std::size_t> added_forbidden_ids;
     added_forbidden_ids.reserve(reserve_hint);
 
@@ -482,7 +480,7 @@ std::vector<BranchBoundSolver::Edge> BranchBoundSolver::bpPartition(
 
         if (kUseMinEdgeFromOneTree) {
             // ── 新选边策略：从 1-tree 所有未决边中直接选最小权重边 ──
-            for (const Edge& e : work_tree->edges) {
+            for (const Edge& e : work_tree.edges) {
                 const std::size_t eid = edgeId(e.u, e.v);
                 if (node.forced[eid]) continue;
                 if (node.forbidden[eid]) continue;
@@ -494,13 +492,13 @@ std::vector<BranchBoundSolver::Edge> BranchBoundSolver::bpPartition(
             int branch_vertex = -1;
             int max_deg = 2;
             for (int v = 0; v < n_; ++v) {
-                if (work_tree->degree[static_cast<std::size_t>(v)] > max_deg) {
-                    max_deg = work_tree->degree[static_cast<std::size_t>(v)];
+                if (work_tree.degree[static_cast<std::size_t>(v)] > max_deg) {
+                    max_deg = work_tree.degree[static_cast<std::size_t>(v)];
                     branch_vertex = v;
                 }
             }
             if (branch_vertex >= 0) {
-                for (const Edge& e : work_tree->edges) {
+                for (const Edge& e : work_tree.edges) {
                     if (e.u != branch_vertex && e.v != branch_vertex) continue;
                     const std::size_t eid = edgeId(e.u, e.v);
                     if (node.forced[eid]) continue;
@@ -518,33 +516,17 @@ std::vector<BranchBoundSolver::Edge> BranchBoundSolver::bpPartition(
             node.forbidden[eid] = 1;
             added_forbidden_ids.push_back(eid);
 
-            auto it = std::find_if(work_candidates.begin(), work_candidates.end(),
-                [&](const Edge& x) {
-                    return (x.u == e.u && x.v == e.v)
-                        || (x.u == e.v && x.v == e.u);
-                });
-            if (it != work_candidates.end()) work_candidates.erase(it);
-
-            unsigned char sm = 0;
-            if (!node.candidate_mask.empty()) {
-                sm = node.candidate_mask[eid];
-                node.candidate_mask[eid] = 0;
-            }
-
-            OneTree next_tree = computeOneTree(node, work_candidates);
-
-            if (!node.candidate_mask.empty()) {
-                node.candidate_mask[eid] = sm;
-            }
+            const bool replacement_found = updateOneTreeAfterForbid(
+                node, branch_candidates, work_tree, e);
 
             B_set.push_back(e);
-            if (!next_tree.feasible) {
+            if (!replacement_found) {
                 return false;
             }
-            if (isTour(next_tree)) {
-                std::vector<int> candidate = buildTour(next_tree.edges);
-                if (!candidate.empty() && next_tree.cost + kEps < best_cost_) {
-                    best_cost_ = next_tree.cost;
+            if (isTour(work_tree)) {
+                std::vector<int> candidate = buildTour(work_tree.edges);
+                if (!candidate.empty() && work_tree.cost + kEps < best_cost_) {
+                    best_cost_ = work_tree.cost;
                     best_tour_ = std::move(candidate);
                     writeDebugLine(debug_,
                                    "new incumbent: cost=" + formatDebugDouble(best_cost_)
@@ -552,13 +534,11 @@ std::vector<BranchBoundSolver::Edge> BranchBoundSolver::bpPartition(
                 }
                 return false;
             }
-            if (shouldPrune(next_tree.cost, best_cost_)) {
+            if (shouldPrune(work_tree.cost, best_cost_)) {
                 return false;
             }
 
-            // forbid 后仍可能包含改进解：保留 forbidden，更新持久状态后继续划分。
-            work_tree_storage = std::move(next_tree);
-            work_tree = &work_tree_storage;
+            // forbid 后仍可能包含改进解：保留 forbidden，基于增量更新后的树继续划分。
             return true;
         };
 
@@ -573,10 +553,19 @@ std::vector<BranchBoundSolver::Edge> BranchBoundSolver::bpPartition(
     return B_set;
 }
 
-void BranchBoundSolver::search(PartialSol& node, std::vector<Edge>& branch_candidates, int depth)
+void BranchBoundSolver::search(
+    PartialSol& node,
+    std::vector<Edge>& branch_candidates,
+    int depth,
+    const OneTree* precomputed_tree)
 {
     // Step 1: 计算 1-tree 下界。
-    OneTree current_tree = computeOneTree(node, branch_candidates);
+    OneTree computed_tree;
+    if (precomputed_tree == nullptr) {
+        computed_tree = computeOneTree(node, branch_candidates);
+        precomputed_tree = &computed_tree;
+    }
+    const OneTree& current_tree = *precomputed_tree;
     node.bound = current_tree.cost;
     node.depth = depth;
 
@@ -813,32 +802,15 @@ bool BranchBoundSolver::isForbidden(const std::vector<unsigned char>& forbidden,
 // 在当前分支节点的强制边和禁止边约束下，构造受约束的 1-tree 以计算下界。
 // 候选集已在 buildBranchCandidates 中过滤，此处不再重复可行性检查。
 BranchBoundSolver::OneTree BranchBoundSolver::computeOneTree(
-    const PartialSol &node_,std::vector<Edge>&branch_candidates) const
+    const PartialSol& node_, const std::vector<Edge>& branch_candidates) const
 {
     OneTree result;
     result.degree.assign(static_cast<std::size_t>(n_), 0);
 
-    // 复用部分解的 forced 并查集初始化 MST 的 DisjointSet（O(n) 拷贝），
-    // 避免 O(n²) 扫描中逐条 unite。顶点 0 不参与 MST，需将其所在分量中的
-    // 其余顶点脱离为独立分量。
-    std::vector<int> mst_parent = node_.forced_parent;
-    std::vector<int> mst_rank = node_.forced_rank;
-    // 找到顶点 0 的根，将分量内的其他顶点重置为独立根。
-    int root0 = 0;
-    while (mst_parent[static_cast<std::size_t>(root0)] != root0) {
-        root0 = mst_parent[static_cast<std::size_t>(root0)];
-    }
-    for (int v = 1; v < n_; ++v) {
-        int rv = v;
-        while (mst_parent[static_cast<std::size_t>(rv)] != rv) {
-            rv = mst_parent[static_cast<std::size_t>(rv)];
-        }
-        if (rv == root0) {
-            mst_parent[static_cast<std::size_t>(v)] = v;
-            mst_rank[static_cast<std::size_t>(v)] = 0;
-        }
-    }
-    DisjointSet tree_components(std::move(mst_parent), std::move(mst_rank));
+    // 顶点 0 不参与 MST；从独立集合开始显式合并所有非根 forced 边。
+    // 不能直接复用包含根边的 forced DSU，否则拆开 0 所在分量时会丢失其中的
+    // 非根 forced 连通关系。
+    DisjointSet tree_components(n_);
 
     int mst_edges = 0;
     double cost = 0.0;
@@ -851,6 +823,7 @@ BranchBoundSolver::OneTree BranchBoundSolver::computeOneTree(
     mst_edges = node_.forced_mst_count;
     for (const Edge& e : node_.forced_edges) {
         if (e.u == 0 || e.v == 0) continue;
+        tree_components.unite(e.u, e.v);
         edges.push_back(e);
     }
     // branch_candidates 由调用者保证已按权重升序排列，无需再次排序。
@@ -922,6 +895,89 @@ BranchBoundSolver::OneTree BranchBoundSolver::computeOneTree(
     result.cost = cost;
     result.edges = std::move(edges);
     return result;
+}
+
+bool BranchBoundSolver::updateOneTreeAfterForbid(
+    const PartialSol& node,
+    const std::vector<Edge>& branch_candidates,
+    OneTree& tree,
+    const Edge& forbidden_edge) const
+{
+    const std::size_t forbidden_id = edgeId(forbidden_edge.u, forbidden_edge.v);
+    if (!tree.feasible || !node.forbidden[forbidden_id] || node.forced[forbidden_id]) {
+        return false;
+    }
+
+    auto removed = std::find_if(tree.edges.begin(), tree.edges.end(),
+        [&](const Edge& edge) {
+            return edgeId(edge.u, edge.v) == forbidden_id;
+        });
+
+    // 禁用非树边不会改变当前最小 1-tree。BP 当前只传入树边，保留此分支使函数语义完整。
+    if (removed == tree.edges.end()) {
+        return true;
+    }
+
+    const Edge old_edge = *removed;
+    const Edge* replacement = nullptr;
+
+    if (old_edge.u == 0 || old_edge.v == 0) {
+        // 0 号顶点的两条边不属于 MST。删除其中一条后，只需补入下一条最轻合法根边。
+        for (const Edge& candidate : root_candidates_sorted_) {
+            const std::size_t candidate_id = edgeId(candidate.u, candidate.v);
+            if (node.forbidden[candidate_id]) continue;
+            if (!node.forced[candidate_id]
+                && !node.candidate_mask.empty()
+                && !node.candidate_mask[candidate_id]) {
+                continue;
+            }
+
+            const bool already_selected = std::any_of(
+                tree.edges.begin(), tree.edges.end(), [&](const Edge& edge) {
+                    return edgeId(edge.u, edge.v) == candidate_id;
+                });
+            if (already_selected) continue;
+
+            replacement = &candidate;
+            break;
+        }
+    } else {
+        // 删除 MST 边后，其余 n-3 条内部树边恰好形成两个分量。
+        DisjointSet components(n_);
+        for (const Edge& edge : tree.edges) {
+            if (edgeId(edge.u, edge.v) == forbidden_id
+                || edge.u == 0 || edge.v == 0) {
+                continue;
+            }
+            components.unite(edge.u, edge.v);
+        }
+
+        // 候选边已按权重升序排列；第一条跨越该割的边就是 replacement edge。
+        for (const Edge& candidate : branch_candidates) {
+            if (candidate.u == 0 || candidate.v == 0) continue;
+            const std::size_t candidate_id = edgeId(candidate.u, candidate.v);
+            if (node.forbidden[candidate_id]) continue;
+            if (!node.candidate_mask.empty() && !node.candidate_mask[candidate_id]) continue;
+            if (components.find(candidate.u) != components.find(candidate.v)) {
+                replacement = &candidate;
+                break;
+            }
+        }
+    }
+
+    if (replacement == nullptr) {
+        tree.feasible = false;
+        tree.cost = std::numeric_limits<double>::infinity();
+        return false;
+    }
+
+    --tree.degree[static_cast<std::size_t>(old_edge.u)];
+    --tree.degree[static_cast<std::size_t>(old_edge.v)];
+    ++tree.degree[static_cast<std::size_t>(replacement->u)];
+    ++tree.degree[static_cast<std::size_t>(replacement->v)];
+    tree.cost += replacement->w - old_edge.w;
+    *removed = *replacement;
+    return true;
 }
 
 bool BranchBoundSolver::isTour(const OneTree& one_tree) const
