@@ -720,19 +720,32 @@ void BranchBoundSolver::search(
         ForceChanges force_changes;
         if (apply_force(branch_edge, force_changes)) {
             std::vector<Edge> child_candidates = prefix_candidates;
-            std::vector<std::size_t> removed_mask_ids;
-            std::vector<std::size_t>* removed_mask_out =
-                node.candidate_mask.empty() ? nullptr : &removed_mask_ids;
+            std::vector<std::size_t> removed_edge_ids;
 
-            const bool ok = buildBranchCandidates(node, child_candidates, removed_mask_out);
+            const bool ok = buildBranchCandidates(node, child_candidates, &removed_edge_ids);
             if (ok) {
-                for (const std::size_t eid : removed_mask_ids) {
-                    node.candidate_mask[eid] = 0;
+                if (!node.candidate_mask.empty()) {
+                    for (const std::size_t eid : removed_edge_ids) {
+                        node.candidate_mask[eid] = 0;
+                    }
                 }
+
+                // 从父节点 1-tree 出发，仅对被移出候选集的树边做增量替换。
+                OneTree child_tree = current_tree;
+                bool tree_valid = true;
+                if (!removed_edge_ids.empty()) {
+                    tree_valid = updateOneTreeAfterCandidateRemoval(
+                        node, child_candidates, child_tree, removed_edge_ids);
+                }
+
                 ++result_.stats.nodes_created;
-                search(node, child_candidates, depth + 1);
-                for (const std::size_t eid : removed_mask_ids) {
-                    node.candidate_mask[eid] = 1;
+                search(node, child_candidates, depth + 1,
+                       tree_valid ? &child_tree : nullptr);
+
+                if (!node.candidate_mask.empty()) {
+                    for (const std::size_t eid : removed_edge_ids) {
+                        node.candidate_mask[eid] = 1;
+                    }
                 }
             } else {
                 ++result_.stats.nodes_pruned_infeasible;
@@ -977,6 +990,78 @@ bool BranchBoundSolver::updateOneTreeAfterForbid(
     ++tree.degree[static_cast<std::size_t>(replacement->v)];
     tree.cost += replacement->w - old_edge.w;
     *removed = *replacement;
+    return true;
+}
+
+bool BranchBoundSolver::updateOneTreeAfterCandidateRemoval(
+    const PartialSol& node,
+    const std::vector<Edge>& branch_candidates,
+    OneTree& tree,
+    const std::vector<std::size_t>& removed_edge_ids) const
+{
+    for (const std::size_t removed_id : removed_edge_ids) {
+        if (node.forced[removed_id]) continue;
+
+        auto it = std::find_if(tree.edges.begin(), tree.edges.end(),
+            [&](const Edge& e) {
+                return edgeId(e.u, e.v) == removed_id;
+            });
+        if (it == tree.edges.end()) continue;
+
+        const Edge old_edge = *it;
+        const Edge* replacement = nullptr;
+
+        if (old_edge.u == 0 || old_edge.v == 0) {
+            // 根边被移除：从 root_candidates_sorted_ 中找下一条最轻合法边。
+            const bool has_mask = !node.candidate_mask.empty();
+            for (const Edge& candidate : root_candidates_sorted_) {
+                const std::size_t cid = edgeId(candidate.u, candidate.v);
+                if (node.forbidden[cid]) continue;
+                if (node.forced[cid]) continue;
+                if (has_mask && !node.candidate_mask[cid]) continue;
+
+                const bool already_in_tree = std::any_of(
+                    tree.edges.begin(), tree.edges.end(),
+                    [&](const Edge& e) {
+                        return edgeId(e.u, e.v) == cid;
+                    });
+                if (already_in_tree) continue;
+
+                replacement = &candidate;
+                break;
+            }
+        } else {
+            // MST 边被移除：用其余 n-3 条内部树边重建 DSU，找跨割最轻边。
+            DisjointSet components(n_);
+            for (const Edge& edge : tree.edges) {
+                if (edgeId(edge.u, edge.v) == removed_id
+                    || edge.u == 0 || edge.v == 0) {
+                    continue;
+                }
+                components.unite(edge.u, edge.v);
+            }
+
+            for (const Edge& candidate : branch_candidates) {
+                if (candidate.u == 0 || candidate.v == 0) continue;
+                const std::size_t cid = edgeId(candidate.u, candidate.v);
+                if (node.forbidden[cid]) continue;
+                if (!node.candidate_mask.empty() && !node.candidate_mask[cid]) continue;
+                if (components.find(candidate.u) != components.find(candidate.v)) {
+                    replacement = &candidate;
+                    break;
+                }
+            }
+        }
+
+        if (replacement == nullptr) return false;
+
+        --tree.degree[static_cast<std::size_t>(old_edge.u)];
+        --tree.degree[static_cast<std::size_t>(old_edge.v)];
+        ++tree.degree[static_cast<std::size_t>(replacement->u)];
+        ++tree.degree[static_cast<std::size_t>(replacement->v)];
+        tree.cost += replacement->w - old_edge.w;
+        *it = *replacement;
+    }
     return true;
 }
 

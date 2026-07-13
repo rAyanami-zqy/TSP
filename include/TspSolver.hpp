@@ -144,6 +144,14 @@ private:
                                   const std::vector<Edge>& branch_candidates,
                                   OneTree& tree,
                                   const Edge& forbidden_edge) const;
+    // force 分支后，buildBranchCandidates 移除的候选边中若包含当前 1-tree 的边，
+    // 则为每条被移除的树边寻找替代边，增量更新 1-tree，避免从零重算 MST。
+    // 返回 false 表示存在无法替代的树边，调用者应回退到完整 computeOneTree。
+    bool updateOneTreeAfterCandidateRemoval(
+        const PartialSol& node,
+        const std::vector<Edge>& branch_candidates,
+        OneTree& tree,
+        const std::vector<std::size_t>& removed_edge_ids) const;
     // 判断一个 1-tree 是否已经是一条合法的 Hamilton 回路。
     bool isTour(const OneTree& one_tree) const;
     // 从 1-tree 的边集合构造访问顺序的顶点序列；如果无法构成合法回路则返回空。
