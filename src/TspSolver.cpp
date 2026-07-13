@@ -476,7 +476,7 @@ std::vector<BranchBoundSolver::Edge> BranchBoundSolver::bpPartition(
     while (true) {
         const Edge* deg_best = nullptr;
 
-        constexpr bool kUseMinEdgeFromOneTree = true;
+        constexpr bool kUseMinEdgeFromOneTree = false;
 
         if (kUseMinEdgeFromOneTree) {
             // ── 新选边策略：从 1-tree 所有未决边中直接选最小权重边 ──
@@ -732,10 +732,26 @@ void BranchBoundSolver::search(
 
                 // 从父节点 1-tree 出发，仅对被移出候选集的树边做增量替换。
                 OneTree child_tree = current_tree;
+
+                // 前缀禁止的 B-set 边已从 prefix_candidates 移除，
+                // buildBranchCandidates 不会将其加入 removed_edge_ids，
+                // 但它们可能仍在 child_tree 中，必须一并替换。
+                std::vector<std::size_t> all_removed = removed_edge_ids;
+                for (const auto& ch : prefix_changes) {
+                    auto tree_it = std::find_if(
+                        child_tree.edges.begin(), child_tree.edges.end(),
+                        [&](const Edge& e) {
+                            return edgeId(e.u, e.v) == ch.edge_id;
+                        });
+                    if (tree_it != child_tree.edges.end()) {
+                        all_removed.push_back(ch.edge_id);
+                    }
+                }
+
                 bool tree_valid = true;
-                if (!removed_edge_ids.empty()) {
+                if (!all_removed.empty()) {
                     tree_valid = updateOneTreeAfterCandidateRemoval(
-                        node, child_candidates, child_tree, removed_edge_ids);
+                        node, child_candidates, child_tree, all_removed);
                 }
 
                 ++result_.stats.nodes_created;

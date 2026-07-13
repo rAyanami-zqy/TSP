@@ -1,29 +1,13 @@
-# tsp_bb 2026-07-13-02 版本说明
+tsp_bb 2026-07-13-02
 
-本目录中的 `tsp_bb` 对应 Git 提交 `db6fa0e`，文件类型是 Linux x86-64 ELF 可执行文件。
+Commit: d676f12 Pass parent 1-tree to force children instead of recomputing MST from scratch
 
-该版本在 BP 选边策略中使用 `kUseMinEdgeFromOneTree = false`，即使用原有的度数违规顶点最小边选边策略。
+Strategy: kUseMinEdgeFromOneTree = false (degree-violation vertex only)
 
-## 命令行
+Changes from 07-08-02:
+- Pass parent 1-tree to children, incrementally update instead of recomputing MST
+- Add updateOneTreeAfterCandidateRemoval for incremental tree updates
+- Fix: prefix-forbidden B-set edges properly removed from child's 1-tree
+- Fallback to full computeOneTree when no replacement exists
 
-```bash
-./tsp_bb [options] [matrix-or-tsplib-file]
-./tsp_bb [options] --batch <list-file>
-```
-
-支持的选项：
-
-- `--batch <list-file>`：批处理清单，每行一个实例路径，空行和 `#` 开头的行会被忽略。
-- `--exact-max-n <n>`：转换成稠密矩阵前的规模上限，默认 `10000`。
-- `--debug`：向 stderr 输出求解过程调试信息。
-- `--debug-interval <n>`：调试进度输出间隔，默认 `10000`。
-- `--help` / `-h`：打印帮助。
-
-## 选边策略
-
-- `kUseMinEdgeFromOneTree = false`：使用原有度数违规顶点最小边选边策略（基线）
-
-## 已知限制
-
-- 二进制是 Linux x86-64 ELF。
-- CLI 没有启发式模式。
+Build: g++ via CMake/Make
