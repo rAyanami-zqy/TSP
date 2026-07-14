@@ -11,11 +11,15 @@ Changes from 07-10:
 - Fallback to full computeOneTree when no replacement exists
 
 Correctness repair:
-- Validate that a reused child 1-tree contains the edge forced by the child
-- Fall back to a full constrained 1-tree rebuild when a B[1+] edge is missing
+- Record the replacement edge and tree slot for every BP forbid step
+- Replay those replacements in search to maintain prefix trees T0, T1, T2, ...
+- Build each force B[i] child from its matching prefix tree Ti instead of T0
+- Keep full computeOneTree fallback only when candidate-removal updating fails
 
 Validation:
 - Complete and sparse BP regression cases both return the optimum 1920
 - 36 complete/sparse random instances (n=5..8) matched brute force
+- Verification builds confirmed every reused child tree contains all forced edges
+  and has the same cost as a complete constrained 1-tree rebuild
 
 Build: AppleClang via CMake, macOS arm64
