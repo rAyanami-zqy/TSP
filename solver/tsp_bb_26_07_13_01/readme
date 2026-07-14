@@ -22,4 +22,4 @@ Validation:
 - Verification builds confirmed every reused child tree contains all forced edges
   and has the same cost as a complete constrained 1-tree rebuild
 
-Build: AppleClang via CMake, macOS arm64
+Build: g++ via CMake/Make
