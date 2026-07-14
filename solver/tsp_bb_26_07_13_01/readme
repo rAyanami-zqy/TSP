@@ -1,6 +1,6 @@
-tsp_bb 2026-07-13-01
+tsp_bb 2026-07-13-01 (correctness repair)
 
-Commit: d676f12 Pass parent 1-tree to force children instead of recomputing MST from scratch
+Base source: e6a862d Fix prefix-forbidden edge leak in child 1-tree
 
 Strategy: kUseMinEdgeFromOneTree = true (min-edge from entire 1-tree)
 
@@ -10,4 +10,12 @@ Changes from 07-10:
 - Fix: prefix-forbidden B-set edges properly removed from child's 1-tree
 - Fallback to full computeOneTree when no replacement exists
 
-Build: g++ via CMake/Make
+Correctness repair:
+- Validate that a reused child 1-tree contains the edge forced by the child
+- Fall back to a full constrained 1-tree rebuild when a B[1+] edge is missing
+
+Validation:
+- Complete and sparse BP regression cases both return the optimum 1920
+- 36 complete/sparse random instances (n=5..8) matched brute force
+
+Build: AppleClang via CMake, macOS arm64
