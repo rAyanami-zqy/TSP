@@ -1,0 +1,11 @@
+tsp_bb 2026-07-14-01
+
+Commit: c4965a1 Optimize BP search with dynamic MST updates
+
+Strategy: kUseMinEdgeFromOneTree = true (min-edge from entire 1-tree)
+
+Changes from 07-13-02:
+- Optimize BP search with dynamic MST updates
+- Major refactor of TspSolver.cpp (886 lines changed)
+
+Build: g++ via CMake/Make
