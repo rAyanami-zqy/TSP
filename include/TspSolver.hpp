@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <iosfwd>
 #include <limits>
 #include <string>
@@ -97,6 +98,22 @@ private:
         // 1-tree 的边集合和度数统计，避免在分支节点中重复计算。
         std::vector<Edge> edges;
         std::vector<int> degree;
+        // 顶点 1..n-1 上当前 MST 的动态邻接位图（按行存储）。子节点复制
+        // OneTree 时一并继承；树边删除/替换通过 cut/link 原地更新。
+        std::vector<std::uint64_t> mst_adjacency_bits;
+        // 已扫描过的根边前缀。约束沿单条 DFS 路径只会收紧，因此根边替换可从
+        // 此处继续；游标随 1-tree 复制，回溯到兄弟节点时不会泄漏状态。
+        std::size_t root_candidate_cursor = 0;
+    };
+
+    // BP 链中的一项：edge 是该子分支要 force 的边；其余字段记录 forbid edge
+    // 对前缀树的一步变换，search 可顺序重放而无需为每个 B 项复制整棵 1-tree。
+    struct BranchChoice {
+        Edge edge;
+        bool has_forbid_replacement = false;
+        std::size_t tree_edge_index = 0;
+        Edge forbid_replacement;
+        std::size_t next_root_candidate_cursor = 0;
     };
 
     // 分支定界节点（部分解 P）：
@@ -114,13 +131,21 @@ private:
         std::vector<int> forced_comp_size; // comp_size[i] = size of component rooted at i
         // 各顶点在 forced 边子图中的度数。
         std::vector<int> forced_degree;
+        // 每个 forced DSU 根对应的成员列表。合并时只追加、回溯时 resize，
+        // 用于只枚举两个新合并分量之间会失效的候选边。
+        std::vector<std::vector<int>> forced_members;
         // forced 边列表与 MST 部分（不含顶点 0 的边）的权值和及计数。
         std::vector<Edge> forced_edges;
         double forced_mst_cost = 0.0;
         int forced_mst_count = 0;
-        // 候选集快速查找表（大小 n*n），由 buildBranchCandidates 维护，
-        // chooseBranchEdge 直接读取，避免重复分配 O(n²) 的掩码数组。
+        // 候选集快速查找表（大小 n*n），由可逆增量删除维护。
         std::vector<unsigned char> candidate_mask;
+        // 按 branch_candidates 权重顺序保存 active 位，既保留 Kruskal 顺序，
+        // 又能按 64 条边一组跳过已删除候选。
+        std::vector<std::uint64_t> candidate_bits;
+        // 当前 active 候选边对各顶点的关联数；与 forced_degree 相加即可
+        // O(n) 判断每个顶点是否仍可能达到度数 2。
+        std::vector<int> candidate_degree;
     };
 
     // tryChild 过滤后的候选集保存在这里，visitChild 直接取用，避免重复过滤。
@@ -138,6 +163,8 @@ private:
     // 在 forced / forbidden 约束下构造最小 1-tree，作为该节点的下界。
     OneTree computeOneTree(const PartialSol& node,
                            const std::vector<Edge>& branch_candidates) const;
+    // 无约束根节点专用的稠密 Prim；子节点仍走支持 forced forest 的 Kruskal。
+    OneTree computeRootOneTreePrim() const;
     // 禁用当前 1-tree 中的一条未强制边后，使用 MST replacement edge 增量更新。
     // node.candidate_mask 必须与 branch_candidates 保持同步，根边可用性由该 mask 判定。
     bool updateOneTreeAfterForbid(const PartialSol& node,
@@ -146,20 +173,47 @@ private:
                                   const Edge& forbidden_edge) const;
     // force 分支后，buildBranchCandidates 移除的候选边中若包含当前 1-tree 的边，
     // 则为每条被移除的树边寻找替代边，增量更新 1-tree，避免从零重算 MST。
-    // 返回 false 表示存在无法替代的树边，调用者应回退到完整 computeOneTree。
+    // 返回 false 表示删除后的内部图已断开；此时传入 tree 可能只完成了部分批次更新，
+    // 调用者不得继续使用它作为可行下界。
     bool updateOneTreeAfterCandidateRemoval(
         const PartialSol& node,
         const std::vector<Edge>& branch_candidates,
         OneTree& tree,
         const std::vector<std::size_t>& removed_edge_ids) const;
+    const Edge* findMstReplacement(const PartialSol& node,
+                                   const std::vector<Edge>& branch_candidates,
+                                   const OneTree& tree,
+                                   const Edge& removed_edge) const;
+    // 构建并维护 OneTree 携带的动态 MST 拓扑；根边不属于该状态。
+    void initializeDynamicMst(OneTree& tree) const;
+    void setDynamicMstEdge(OneTree& tree, int u, int v, bool present) const;
+    void replaceOneTreeEdge(OneTree& tree, std::size_t edge_index,
+                            const Edge& replacement) const;
+    bool markMstComponentWithoutEdge(const OneTree& tree,
+                                     const Edge& removed_edge) const;
+    bool dynamicMstMatchesEdges(const OneTree& tree) const;
+    // 根据树中已选择的 optional 根边重建下一次根边扫描位置。
+    std::size_t rootCandidateCursor(const PartialSol& node, const OneTree& tree) const;
     // 判断一个 1-tree 是否已经是一条合法的 Hamilton 回路。
     bool isTour(const OneTree& one_tree) const;
     // 从 1-tree 的边集合构造访问顺序的顶点序列；如果无法构成合法回路则返回空。
     std::vector<int> buildTour(const std::vector<Edge>& edges) const;
-    // 收集当前节点尚未决定且实际存在的边，作为本节点分支候选集。
+    // 完整过滤实现，供测试构建与增量状态对拍使用。
     bool buildBranchCandidates(const PartialSol& node,
                                std::vector<Edge>& branch_candidates,
                                std::vector<std::size_t>* removed_edge_ids = nullptr) const;
+    // 可逆地停用/恢复候选边，并同步 candidate_mask/candidate_degree。
+    void deactivateCandidate(PartialSol& node, std::size_t edge_id,
+                             std::vector<std::size_t>& removed_edge_ids) const;
+    void restoreCandidates(PartialSol& node,
+                           const std::vector<std::size_t>& removed_edge_ids) const;
+    // force 一条边后，仅处理由端点度数饱和、forced 分量合并导致的新失效边。
+    void deactivateCandidatesAfterForce(PartialSol& node, const Edge& forced_edge,
+                                        int component_u, int component_v,
+                                        std::vector<std::size_t>& removed_edge_ids) const;
+    bool hasSufficientCandidateDegree(const PartialSol& node) const;
+    std::size_t nextActiveCandidate(const PartialSol& node, std::size_t begin,
+                                    std::size_t candidate_count) const;
     // 判断当前节点的下界是否已经不优于已知最优可行解，可以直接剪枝。
     bool shouldPrune(double bound, double best_cost) const;
     // 最近邻 + 2-opt + LK，生成一个可行上界，帮助早剪枝。
@@ -185,12 +239,12 @@ private:
 
     // ── BP (Branch Partitioning) 搜索 ──
     // 在当前 1-tree 上执行 BP 划分：依次测试前缀禁止约束并返回关键边集合 B。
-    std::vector<Edge> bpPartition(PartialSol& node,
-                                  const std::vector<Edge>& branch_candidates,
-                                  const OneTree& current_tree);
+    std::vector<BranchChoice> bpPartition(PartialSol& node,
+                                          const std::vector<Edge>& branch_candidates,
+                                          const OneTree& current_tree);
     // BP 递归搜索：在每个节点执行 BP 划分后枚举“前缀 forbid + 当前 force”子节点。
     void search(PartialSol& node,
-                std::vector<Edge>& branch_candidates,
+                const std::vector<Edge>& branch_candidates,
                 int depth,
                 const OneTree* precomputed_tree = nullptr);
 
@@ -199,8 +253,14 @@ private:
     // 距离矩阵，dist[i][j] 是顶点 i 和 j 之间的距离；dist[i][i] 必须为 0。
     std::vector<std::vector<double>> dist_;
     // 与顶点 0 相连的所有有限边，按权重升序排列。
-    // 在 computeOneTree 中取前 2 条未被禁止的边作为 1-tree 的 root edges。
+    // 在根 Prim / computeOneTree 中取前 2 条合法边作为 1-tree 的 root edges。
     std::vector<Edge> root_candidates_sorted_;
+    // edgeId -> branch_candidates 中的稳定排序位置，供 active bitset O(1) 更新。
+    std::vector<std::size_t> candidate_position_by_id_;
+    // 动态 MST cut 查询复用的分量标记与 DFS 栈，epoch 避免每次清零 O(n)。
+    mutable std::vector<std::uint32_t> mst_component_mark_;
+    mutable std::uint32_t mst_component_epoch_ = 0;
+    mutable std::vector<int> mst_component_stack_;
     DebugOptions debug_;
 
     // LK 候选集：每个顶点的 K 近邻，惰性初始化。

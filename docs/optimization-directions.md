@@ -14,7 +14,12 @@
 
 ## 2. MST 替换边查询：避免每次重建 DSU
 
-**现状**: `updateOneTreeAfterForbid` 和 `updateOneTreeAfterCandidateRemoval` 里，每次替换 MST 边都要：
+> **实现状态（2026-07-14）**：已采用面向 DFS 回溯的 decremental dynamic MST。`OneTree`
+> 携带内部 MST 邻接位图；删除树边时标记 fundamental cut 并扫描有序 active candidates，
+> 不再为每次 replacement 重建 DSU。设计与正确性边界见
+> [`dynamic-mst-design.md`](dynamic-mst-design.md)。
+
+**原实现**: `updateOneTreeAfterForbid` 和 `updateOneTreeAfterCandidateRemoval` 里，每次替换 MST 边都要：
 
 ```
 重建 DSU: O(n)                // 遍历 n-3 条树边
@@ -23,17 +28,22 @@
 
 这两个操作在每次 forbid/force-child 时都会触发。
 
-**优化方向 A — MST 敏感性预处理**: 对 MST 中每条边，预计算"如果这条边被删除，最优替代边是什么"。有经典算法可以在 `O(m α(n))` 时间内为所有 `n-3` 条 MST 边找到替代边（`m = n²` 对于完全图）。预处理完之后，所有替换查询都是 `O(1)`。
+**原候选方向 A — MST 敏感性预处理**: 对 MST 中每条边，预计算"如果这条边被删除，最优替代边是什么"。有经典算法可以在 `O(m α(n))` 时间内为所有 `n-3` 条 MST 边找到替代边（`m = n²` 对于完全图）。预处理完之后，所有替换查询都是 `O(1)`。
 
-**优化方向 B — 持久化 DSU**: 把 `computeOneTree` 中 Kruskal 每一步的 DSU 快照存下来。替换某条 MST 边时，回退到该边加入前的 DSU 状态，直接定位割的两端。增量 DSU rollback 可以在 `O(α(n))` 内完成（类似 persistent array 或记录 change log）。
+**原候选方向 B — 持久化 DSU**: 把 `computeOneTree` 中 Kruskal 每一步的 DSU 快照存下来。替换某条 MST 边时，回退到该边加入前的 DSU 状态，直接定位割的两端。增量 DSU rollback 可以在 `O(α(n))` 内完成（类似 persistent array 或记录 change log）。
 
 ---
 
 ## 3. MST DSU 向子节点传递
 
-**现状**: 我们现在传了 1-tree，但 `computeOneTree` 里的 `tree_components`（Kruskal 用的 DSU）每次都是从零建的。如果子节点需要完整重算（增量更新失败），Kruskal 会把所有 forced 边重新 unite 一遍，再扫描候选边。
+> **方案修正（2026-07-14）**：不直接传最终 DSU，也不采用单向 warm-start cursor。最终 DSU
+> 无法 split；此前因成环被 Kruskal 跳过的较早边，在树边删除后可能成为最优 replacement。
+> 当前实现改为传递可 cut/link 的 MST 邻接状态，详见
+> [`dynamic-mst-design.md`](dynamic-mst-design.md)。
 
-**优化方向**: 把建好的 MST DSU 也随 1-tree 一起传给子节点。子节点做 Kruskal 时跳过已经在 DSU 中的 forced 边，直接从上次中断的位置继续扫描候选边——"warm start Kruskal"。
+**原提案背景**: 我们已经传了 1-tree，但 `computeOneTree` 里的 `tree_components`（Kruskal 用的 DSU）每次都是从零建的。如果子节点需要完整重算，Kruskal 会把所有 forced 边重新 unite 一遍，再扫描候选边。
+
+**原提案（不采用）**: 把建好的 MST DSU 也随 1-tree 一起传给子节点。子节点做 Kruskal 时跳过已经在 DSU 中的 forced 边，直接从上次中断的位置继续扫描候选边——"warm start Kruskal"。
 
 ```cpp
 struct OneTree {

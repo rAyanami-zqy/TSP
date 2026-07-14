@@ -37,6 +37,8 @@ if(BUILD_TESTING)
     )
 
     target_compile_features(tsp_solver_tests PRIVATE cxx_std_17)
+    # 测试二进制逐节点用完整候选过滤/Kruskal 对拍增量状态；主程序不启用。
+    target_compile_definitions(tsp_solver_tests PRIVATE TSP_VERIFY_INCREMENTAL_STATE=1)
 
     if(MSVC)
         target_compile_options(tsp_solver_tests PRIVATE /W4)
