@@ -279,8 +279,12 @@ void printUsage(const char* program)
     std::cerr << "Usage:\n"
               << "  " << program << " [options] [matrix-or-tsplib-file]\n"
               << "  " << program << " [options] --batch <list-file>\n"
-              << "\nOptions:\n"
-              << "  --exact-max-n <n>\n"
+              << "\nOptions:\n";
+#ifdef TSP_DISABLE_BP
+    // 保留旧 07_02 命令行兼容，但该构建只允许 smart 策略。
+    std::cerr << "  --branch-strategy <smart>\n";
+#endif
+    std::cerr << "  --exact-max-n <n>\n"
               << "  --debug\n"
               << "  --debug-interval <n>\n";
 }
@@ -323,6 +327,14 @@ CliOptions parseArgs(int argc, char** argv)
             std::exit(0);
         } else if (arg == "--batch") {
             options.batch_path = require_value(arg);
+#ifdef TSP_DISABLE_BP
+        } else if (arg == "--branch-strategy") {
+            const std::string strategy = require_value(arg);
+            if (strategy != "smart") {
+                throw std::runtime_error(
+                    "--branch-strategy only accepts smart in this solver build");
+            }
+#endif
         } else if (arg == "--exact-max-n") {
             options.exact_max_n = parseSizeOption(require_value(arg), arg);
             if (options.exact_max_n == 0) {

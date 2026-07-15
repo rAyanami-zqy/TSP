@@ -88,6 +88,20 @@ struct BranchBoundSolverTestAccess {
             });
         }
 
+        Edge chooseSmart(const std::vector<Edge>& available_candidates) const
+        {
+            Edge selected;
+            expect(solver.chooseSmartBranchEdge(
+                       node, tree, available_candidates, selected),
+                   "smart selector did not return an available edge");
+            return selected;
+        }
+
+        void setCandidateAvailable(int u, int v, bool available)
+        {
+            node.candidate_mask[solver.edgeId(u, v)] = available ? 1 : 0;
+        }
+
         OneTree forbidAndCompare(int u, int v, bool require_same_degree = true)
         {
             const Edge removed = edge(u, v);
@@ -289,6 +303,44 @@ std::vector<std::vector<double>> replacementMatrix()
         {6, 4, 2, 0, 3},
         {7, 10, 5, 3, 0},
     };
+}
+
+void testSmartBranchPriorities()
+{
+    Fixture fixture(replacementMatrix());
+
+    // Priority 1: vertex 2 is the only degree-3 vertex in this 1-tree; its
+    // lightest undecided incident tree edge is (1,2).
+    auto selected = fixture.chooseSmart(fixture.candidates);
+    if (selected.u != 1 || selected.v != 2) {
+        throw std::runtime_error("smart priority 1 selected the wrong edge");
+    }
+
+    // Priority 2: hide all undecided tree edges incident to the violating
+    // vertex, then select the lightest remaining undecided tree edge (0,1).
+    for (const auto& edge : fixture.tree.edges) {
+        if (edge.u == 2 || edge.v == 2) {
+            fixture.setCandidateAvailable(edge.u, edge.v, false);
+        }
+    }
+    selected = fixture.chooseSmart(fixture.candidates);
+    if (selected.u != 0 || selected.v != 1) {
+        throw std::runtime_error("smart priority 2 selected the wrong edge");
+    }
+
+    // Priority 3: with every tree edge unavailable, fall back to the lightest
+    // edge in the supplied branch-candidate set.
+    for (const auto& edge : fixture.tree.edges) {
+        fixture.setCandidateAvailable(edge.u, edge.v, false);
+    }
+    const std::vector<tsp::BranchBoundSolverTestAccess::Edge> fallback_candidates = {
+        fixture.edge(1, 3),
+        fixture.edge(1, 4),
+    };
+    selected = fixture.chooseSmart(fallback_candidates);
+    if (selected.u != 1 || selected.v != 3) {
+        throw std::runtime_error("smart priority 3 selected the wrong edge");
+    }
 }
 
 void expectCost(double actual, double expected, const std::string& message)
@@ -834,6 +886,7 @@ void testExactIntegerPruningDomain()
 int main()
 {
     try {
+        testSmartBranchPriorities();
         testInternalReplacement();
         testRootReplacement();
         testNonTreeForbid();

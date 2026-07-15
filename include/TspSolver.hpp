@@ -68,9 +68,9 @@ struct HeuristicOptions {
 
 struct BranchBoundSolverTestAccess;
 
-// 分支定界 TSP 求解器，使用 BP (Branch Partitioning) 策略。
-// 当前实现面向对称 TSP：dist[i][j] 必须等于 dist[j][i]。
-// BP 策略：在 1-tree 上执行候选边划分（A 集/B 集），直接枚举 B 集的 force 子节点。
+// 分支定界 TSP 求解器。当前默认使用 BP (Branch Partitioning)；
+// TSP_DISABLE_BP 变体使用历史 smart 选边的 force/forbid 二分搜索。
+// 实现面向对称 TSP：dist[i][j] 必须等于 dist[j][i]。
 
 class BranchBoundSolver {
 public:
@@ -174,6 +174,12 @@ private:
     bool buildBranchCandidates(const PartialSol& node,
                                std::vector<Edge>& branch_candidates,
                                std::vector<std::size_t>* removed_edge_ids = nullptr) const;
+    // 历史 smart 选边：先在 1-tree 中选最高违规度顶点的最轻未决边，
+    // 再回退到全部 1-tree 未决边和全候选集的最轻边。
+    bool chooseSmartBranchEdge(const PartialSol& node,
+                               const OneTree& one_tree,
+                               const std::vector<Edge>& candidates,
+                               Edge& edge) const;
     // 精确恢复 DFS force 前的 MST 缓存；不能用 +w/-w 逆运算，因为不同
     // 动态范围的浮点数相加会丢失旧值。
     void restoreForcedMstCache(PartialSol& node, double old_cost,
@@ -211,6 +217,12 @@ private:
                 std::vector<Edge>& branch_candidates,
                 int depth,
                 const OneTree* precomputed_tree = nullptr);
+    // 不使用 BP 划分的 smart 二分搜索：每层只生成 force / forbid
+    // 两个互斥子节点，其他下界、回滚和 1-tree 安全校验与当前实现共享。
+    void searchSmart(PartialSol& node,
+                     std::vector<Edge>& branch_candidates,
+                     int depth,
+                     const OneTree* precomputed_tree = nullptr);
 
     // 顶点数。
     int n_ = 0;
