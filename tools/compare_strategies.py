@@ -33,7 +33,9 @@ import math
 import json
 import shutil
 import tempfile
+import threading
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from typing import cast
 
@@ -59,6 +61,15 @@ CONCORDE_OUT_DIR = os.path.join(PROJECT_ROOT, "TS")
 TIMEOUT = 1800  # seconds per instance per algorithm
 DEBUG_INTERVAL = 5000000  # how often tsp_bb prints debug progress
 CONCORDE_SEED = 123  # fixed seed for reproducibility
+
+# ── Parallel execution ──────────────────────────────────────────────
+# 同时求解不同实例的最大线程数。每个线程独立运行 Concorde（若未缓存）
+# 及所有 solver 变体，实例间无依赖可完全并行。设为 1 即为原始串行行为。
+# 建议值：CPU 核心数附近（如 4~8），IO 密集场景可适当更多。
+MAX_WORKERS = 5
+
+# 保护 cache 字典读写与文件落盘的线程锁。
+_cache_lock = threading.Lock()
 
 # Fallback strategy for older solver versions that still require --branch-strategy.
 LEGACY_STRATEGY = "smart"
@@ -896,6 +907,93 @@ def _build_source_description() -> str:
 
 # ── Main ──────────────────────────────────────────────────────────────
 
+def _process_instance(idx: int, path: str, dim: int,
+                      solver_entries: list[tuple[str, str, bool]],
+                      cache: dict) -> dict:
+    """处理单个实例：Concorde（若未缓存）及所有 solver（若未缓存）。
+
+    在 MAX_WORKERS > 1 时由线程池并发调用。缓存读写通过 _cache_lock 保护。
+    日志收集到列表中由主线程整块输出，避免并发交错。
+    返回字典供主线程生成 markdown / 汇总。
+    """
+    rel_path = os.path.relpath(path, PROJECT_ROOT)
+    log: list[str] = []  # 收集日志，由主线程原子输出
+
+    # ── Concorde (reference) ──
+    with _cache_lock:
+        cached_cc = get_cached_concorde(cache, rel_path)
+    if cached_cc is not None:
+        concorde_stats = cached_concorde_to_stats(cached_cc)
+        ref_cost = concorde_stats.get("cost") if concorde_stats.get("feasible") else None
+        log.append(f"\n[{idx}/{_instance_total}] {rel_path} (n={dim})")
+        log.append(f"  Concorde: (cached) cost={ref_cost} time={fmt_time(concorde_stats.get('elapsed', 0))}")
+    else:
+        log.append(f"\n[{idx}/{_instance_total}] {rel_path} (n={dim})")
+        log.append("  Concorde...")
+        concorde_stats = run_concorde(path, CONCORDE_SEED)
+        with _cache_lock:
+            store_concorde_result(cache, rel_path, concorde_stats)
+            save_cache(cache)
+        ref_cost = concorde_stats.get("cost") if concorde_stats.get("feasible") else None
+        if concorde_stats["timeout"]:
+            log[-1] += " TIMEOUT"
+        elif concorde_stats["error"]:
+            log[-1] += f" ERROR: {concorde_stats['error']}"
+        else:
+            c_time = concorde_stats.get("elapsed", 0)
+            c_bb = concorde_stats.get("bbnodes")
+            if ref_cost is not None:
+                log[-1] += f" cost={ref_cost:.0f} time={fmt_time(c_time)} bbnodes={c_bb}"
+            else:
+                log[-1] += f" no solution time={fmt_time(c_time)}"
+
+    # ── Run all solver versions ──
+    all_results: dict[str, dict] = {}
+    for s_label, s_path, needs_arg in solver_entries:
+        with _cache_lock:
+            is_timeout = is_solver_timeout_cached(cache, s_label, rel_path)
+            cached_sr = get_cached_solver_result(cache, s_label, rel_path) if not is_timeout else None
+
+        if is_timeout:
+            st = _empty_stats_tspbb()
+            st["elapsed"] = TIMEOUT
+            st["timeout"] = True
+            all_results[s_label] = st
+            log.append(f"  {s_label}: (cached TIMEOUT — skipped)")
+            continue
+
+        if cached_sr is not None:
+            st = cached_stats_to_result(cached_sr)
+            all_results[s_label] = st
+            status = _solver_status_line(s_label, st, ref_cost)
+            log.append(f"  {s_label}: {status} (cached)")
+            continue
+
+        st = run_tspbb(path, binary=s_path, add_strategy_arg=needs_arg)
+        all_results[s_label] = st
+        status = _solver_status_line(s_label, st, ref_cost)
+        log.append(f"  {s_label}: {status}")
+
+        with _cache_lock:
+            if st["timeout"]:
+                store_solver_timeout(cache, s_label, rel_path)
+            elif not st["error"]:
+                store_solver_result(cache, s_label, rel_path, st)
+            save_cache(cache)
+
+    return {
+        "idx": idx,
+        "rel_path": rel_path,
+        "dim": dim,
+        "concorde_stats": concorde_stats,
+        "all_results": all_results,
+        "log": log,
+    }
+
+
+_instance_total: int = 0  # 实例总数，由 main() 设置供 _process_instance 打印进度
+
+
 def main():
     # ── Discover solvers ──
     solvers = discover_solvers()
@@ -993,72 +1091,52 @@ def main():
 
     flush()
 
+    # ── Phase 1: parallel computation across instances ──
+    global _instance_total
+    _instance_total = len(instances)
+    instance_data: dict[int, dict] = {}  # idx → result dict
+
+    # 用于并行模式下整块输出日志，避免线程间 stderr 交错。
+    _print_lock = threading.Lock()
+
+    if MAX_WORKERS <= 1:
+        # 串行路径：避免线程开销，保持原始行为。
+        for idx, (path, dim) in enumerate(instances, 1):
+            result = _process_instance(idx, path, dim, solver_entries, cache)
+            instance_data[idx] = result
+            # 串行时直接输出日志。
+            for line in result.get("log", []):
+                print(line, file=sys.stderr)
+    else:
+        print(f"Running with {MAX_WORKERS} parallel workers...", file=sys.stderr)
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = {
+                executor.submit(
+                    _process_instance, idx, path, dim, solver_entries, cache
+                ): idx
+                for idx, (path, dim) in enumerate(instances, 1)
+            }
+            for future in as_completed(futures):
+                result = future.result()
+                instance_data[result["idx"]] = result
+                # 整块输出本实例的全部日志，不与其他线程交错。
+                with _print_lock:
+                    for line in result.get("log", []):
+                        print(line, file=sys.stderr)
+                    sys.stderr.flush()
+
+    # ── Phase 2: markdown generation & summary (in instance order) ──
     per_instance: list[dict] = []
 
-    for idx, (path, dim) in enumerate(instances, 1):
-        rel_path = os.path.relpath(path, PROJECT_ROOT)
-        print(f"\n[{idx}/{len(instances)}] {rel_path} (n={dim})", file=sys.stderr)
+    for idx in sorted(instance_data):
+        r = instance_data[idx]
+        rel_path: str = r["rel_path"]
+        dim: int = r["dim"]
+        concorde_stats: dict = r["concorde_stats"]
+        all_results: dict[str, dict] = r["all_results"]
 
-        # ── Concorde (reference) ──
-        cached_cc = get_cached_concorde(cache, rel_path)
-        if cached_cc is not None:
-            concorde_stats = cached_concorde_to_stats(cached_cc)
-            ref_cost = concorde_stats.get("cost") if concorde_stats.get("feasible") else None
-            ref_feasible = concorde_stats.get("feasible", False)
-            print(f"  Concorde: (cached) cost={ref_cost} time={fmt_time(concorde_stats.get('elapsed', 0))}", file=sys.stderr)
-        else:
-            print(f"  Concorde...", file=sys.stderr, end=" ", flush=True)
-            concorde_stats = run_concorde(path, CONCORDE_SEED)
-            store_concorde_result(cache, rel_path, concorde_stats)
-            save_cache(cache)
-            ref_cost = concorde_stats.get("cost") if concorde_stats.get("feasible") else None
-            ref_feasible = concorde_stats.get("feasible", False)
-            if concorde_stats["timeout"]:
-                print(f"TIMEOUT", file=sys.stderr)
-            elif concorde_stats["error"]:
-                print(f"ERROR: {concorde_stats['error']}", file=sys.stderr)
-            else:
-                c_time = concorde_stats.get("elapsed", 0)
-                c_bb = concorde_stats.get("bbnodes")
-                if ref_cost is not None:
-                    print(f"cost={ref_cost:.0f} time={fmt_time(c_time)} bbnodes={c_bb}", file=sys.stderr)
-                else:
-                    print(f"no solution time={fmt_time(c_time)}", file=sys.stderr)
-
-        # ── Run all solver versions ──
-        all_results: dict[str, dict] = {}  # keyed by solver_label
-        for s_label, s_path, needs_arg in solver_entries:
-            # Check timeout cache first — skip immediately if known to time out.
-            if is_solver_timeout_cached(cache, s_label, rel_path):
-                st = _empty_stats_tspbb()
-                st["elapsed"] = TIMEOUT
-                st["timeout"] = True
-                all_results[s_label] = st
-                print(f"  {s_label}: (cached TIMEOUT — skipped)", file=sys.stderr)
-                continue
-
-            # Check result cache — reuse if we already have a successful run.
-            cached_sr = get_cached_solver_result(cache, s_label, rel_path)
-            if cached_sr is not None:
-                st = cached_stats_to_result(cached_sr)
-                all_results[s_label] = st
-                print(f"  {s_label}: ", file=sys.stderr, end="")
-                _print_solver_status(s_label, st, ref_cost)
-                print(f"           (cached)", file=sys.stderr)
-                continue
-
-            # Run the solver.
-            print(f"  {s_label}: ", file=sys.stderr, end="", flush=True)
-            st = run_tspbb(path, binary=s_path, add_strategy_arg=needs_arg)
-            all_results[s_label] = st
-            _print_solver_status(s_label, st, ref_cost)
-
-            # Persist to cache.
-            if st["timeout"]:
-                store_solver_timeout(cache, s_label, rel_path)
-            elif not st["error"]:
-                store_solver_result(cache, s_label, rel_path, st)
-            save_cache(cache)
+        ref_cost = concorde_stats.get("cost") if concorde_stats.get("feasible") else None
+        ref_feasible = concorde_stats.get("feasible", False)
 
         # ── Update summary ──
         for s_label, s_path, needs_arg in solver_entries:
@@ -1288,22 +1366,26 @@ def main():
     print(f"\nResults written to: {OUT_PATH}", file=sys.stderr)
 
 
-def _print_solver_status(_label: str, stats: dict, ref_cost: float | None):
-    """Print a one-line solver status to stderr."""
+def _solver_status_line(_label: str, stats: dict, ref_cost: float | None) -> str:
+    """返回 solver 状态的单行字符串（线程安全，不直接写 stderr）。"""
     if stats["timeout"]:
-        print(f"TIMEOUT", file=sys.stderr)
-    elif stats["error"]:
-        print(f"ERROR: {stats['error']}", file=sys.stderr)
-    elif stats["feasible"]:
+        return "TIMEOUT"
+    if stats["error"]:
+        return f"ERROR: {stats['error']}"
+    if stats["feasible"]:
         cost = stats["cost"]
         expanded = stats.get("nodes_expanded")
         if ref_cost is not None and ref_cost < INF / 2:
             tag = "OK (=ref)" if abs(cost - ref_cost) < 1e-6 else f"WRONG (ref={ref_cost:.0f})"
         else:
             tag = "OK (no reference)"
-        print(f"cost={cost:.0f} {tag} time={fmt_time(stats['elapsed'])} expanded={expanded}", file=sys.stderr)
-    else:
-        print(f"INFEASIBLE", file=sys.stderr)
+        return f"cost={cost:.0f} {tag} time={fmt_time(stats['elapsed'])} expanded={expanded}"
+    return "INFEASIBLE"
+
+
+def _print_solver_status(_label: str, stats: dict, ref_cost: float | None):
+    """Print a one-line solver status to stderr."""
+    print(_solver_status_line(_label, stats, ref_cost), file=sys.stderr)
 
 
 # ── Excel Export ────────────────────────────────────────────────────────
