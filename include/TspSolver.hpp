@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <iosfwd>
 #include <limits>
 #include <string>
@@ -97,6 +98,9 @@ private:
         // 1-tree 的边集合和度数统计，避免在分支节点中重复计算。
         std::vector<Edge> edges;
         std::vector<int> degree;
+        // 顶点 1..n-1 上当前 MST 的动态邻接位图（按行存储）。
+        // 根边不进入该状态；子节点复制 OneTree 时一并继承。
+        std::vector<std::uint64_t> mst_adjacency_bits;
     };
 
     // BP 链中的一项。记录 forbid edge 对前缀树的一步变换；search 只维护
@@ -131,6 +135,9 @@ private:
         // 候选集快速查找表（大小 n*n），由 buildBranchCandidates 维护，
         // chooseBranchEdge 直接读取，避免重复分配 O(n²) 的掩码数组。
         std::vector<unsigned char> candidate_mask;
+        // 按当前 branch_candidates 权重顺序保存 active 位，支持 64 条一组跳过。
+        std::vector<std::uint64_t> candidate_bits;
+        std::size_t candidate_bit_count = 0;
     };
 
     // tryChild 过滤后的候选集保存在这里，visitChild 直接取用，避免重复过滤。
@@ -162,6 +169,18 @@ private:
         const std::vector<Edge>& branch_candidates,
         OneTree& tree,
         const std::vector<std::size_t>& removed_edge_ids) const;
+    const Edge* findMstReplacement(const PartialSol& node,
+                                   const std::vector<Edge>& branch_candidates,
+                                   const OneTree& tree,
+                                   const Edge& removed_edge) const;
+    // 构建并维护 OneTree 携带的动态 MST 拓扑；根边不属于该状态。
+    void initializeDynamicMst(OneTree& tree) const;
+    void setDynamicMstEdge(OneTree& tree, int u, int v, bool present) const;
+    void replaceOneTreeEdge(OneTree& tree, std::size_t edge_index,
+                            const Edge& replacement) const;
+    bool markMstComponentWithoutEdge(const OneTree& tree,
+                                     const Edge& removed_edge) const;
+    bool dynamicMstMatchesEdges(const OneTree& tree) const;
     // 验证增量 1-tree 的生产不变量：完整结构、缓存度数/成本，以及所有
     // forced / forbidden / candidate 约束。失败时调用者必须完整重建。
     bool oneTreeSatisfiesConstraints(const PartialSol& node,
@@ -180,6 +199,10 @@ private:
                                const OneTree& one_tree,
                                const std::vector<Edge>& candidates,
                                Edge& edge) const;
+    // 在当前候选 bitset 中查找下一个 active 候选；未初始化 bitset 时回退逐项扫描。
+    void resetCandidateBits(PartialSol& node, std::size_t candidate_count) const;
+    std::size_t nextActiveCandidate(const PartialSol& node, std::size_t begin,
+                                    std::size_t candidate_count) const;
     // 精确恢复 DFS force 前的 MST 缓存；不能用 +w/-w 逆运算，因为不同
     // 动态范围的浮点数相加会丢失旧值。
     void restoreForcedMstCache(PartialSol& node, double old_cost,
@@ -234,6 +257,10 @@ private:
     // 与顶点 0 相连的所有有限边，按权重升序排列。
     // 在 computeOneTree 中取前 2 条未被禁止的边作为 1-tree 的 root edges。
     std::vector<Edge> root_candidates_sorted_;
+    // 动态 MST cut 查询复用的分量标记与 DFS 栈，epoch 避免每次清零 O(n)。
+    mutable std::vector<std::uint32_t> mst_component_mark_;
+    mutable std::uint32_t mst_component_epoch_ = 0;
+    mutable std::vector<int> mst_component_stack_;
     DebugOptions debug_;
 
     // LK 候选集：每个顶点的 K 近邻，惰性初始化。

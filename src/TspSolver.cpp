@@ -445,6 +445,7 @@ SolveResult BranchBoundSolver::solve()
 
     // 初始化候选集掩码，供 chooseBranchEdge O(1) 查询。
     root.candidate_mask.assign(edge_state_size, 0);
+    resetCandidateBits(root, branch_candidates.size());
     for (const Edge& e : branch_candidates) {
         root.candidate_mask[edgeId(e.u, e.v)] = 1;
     }
@@ -675,6 +676,9 @@ void BranchBoundSolver::searchSmart(
             node, child_candidates, &removed_edge_ids);
 
         if (candidates_feasible) {
+            const std::vector<std::uint64_t> old_candidate_bits = node.candidate_bits;
+            const std::size_t old_candidate_bit_count = node.candidate_bit_count;
+            resetCandidateBits(node, child_candidates.size());
             for (const std::size_t id : removed_edge_ids) {
                 node.candidate_mask[id] = 0;
             }
@@ -683,9 +687,18 @@ void BranchBoundSolver::searchSmart(
             bool child_tree_valid = false;
 #ifndef TSP_DISABLE_INCREMENTAL_ONETREE
             child_tree = current_tree;
-            child_tree_valid = removed_edge_ids.empty()
-                || updateOneTreeAfterCandidateRemoval(
-                    node, child_candidates, child_tree, removed_edge_ids);
+            const bool forced_edge_selected = std::any_of(
+                child_tree.edges.begin(), child_tree.edges.end(), [&](const Edge& edge) {
+                    return edgeId(edge.u, edge.v) == force_changes.forced_id;
+                });
+            if (forced_edge_selected) {
+                child_tree_valid = removed_edge_ids.empty()
+                    || updateOneTreeAfterCandidateRemoval(
+                        node, child_candidates, child_tree, removed_edge_ids);
+            } else {
+                child_tree = computeOneTree(node, child_candidates);
+                child_tree_valid = child_tree.feasible;
+            }
             child_tree_valid = child_tree_valid;
                 // && oneTreeSatisfiesConstraints(node, child_tree);  // 已关闭
 
@@ -718,6 +731,8 @@ void BranchBoundSolver::searchSmart(
                 ++result_.stats.nodes_pruned_infeasible;
             }
 
+            node.candidate_bits = old_candidate_bits;
+            node.candidate_bit_count = old_candidate_bit_count;
             for (const std::size_t id : removed_edge_ids) {
                 node.candidate_mask[id] = 1;
             }
@@ -755,6 +770,9 @@ void BranchBoundSolver::searchSmart(
         });
 
     if (forbid_candidates_feasible) {
+        const std::vector<std::uint64_t> old_candidate_bits = node.candidate_bits;
+        const std::size_t old_candidate_bit_count = node.candidate_bit_count;
+        resetCandidateBits(node, forbid_candidates.size());
         OneTree child_tree;
         bool child_tree_valid = false;
 #ifndef TSP_DISABLE_INCREMENTAL_ONETREE
@@ -792,6 +810,8 @@ void BranchBoundSolver::searchSmart(
         } else {
             ++result_.stats.nodes_pruned_infeasible;
         }
+        node.candidate_bits = old_candidate_bits;
+        node.candidate_bit_count = old_candidate_bit_count;
     } else {
         ++result_.stats.nodes_pruned_infeasible;
     }
@@ -1146,6 +1166,9 @@ void BranchBoundSolver::search(
 
             const bool ok = buildBranchCandidates(node, child_candidates, &removed_edge_ids);
             if (ok) {
+                const std::vector<std::uint64_t> old_candidate_bits = node.candidate_bits;
+                const std::size_t old_candidate_bit_count = node.candidate_bit_count;
+                resetCandidateBits(node, child_candidates.size());
                 if (!node.candidate_mask.empty()) {
                     for (const std::size_t eid : removed_edge_ids) {
                         node.candidate_mask[eid] = 0;
@@ -1196,6 +1219,8 @@ void BranchBoundSolver::search(
                     ++result_.stats.nodes_pruned_infeasible;
                 }
 
+                node.candidate_bits = old_candidate_bits;
+                node.candidate_bit_count = old_candidate_bit_count;
                 if (!node.candidate_mask.empty()) {
                     for (const std::size_t eid : removed_edge_ids) {
                         node.candidate_mask[eid] = 1;
@@ -1245,19 +1270,20 @@ void BranchBoundSolver::search(
                       prefix_tree.edges[choice.tree_edge_index].v) == eid) {
             const Edge old_edge = prefix_tree.edges[choice.tree_edge_index];
             const Edge& replacement = choice.forbid_replacement;
-            --prefix_tree.degree[static_cast<std::size_t>(old_edge.u)];
-            --prefix_tree.degree[static_cast<std::size_t>(old_edge.v)];
-            ++prefix_tree.degree[static_cast<std::size_t>(replacement.u)];
-            ++prefix_tree.degree[static_cast<std::size_t>(replacement.v)];
-            prefix_tree.cost += replacement.w - old_edge.w;
-            prefix_tree.edges[choice.tree_edge_index] = replacement;
+            (void)old_edge;
+            replaceOneTreeEdge(prefix_tree, choice.tree_edge_index, replacement);
             prefix_valid = true;
             // oneTreeSatisfiesConstraints 已关闭；调试时取消注释
         }
 
 #ifdef TSP_VERIFY_INCREMENTAL_STATE
         if (!choice.replay_requires_rebuild) {
+            const std::vector<std::uint64_t> old_candidate_bits = node.candidate_bits;
+            const std::size_t old_candidate_bit_count = node.candidate_bit_count;
+            resetCandidateBits(node, prefix_candidates.size());
             const OneTree rebuilt_prefix = computeOneTree(node, prefix_candidates);
+            node.candidate_bits = old_candidate_bits;
+            node.candidate_bit_count = old_candidate_bit_count;
             if (prefix_valid != rebuilt_prefix.feasible
                 || (prefix_valid
                     && !costsNumericallyEqual(
@@ -1271,7 +1297,12 @@ void BranchBoundSolver::search(
 #endif
 
         if (!prefix_valid) {
+            const std::vector<std::uint64_t> old_candidate_bits = node.candidate_bits;
+            const std::size_t old_candidate_bit_count = node.candidate_bit_count;
+            resetCandidateBits(node, prefix_candidates.size());
             prefix_tree = computeOneTree(node, prefix_candidates);
+            node.candidate_bits = old_candidate_bits;
+            node.candidate_bit_count = old_candidate_bit_count;
             prefix_valid = prefix_tree.feasible;
                 // && oneTreeSatisfiesConstraints(node, prefix_tree);  // 已关闭
         }
@@ -1344,7 +1375,12 @@ BranchBoundSolver::OneTree BranchBoundSolver::computeOneTree(
 
     // Kruskal：按权重从小到大加入不会成环的边，直到 MST 有 n-2 条边。
     // 跳过与顶点 0 相连的边，它们留给 1-tree 的第二部分处理。
-    for (const Edge& edge : branch_candidates) {
+    for (std::size_t candidate_index = nextActiveCandidate(
+             node_, 0, branch_candidates.size());
+         candidate_index < branch_candidates.size();
+         candidate_index = nextActiveCandidate(
+             node_, candidate_index + 1, branch_candidates.size())) {
+        const Edge& edge = branch_candidates[candidate_index];
         if (mst_edges == n_ - 2) {
             break;
         }
@@ -1415,6 +1451,7 @@ BranchBoundSolver::OneTree BranchBoundSolver::computeOneTree(
     result.feasible = true;
     result.cost = cost;
     result.edges = std::move(edges);
+    initializeDynamicMst(result);
     return result;
 }
 
@@ -1440,6 +1477,8 @@ bool BranchBoundSolver::updateOneTreeAfterForbid(
     }
 
     const Edge old_edge = *removed;
+    const std::size_t removed_index = static_cast<std::size_t>(
+        std::distance(tree.edges.begin(), removed));
     const Edge* replacement = nullptr;
 
     if (old_edge.u == 0 || old_edge.v == 0) {
@@ -1463,27 +1502,10 @@ bool BranchBoundSolver::updateOneTreeAfterForbid(
             break;
         }
     } else {
-        // 删除 MST 边后，其余 n-3 条内部树边恰好形成两个分量。
-        DisjointSet components(n_);
-        for (const Edge& edge : tree.edges) {
-            if (edgeId(edge.u, edge.v) == forbidden_id
-                || edge.u == 0 || edge.v == 0) {
-                continue;
-            }
-            components.unite(edge.u, edge.v);
+        if (tree.mst_adjacency_bits.empty()) {
+            initializeDynamicMst(tree);
         }
-
-        // 候选边已按权重升序排列；第一条跨越该割的边就是 replacement edge。
-        for (const Edge& candidate : branch_candidates) {
-            if (candidate.u == 0 || candidate.v == 0) continue;
-            const std::size_t candidate_id = edgeId(candidate.u, candidate.v);
-            if (node.forbidden[candidate_id]) continue;
-            if (!node.candidate_mask.empty() && !node.candidate_mask[candidate_id]) continue;
-            if (components.find(candidate.u) != components.find(candidate.v)) {
-                replacement = &candidate;
-                break;
-            }
-        }
+        replacement = findMstReplacement(node, branch_candidates, tree, old_edge);
     }
 
     if (replacement == nullptr) {
@@ -1492,12 +1514,7 @@ bool BranchBoundSolver::updateOneTreeAfterForbid(
         return false;
     }
 
-    --tree.degree[static_cast<std::size_t>(old_edge.u)];
-    --tree.degree[static_cast<std::size_t>(old_edge.v)];
-    ++tree.degree[static_cast<std::size_t>(replacement->u)];
-    ++tree.degree[static_cast<std::size_t>(replacement->v)];
-    tree.cost += replacement->w - old_edge.w;
-    *removed = *replacement;
+    replaceOneTreeEdge(tree, removed_index, *replacement);
     return true;
 }
 
@@ -1517,6 +1534,8 @@ bool BranchBoundSolver::updateOneTreeAfterCandidateRemoval(
         if (it == tree.edges.end()) continue;
 
         const Edge old_edge = *it;
+        const std::size_t removed_index = static_cast<std::size_t>(
+            std::distance(tree.edges.begin(), it));
         const Edge* replacement = nullptr;
 
         if (old_edge.u == 0 || old_edge.v == 0) {
@@ -1539,38 +1558,259 @@ bool BranchBoundSolver::updateOneTreeAfterCandidateRemoval(
                 break;
             }
         } else {
-            // MST 边被移除：用其余 n-3 条内部树边重建 DSU，找跨割最轻边。
-            DisjointSet components(n_);
-            for (const Edge& edge : tree.edges) {
-                if (edgeId(edge.u, edge.v) == removed_id
-                    || edge.u == 0 || edge.v == 0) {
-                    continue;
-                }
-                components.unite(edge.u, edge.v);
+            if (tree.mst_adjacency_bits.empty()) {
+                initializeDynamicMst(tree);
             }
-
-            for (const Edge& candidate : branch_candidates) {
-                if (candidate.u == 0 || candidate.v == 0) continue;
-                const std::size_t cid = edgeId(candidate.u, candidate.v);
-                if (node.forbidden[cid]) continue;
-                if (!node.candidate_mask.empty() && !node.candidate_mask[cid]) continue;
-                if (components.find(candidate.u) != components.find(candidate.v)) {
-                    replacement = &candidate;
-                    break;
-                }
-            }
+            replacement = findMstReplacement(node, branch_candidates, tree, old_edge);
         }
 
         if (replacement == nullptr) return false;
 
-        --tree.degree[static_cast<std::size_t>(old_edge.u)];
-        --tree.degree[static_cast<std::size_t>(old_edge.v)];
-        ++tree.degree[static_cast<std::size_t>(replacement->u)];
-        ++tree.degree[static_cast<std::size_t>(replacement->v)];
-        tree.cost += replacement->w - old_edge.w;
-        *it = *replacement;
+        replaceOneTreeEdge(tree, removed_index, *replacement);
     }
     return true;
+}
+
+const BranchBoundSolver::Edge* BranchBoundSolver::findMstReplacement(
+    const PartialSol& node, const std::vector<Edge>& branch_candidates,
+    const OneTree& tree, const Edge& removed_edge) const
+{
+    if (!markMstComponentWithoutEdge(tree, removed_edge)) {
+        throw std::logic_error("dynamic MST state is missing or inconsistent");
+    }
+
+    const auto first = std::lower_bound(
+        branch_candidates.begin(), branch_candidates.end(), removed_edge.w,
+        [](const Edge& edge, double weight) { return edge.w < weight; });
+    const std::size_t first_index = static_cast<std::size_t>(
+        std::distance(branch_candidates.begin(), first));
+
+    for (std::size_t candidate_index = nextActiveCandidate(
+             node, first_index, branch_candidates.size());
+         candidate_index < branch_candidates.size();
+         candidate_index = nextActiveCandidate(
+             node, candidate_index + 1, branch_candidates.size())) {
+        const Edge& candidate = branch_candidates[candidate_index];
+        if (candidate.u == 0 || candidate.v == 0) continue;
+        const std::size_t candidate_id = edgeId(candidate.u, candidate.v);
+        if (node.forced[candidate_id] || node.forbidden[candidate_id]) continue;
+        if (!node.candidate_mask.empty() && !node.candidate_mask[candidate_id]) continue;
+
+        const bool u_in_component =
+            mst_component_mark_[static_cast<std::size_t>(candidate.u)]
+            == mst_component_epoch_;
+        const bool v_in_component =
+            mst_component_mark_[static_cast<std::size_t>(candidate.v)]
+            == mst_component_epoch_;
+        if (u_in_component != v_in_component) {
+            return &candidate;
+        }
+    }
+    return nullptr;
+}
+
+void BranchBoundSolver::initializeDynamicMst(OneTree& tree) const
+{
+    const std::size_t words_per_row = (static_cast<std::size_t>(n_) + 63) / 64;
+    tree.mst_adjacency_bits.assign(
+        static_cast<std::size_t>(n_) * words_per_row, 0);
+    for (const Edge& edge : tree.edges) {
+        if (edge.u == 0 || edge.v == 0) continue;
+        setDynamicMstEdge(tree, edge.u, edge.v, true);
+    }
+#ifdef TSP_VERIFY_INCREMENTAL_STATE
+    if (tree.feasible && !dynamicMstMatchesEdges(tree)) {
+        throw std::logic_error("new dynamic MST state is inconsistent");
+    }
+#endif
+}
+
+void BranchBoundSolver::setDynamicMstEdge(
+    OneTree& tree, int u, int v, bool present) const
+{
+    if (u == 0 || v == 0) return;
+    const std::size_t words_per_row = (static_cast<std::size_t>(n_) + 63) / 64;
+    const std::size_t expected_size = static_cast<std::size_t>(n_) * words_per_row;
+    if (tree.mst_adjacency_bits.size() != expected_size) {
+        throw std::logic_error("dynamic MST adjacency has the wrong size");
+    }
+
+    auto update = [&](int from, int to) {
+        std::uint64_t& word = tree.mst_adjacency_bits[
+            static_cast<std::size_t>(from) * words_per_row
+            + static_cast<std::size_t>(to) / 64];
+        const std::uint64_t bit =
+            std::uint64_t{1} << (static_cast<std::size_t>(to) % 64);
+        if (present) {
+            word |= bit;
+        } else {
+            word &= ~bit;
+        }
+    };
+    update(u, v);
+    update(v, u);
+}
+
+void BranchBoundSolver::replaceOneTreeEdge(
+    OneTree& tree, std::size_t edge_index, const Edge& replacement) const
+{
+    if (edge_index >= tree.edges.size()) {
+        throw std::logic_error("1-tree replacement index is out of range");
+    }
+    if (tree.mst_adjacency_bits.empty()) {
+        initializeDynamicMst(tree);
+    }
+
+    const Edge old_edge = tree.edges[edge_index];
+    const bool old_is_internal = old_edge.u != 0 && old_edge.v != 0;
+    const bool replacement_is_internal = replacement.u != 0 && replacement.v != 0;
+    if (old_is_internal != replacement_is_internal) {
+        throw std::logic_error("1-tree replacement crossed the root/MST boundary");
+    }
+    if (old_is_internal) {
+        setDynamicMstEdge(tree, old_edge.u, old_edge.v, false);
+        setDynamicMstEdge(tree, replacement.u, replacement.v, true);
+    }
+
+    --tree.degree[static_cast<std::size_t>(old_edge.u)];
+    --tree.degree[static_cast<std::size_t>(old_edge.v)];
+    ++tree.degree[static_cast<std::size_t>(replacement.u)];
+    ++tree.degree[static_cast<std::size_t>(replacement.v)];
+    tree.cost += replacement.w - old_edge.w;
+    tree.edges[edge_index] = replacement;
+#ifdef TSP_VERIFY_INCREMENTAL_STATE
+    if (tree.feasible && !dynamicMstMatchesEdges(tree)) {
+        throw std::logic_error("dynamic MST cut/link produced an invalid tree");
+    }
+#endif
+}
+
+bool BranchBoundSolver::markMstComponentWithoutEdge(
+    const OneTree& tree, const Edge& removed_edge) const
+{
+    const std::size_t words_per_row = (static_cast<std::size_t>(n_) + 63) / 64;
+    const std::size_t expected_size = static_cast<std::size_t>(n_) * words_per_row;
+    if (removed_edge.u == 0 || removed_edge.v == 0
+        || tree.mst_adjacency_bits.size() != expected_size) {
+        return false;
+    }
+
+    auto has_edge = [&](int from, int to) {
+        return (tree.mst_adjacency_bits[
+                    static_cast<std::size_t>(from) * words_per_row
+                    + static_cast<std::size_t>(to) / 64]
+                & (std::uint64_t{1}
+                   << (static_cast<std::size_t>(to) % 64)))
+            != 0;
+    };
+    if (!has_edge(removed_edge.u, removed_edge.v)
+        || !has_edge(removed_edge.v, removed_edge.u)) {
+        return false;
+    }
+
+    if (mst_component_mark_.size() != static_cast<std::size_t>(n_)) {
+        mst_component_mark_.assign(static_cast<std::size_t>(n_), 0);
+        mst_component_epoch_ = 0;
+        mst_component_stack_.reserve(static_cast<std::size_t>(n_));
+    }
+    ++mst_component_epoch_;
+    if (mst_component_epoch_ == 0) {
+        std::fill(mst_component_mark_.begin(), mst_component_mark_.end(), 0);
+        mst_component_epoch_ = 1;
+    }
+
+    mst_component_stack_.clear();
+    mst_component_stack_.push_back(removed_edge.u);
+    mst_component_mark_[static_cast<std::size_t>(removed_edge.u)] =
+        mst_component_epoch_;
+
+    while (!mst_component_stack_.empty()) {
+        const int vertex = mst_component_stack_.back();
+        mst_component_stack_.pop_back();
+        for (std::size_t word_index = 0; word_index < words_per_row; ++word_index) {
+            std::uint64_t neighbors = tree.mst_adjacency_bits[
+                static_cast<std::size_t>(vertex) * words_per_row + word_index];
+            if (vertex == removed_edge.u
+                && word_index == static_cast<std::size_t>(removed_edge.v) / 64) {
+                neighbors &= ~(
+                    std::uint64_t{1}
+                    << (static_cast<std::size_t>(removed_edge.v) % 64));
+            } else if (vertex == removed_edge.v
+                       && word_index == static_cast<std::size_t>(removed_edge.u) / 64) {
+                neighbors &= ~(
+                    std::uint64_t{1}
+                    << (static_cast<std::size_t>(removed_edge.u) % 64));
+            }
+
+            while (neighbors != 0) {
+                unsigned bit_index = 0;
+                std::uint64_t shifted = neighbors;
+                while ((shifted & std::uint64_t{1}) == 0) {
+                    shifted >>= 1;
+                    ++bit_index;
+                }
+                neighbors &= neighbors - 1;
+                const std::size_t neighbor_index = word_index * 64 + bit_index;
+                if (neighbor_index >= static_cast<std::size_t>(n_)) continue;
+                if (mst_component_mark_[neighbor_index] == mst_component_epoch_) continue;
+                mst_component_mark_[neighbor_index] = mst_component_epoch_;
+                mst_component_stack_.push_back(static_cast<int>(neighbor_index));
+            }
+        }
+    }
+    return mst_component_mark_[static_cast<std::size_t>(removed_edge.v)]
+        != mst_component_epoch_;
+}
+
+bool BranchBoundSolver::dynamicMstMatchesEdges(const OneTree& tree) const
+{
+    const std::size_t words_per_row = (static_cast<std::size_t>(n_) + 63) / 64;
+    const std::size_t expected_size = static_cast<std::size_t>(n_) * words_per_row;
+    if (!tree.feasible || tree.mst_adjacency_bits.size() != expected_size) return false;
+    if (tree.edges.size() != static_cast<std::size_t>(n_)) return false;
+
+    std::vector<std::uint64_t> expected(expected_size, 0);
+    DisjointSet components(n_);
+    int root_edge_count = 0;
+    int internal_edge_count = 0;
+    auto add_expected = [&](int from, int to) -> bool {
+        if (from <= 0 || from >= n_ || to <= 0 || to >= n_ || from == to) {
+            return false;
+        }
+        std::uint64_t& word = expected[
+            static_cast<std::size_t>(from) * words_per_row
+            + static_cast<std::size_t>(to) / 64];
+        const std::uint64_t bit =
+            std::uint64_t{1} << (static_cast<std::size_t>(to) % 64);
+        if ((word & bit) != 0) return false;
+        word |= bit;
+        return true;
+    };
+
+    for (const Edge& edge : tree.edges) {
+        if (edge.u < 0 || edge.u >= n_ || edge.v < 0 || edge.v >= n_
+            || edge.u == edge.v) {
+            return false;
+        }
+        if (edge.u == 0 || edge.v == 0) {
+            ++root_edge_count;
+            continue;
+        }
+        ++internal_edge_count;
+        if (!components.unite(edge.u, edge.v)
+            || !add_expected(edge.u, edge.v)
+            || !add_expected(edge.v, edge.u)) {
+            return false;
+        }
+    }
+    if (root_edge_count != 2 || internal_edge_count != n_ - 2) return false;
+    if (n_ > 1) {
+        const int component = components.find(1);
+        for (int vertex = 2; vertex < n_; ++vertex) {
+            if (components.find(vertex) != component) return false;
+        }
+    }
+    return expected == tree.mst_adjacency_bits;
 }
 
 bool BranchBoundSolver::oneTreeSatisfiesConstraints(
@@ -1847,6 +2087,48 @@ bool BranchBoundSolver::chooseSmartBranchEdge(
     }
     edge = *best_candidate;
     return true;
+}
+
+void BranchBoundSolver::resetCandidateBits(
+    PartialSol& node, std::size_t candidate_count) const
+{
+    node.candidate_bit_count = candidate_count;
+    node.candidate_bits.assign((candidate_count + 63) / 64, ~std::uint64_t{0});
+    const std::size_t extra_bits = node.candidate_bits.size() * 64 - candidate_count;
+    if (!node.candidate_bits.empty() && extra_bits > 0) {
+        node.candidate_bits.back() >>= extra_bits;
+    }
+}
+
+std::size_t BranchBoundSolver::nextActiveCandidate(
+    const PartialSol& node, std::size_t begin, std::size_t candidate_count) const
+{
+    if (begin >= candidate_count) return candidate_count;
+    if (node.candidate_bit_count != candidate_count
+        || node.candidate_bits.size() != (candidate_count + 63) / 64) {
+        return begin;
+    }
+
+    std::size_t word_index = begin / 64;
+    const std::size_t bit_offset = begin % 64;
+    std::uint64_t word = node.candidate_bits[word_index]
+        & (~std::uint64_t{0} << bit_offset);
+
+    while (true) {
+        if (word != 0) {
+            unsigned trailing_zeros = 0;
+            std::uint64_t shifted = word;
+            while ((shifted & std::uint64_t{1}) == 0) {
+                shifted >>= 1;
+                ++trailing_zeros;
+            }
+            const std::size_t result = word_index * 64 + trailing_zeros;
+            return result < candidate_count ? result : candidate_count;
+        }
+        ++word_index;
+        if (word_index >= node.candidate_bits.size()) return candidate_count;
+        word = node.candidate_bits[word_index];
+    }
 }
 
 void BranchBoundSolver::restoreForcedMstCache(
