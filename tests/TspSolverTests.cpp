@@ -7,6 +7,7 @@
 #include <limits>
 #include <numeric>
 #include <random>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -175,6 +176,24 @@ struct BranchBoundSolverTestAccess {
             validate(tree);
         }
 
+        void verifyForcedMstCacheRestore()
+        {
+            node.forced_mst_cost = 1.0;
+            node.forced_mst_count = 1;
+            const double old_cost = node.forced_mst_cost;
+            const int old_count = node.forced_mst_count;
+
+            node.forced_mst_cost += 1e300;
+            ++node.forced_mst_count;
+            expect(node.forced_mst_cost - 1e300 != old_cost,
+                   "test setup did not lose the small cached cost");
+
+            solver.restoreForcedMstCache(node, old_cost, old_count);
+            expect(node.forced_mst_cost == old_cost
+                       && node.forced_mst_count == old_count,
+                   "force rollback did not restore the exact cached MST state");
+        }
+
         void validate(const OneTree& value) const
         {
             expect(value.feasible, "cannot validate infeasible 1-tree");
@@ -245,6 +264,12 @@ struct BranchBoundSolverTestAccess {
             if (!condition) throw std::runtime_error(message);
         }
     };
+
+    static bool usesExactIntegerCosts(std::vector<std::vector<double>> matrix)
+    {
+        BranchBoundSolver solver(std::move(matrix));
+        return solver.exact_integer_costs_;
+    }
 };
 
 } // namespace tsp
@@ -268,9 +293,94 @@ std::vector<std::vector<double>> replacementMatrix()
 
 void expectCost(double actual, double expected, const std::string& message)
 {
-    if (std::fabs(actual - expected) > 1e-9) {
+    if (!std::isfinite(actual) || !std::isfinite(expected)) {
+        if (actual == expected) return;
         throw std::runtime_error(message);
     }
+    const double scale = std::max(std::fabs(actual), std::fabs(expected));
+    const double next = std::nextafter(scale, inf);
+    const double ulp = std::isfinite(next)
+        ? next - scale
+        : scale - std::nextafter(scale, 0.0);
+    const double tolerance = 64.0 * std::max(
+        std::numeric_limits<double>::epsilon() * scale, ulp);
+    if (std::fabs(actual - expected) > tolerance) {
+        throw std::runtime_error(message);
+    }
+}
+
+double bruteForceOptimalCost(const std::vector<std::vector<double>>& matrix)
+{
+    const int n = static_cast<int>(matrix.size());
+    std::vector<int> order(static_cast<std::size_t>(n - 1));
+    std::iota(order.begin(), order.end(), 1);
+
+    double best = inf;
+    do {
+        double cost = 0.0;
+        int previous = 0;
+        bool feasible = true;
+        for (const int vertex : order) {
+            const double weight = matrix[static_cast<std::size_t>(previous)]
+                                        [static_cast<std::size_t>(vertex)];
+            if (!std::isfinite(weight)) {
+                feasible = false;
+                break;
+            }
+            cost += weight;
+            previous = vertex;
+        }
+        const double closing_weight = matrix[static_cast<std::size_t>(previous)][0];
+        if (feasible && std::isfinite(closing_weight)) {
+            best = std::min(best, cost + closing_weight);
+        }
+    } while (std::next_permutation(order.begin(), order.end()));
+    return best;
+}
+
+tsp::SolveResult solveAndCompareWithBruteForce(
+    const std::vector<std::vector<double>>& matrix,
+    const std::string& case_name)
+{
+    const double expected = bruteForceOptimalCost(matrix);
+    tsp::BranchBoundSolver solver(matrix);
+    const tsp::SolveResult result = solver.solve();
+
+    if (!std::isfinite(expected)) {
+        if (result.feasible || std::isfinite(result.cost)) {
+            throw std::runtime_error(case_name + ": solver accepted an infeasible instance");
+        }
+        return result;
+    }
+    if (!result.feasible) {
+        throw std::runtime_error(case_name + ": solver rejected a feasible instance");
+    }
+    expectCost(result.cost, expected,
+               case_name + ": optimal cost differs from brute force");
+
+    const int n = static_cast<int>(matrix.size());
+    if (static_cast<int>(result.tour.size()) != n) {
+        throw std::runtime_error(case_name + ": returned tour has the wrong size");
+    }
+    std::vector<unsigned char> seen(static_cast<std::size_t>(n), 0);
+    double returned_cost = 0.0;
+    for (int index = 0; index < n; ++index) {
+        const int u = result.tour[static_cast<std::size_t>(index)];
+        const int v = result.tour[static_cast<std::size_t>((index + 1) % n)];
+        if (u < 0 || u >= n || seen[static_cast<std::size_t>(u)]) {
+            throw std::runtime_error(case_name + ": returned tour repeats an invalid vertex");
+        }
+        seen[static_cast<std::size_t>(u)] = 1;
+        const double weight = matrix[static_cast<std::size_t>(u)]
+                                    [static_cast<std::size_t>(v)];
+        if (!std::isfinite(weight)) {
+            throw std::runtime_error(case_name + ": returned tour uses a missing edge");
+        }
+        returned_cost += weight;
+    }
+    expectCost(returned_cost, result.cost,
+               case_name + ": result cost is not the returned tour's real cost");
+    return result;
 }
 
 void testInternalReplacement()
@@ -453,6 +563,272 @@ void testRandomSparseTiedForbids()
     }
 }
 
+void testBpPrefixTreeRegressions()
+{
+    // B[1+] 的 force 子节点必须继承已禁止此前 B 边后的 prefix tree。
+    const std::vector<std::vector<double>> complete = {
+        {0, 585, 792, 891, 348, 768},
+        {585, 0, 249, 83, 294, 778},
+        {792, 249, 0, 14, 340, 834},
+        {891, 83, 14, 0, 530, 399},
+        {348, 294, 340, 530, 0, 325},
+        {768, 778, 834, 399, 325, 0},
+    };
+    const tsp::SolveResult complete_result = solveAndCompareWithBruteForce(
+        complete, "six-node complete BP prefix regression");
+    expectCost(complete_result.cost, 1920.0,
+               "six-node complete BP prefix regression returned the wrong optimum");
+
+    const std::vector<std::vector<double>> sparse = {
+        {0, 585, inf, inf, 348, inf},
+        {585, 0, 249, 83, 294, inf},
+        {inf, 249, 0, 14, inf, inf},
+        {inf, 83, 14, 0, inf, 399},
+        {348, 294, inf, inf, 0, 325},
+        {inf, inf, inf, 399, 325, 0},
+    };
+    const tsp::SolveResult sparse_result = solveAndCompareWithBruteForce(
+        sparse, "six-node sparse BP prefix regression");
+    expectCost(sparse_result.cost, 1920.0,
+               "six-node sparse BP prefix regression returned the wrong optimum");
+
+    // 旧的父树复用路径在该 5 点实例上返回 38，而真实最优值为 35。
+    const std::vector<std::vector<double>> five_node = {
+        {0, 7, 6, inf, 9},
+        {7, 0, 6, inf, 6},
+        {6, 6, 0, 7, 1},
+        {inf, inf, 7, 0, 9},
+        {9, 6, 1, 9, 0},
+    };
+    const tsp::SolveResult five_result = solveAndCompareWithBruteForce(
+        five_node, "five-node forced-prefix regression");
+    expectCost(five_result.cost, 35.0,
+               "five-node forced-prefix regression returned the wrong optimum");
+}
+
+void testScaleSafeExactSearch()
+{
+    const std::vector<std::vector<double>> base = {
+        {0, 585, 792, 891, 348, 768},
+        {585, 0, 249, 83, 294, 778},
+        {792, 249, 0, 14, 340, 834},
+        {891, 83, 14, 0, 530, 399},
+        {348, 294, 340, 530, 0, 325},
+        {768, 778, 834, 399, 325, 0},
+    };
+    std::vector<std::vector<double>> scaled = base;
+    for (std::size_t u = 0; u < scaled.size(); ++u) {
+        for (std::size_t v = 0; v < scaled.size(); ++v) {
+            if (u != v) scaled[u][v] *= 1e-12;
+        }
+    }
+
+    const tsp::SolveResult result = solveAndCompareWithBruteForce(
+        scaled, "1e-12 scaled exact-search regression");
+    expectCost(result.cost, 1920.0e-12,
+               "scaled exact search was incorrectly pruned by an absolute epsilon");
+    if (result.stats.nodes_expanded == 0) {
+        throw std::runtime_error(
+            "scaled exact-search regression did not enter the branch-and-bound search");
+    }
+
+    // epsilon*scale 在 subnormal 区间会下溢为 0；比较余量必须至少为
+    // 实际相邻 double 的一个 ULP，不能把 1 ULP 舍入差当成确定下界差。
+    std::vector<std::vector<double>> subnormal = base;
+    const double denorm = std::numeric_limits<double>::denorm_min();
+    for (std::size_t u = 0; u < subnormal.size(); ++u) {
+        for (std::size_t v = 0; v < subnormal.size(); ++v) {
+            if (u != v) subnormal[u][v] *= denorm;
+        }
+    }
+    const tsp::SolveResult subnormal_result = solveAndCompareWithBruteForce(
+        subnormal, "subnormal exact-search regression");
+    expectCost(subnormal_result.cost, 1920.0 * denorm,
+               "subnormal exact search returned the wrong optimum");
+    if (subnormal_result.cost == 0.0) {
+        throw std::runtime_error("subnormal exact-search cost unexpectedly underflowed to zero");
+    }
+}
+
+void testMixedMagnitudeForceRollback()
+{
+    // force 子节点回溯必须恢复 forced_mst_cost 的原值，不能用 +w/-w。
+    // 小的祖先缓存与 1e100 sibling 边相加时会被舍入吞掉，减回也无法恢复。
+    Fixture cache_fixture(replacementMatrix());
+    cache_fixture.verifyForcedMstCacheRestore();
+
+    const std::vector<std::vector<double>> matrix = {
+        {0, 32, 27, 34, 6e100, 8e100},
+        {32, 0, 4e100, 1e100, 6e100, 1e100},
+        {27, 4e100, 0, 1e100, 9e100, 9e100},
+        {34, 1e100, 1e100, 0, 4e100, 14},
+        {6e100, 6e100, 9e100, 4e100, 0, 7e100},
+        {8e100, 1e100, 9e100, 14, 7e100, 0},
+    };
+    const tsp::SolveResult result = solveAndCompareWithBruteForce(
+        matrix, "mixed-magnitude rollback pressure");
+    if (result.stats.nodes_created <= 1) {
+        throw std::runtime_error(
+            "mixed-magnitude rollback tests did not exercise recursive BP search");
+    }
+}
+
+void testRandomCompleteSolveAgainstBruteForce()
+{
+    std::mt19937 generator(2026071501);
+    std::uniform_int_distribution<int> weight(1, 50);
+    bool exercised_recursive_search = false;
+
+    for (int case_index = 0; case_index < 16; ++case_index) {
+        const int n = 5 + case_index % 4;
+        std::vector<std::vector<double>> matrix(
+            static_cast<std::size_t>(n),
+            std::vector<double>(static_cast<std::size_t>(n), 0.0));
+        for (int u = 0; u < n; ++u) {
+            for (int v = u + 1; v < n; ++v) {
+                const double value = static_cast<double>(weight(generator));
+                matrix[static_cast<std::size_t>(u)][static_cast<std::size_t>(v)] = value;
+                matrix[static_cast<std::size_t>(v)][static_cast<std::size_t>(u)] = value;
+            }
+        }
+        const tsp::SolveResult result = solveAndCompareWithBruteForce(
+            matrix, "complete random solve " + std::to_string(case_index));
+        exercised_recursive_search = exercised_recursive_search
+            || result.stats.nodes_created > 1;
+    }
+    if (!exercised_recursive_search) {
+        throw std::runtime_error("complete solve tests did not exercise recursive BP search");
+    }
+}
+
+void testRandomSparseSolveAgainstBruteForce()
+{
+    std::mt19937 generator(2026071502);
+    std::uniform_int_distribution<int> weight(1, 50);
+    std::bernoulli_distribution include_chord(0.35);
+    bool exercised_recursive_search = false;
+
+    for (int case_index = 0; case_index < 20; ++case_index) {
+        const int n = 5 + case_index % 4;
+        std::vector<std::vector<double>> matrix(
+            static_cast<std::size_t>(n),
+            std::vector<double>(static_cast<std::size_t>(n), inf));
+        for (int vertex = 0; vertex < n; ++vertex) {
+            matrix[static_cast<std::size_t>(vertex)]
+                  [static_cast<std::size_t>(vertex)] = 0.0;
+        }
+        auto add_edge = [&](int u, int v) {
+            const double value = static_cast<double>(weight(generator));
+            matrix[static_cast<std::size_t>(u)][static_cast<std::size_t>(v)] = value;
+            matrix[static_cast<std::size_t>(v)][static_cast<std::size_t>(u)] = value;
+        };
+        for (int u = 0; u < n; ++u) {
+            add_edge(u, (u + 1) % n);
+        }
+        for (int u = 0; u < n; ++u) {
+            for (int v = u + 1; v < n; ++v) {
+                if (!std::isfinite(matrix[static_cast<std::size_t>(u)]
+                                         [static_cast<std::size_t>(v)])
+                    && include_chord(generator)) {
+                    add_edge(u, v);
+                }
+            }
+        }
+        const tsp::SolveResult result = solveAndCompareWithBruteForce(
+            matrix, "sparse random solve " + std::to_string(case_index));
+        exercised_recursive_search = exercised_recursive_search
+            || result.stats.nodes_created > 1;
+    }
+    if (!exercised_recursive_search) {
+        throw std::runtime_error("sparse solve tests did not exercise recursive BP search");
+    }
+}
+
+void testProblemParsingDoesNotWriteStdout()
+{
+    std::ostringstream captured;
+    std::streambuf* original = std::cout.rdbuf(captured.rdbuf());
+    try {
+        std::istringstream plain(
+            "3\n"
+            "0 1 2\n"
+            "1 0 3\n"
+            "2 3 0\n");
+        const tsp::TspProblem plain_problem = tsp::readTspProblem(plain);
+        if (plain_problem.dimension() != 3 || !plain_problem.hasDenseMatrix()) {
+            throw std::runtime_error("plain matrix parser returned the wrong problem");
+        }
+
+        std::istringstream tsplib(
+            "NAME: tiny\n"
+            "TYPE: TSP\n"
+            "DIMENSION: 3\n"
+            "EDGE_WEIGHT_TYPE: EXPLICIT\n"
+            "EDGE_WEIGHT_FORMAT: FULL_MATRIX\n"
+            "EDGE_WEIGHT_SECTION\n"
+            "0 1 2\n"
+            "1 0 3\n"
+            "2 3 0\n"
+            "EOF\n");
+        const tsp::TspProblem tsplib_problem = tsp::readTspProblem(tsplib);
+        if (tsplib_problem.dimension() != 3 || !tsplib_problem.hasDenseMatrix()) {
+            throw std::runtime_error("TSPLIB parser returned the wrong problem");
+        }
+    } catch (...) {
+        std::cout.rdbuf(original);
+        throw;
+    }
+    std::cout.rdbuf(original);
+    if (!captured.str().empty()) {
+        throw std::runtime_error("problem parsing unexpectedly wrote debug text to stdout");
+    }
+}
+
+void testDistanceMatrixSymmetryIsExact()
+{
+    auto expect_rejected = [](std::vector<std::vector<double>> matrix,
+                              const std::string& message) {
+        try {
+            tsp::BranchBoundSolver solver(std::move(matrix));
+            (void)solver;
+        } catch (const std::runtime_error&) {
+            return;
+        }
+        throw std::runtime_error(message);
+    };
+
+    auto asymmetric = replacementMatrix();
+    asymmetric[0][1] = std::nextafter(asymmetric[1][0], inf);
+    expect_rejected(std::move(asymmetric),
+                    "matrix differing by one ULP was accepted as symmetric");
+}
+
+void testExactIntegerPruningDomain()
+{
+    if (!tsp::BranchBoundSolverTestAccess::usesExactIntegerCosts(
+            replacementMatrix())) {
+        throw std::runtime_error("small integer matrix missed exact-cost pruning domain");
+    }
+
+    // 3*w = 2^53+1 mathematically, but on platforms where long double is just
+    // binary64 the multiplication rounds to 2^53. Integer division must reject it.
+    const double boundary_weight = 3002399751580331.0;
+    const std::vector<std::vector<double>> boundary = {
+        {0, boundary_weight, boundary_weight},
+        {boundary_weight, 0, boundary_weight},
+        {boundary_weight, boundary_weight, 0},
+    };
+    if (tsp::BranchBoundSolverTestAccess::usesExactIntegerCosts(boundary)) {
+        throw std::runtime_error("unsafe 2^53 integer-sum boundary enabled equality pruning");
+    }
+
+    auto fractional = replacementMatrix();
+    fractional[0][1] = fractional[1][0] = 1.5;
+    if (tsp::BranchBoundSolverTestAccess::usesExactIntegerCosts(fractional)) {
+        throw std::runtime_error("fractional matrix enabled exact-integer pruning");
+    }
+}
+
 } // namespace
 
 int main()
@@ -470,6 +846,14 @@ int main()
         testMultipleForcedInternalEdges();
         testRandomSequentialForbids();
         testRandomSparseTiedForbids();
+        testBpPrefixTreeRegressions();
+        testScaleSafeExactSearch();
+        testMixedMagnitudeForceRollback();
+        testRandomCompleteSolveAgainstBruteForce();
+        testRandomSparseSolveAgainstBruteForce();
+        testProblemParsingDoesNotWriteStdout();
+        testDistanceMatrixSymmetryIsExact();
+        testExactIntegerPruningDomain();
     } catch (const std::exception& error) {
         std::cerr << "tsp_solver_tests failed: " << error.what() << '\n';
         return 1;

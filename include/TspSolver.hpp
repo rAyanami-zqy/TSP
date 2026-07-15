@@ -99,6 +99,16 @@ private:
         std::vector<int> degree;
     };
 
+    // BP 链中的一项。记录 forbid edge 对前缀树的一步变换；search 只维护
+    // 一棵 prefix_tree 并顺序重放，避免为 B 中每项复制整棵树。
+    struct BranchChoice {
+        Edge edge;
+        bool has_forbid_replacement = false;
+        bool replay_requires_rebuild = false;
+        std::size_t tree_edge_index = 0;
+        Edge forbid_replacement;
+    };
+
     // 分支定界节点（部分解 P）：
     // forced 表示必须选择的边，forbidden 表示禁止选择的边。
     // 同时维护 forced 边的并查集和度数统计，加速 1-tree 计算与候选集筛选。
@@ -152,6 +162,10 @@ private:
         const std::vector<Edge>& branch_candidates,
         OneTree& tree,
         const std::vector<std::size_t>& removed_edge_ids) const;
+    // 验证增量 1-tree 的生产不变量：完整结构、缓存度数/成本，以及所有
+    // forced / forbidden / candidate 约束。失败时调用者必须完整重建。
+    bool oneTreeSatisfiesConstraints(const PartialSol& node,
+                                     const OneTree& tree) const;
     // 判断一个 1-tree 是否已经是一条合法的 Hamilton 回路。
     bool isTour(const OneTree& one_tree) const;
     // 从 1-tree 的边集合构造访问顺序的顶点序列；如果无法构成合法回路则返回空。
@@ -160,6 +174,10 @@ private:
     bool buildBranchCandidates(const PartialSol& node,
                                std::vector<Edge>& branch_candidates,
                                std::vector<std::size_t>* removed_edge_ids = nullptr) const;
+    // 精确恢复 DFS force 前的 MST 缓存；不能用 +w/-w 逆运算，因为不同
+    // 动态范围的浮点数相加会丢失旧值。
+    void restoreForcedMstCache(PartialSol& node, double old_cost,
+                               int old_count) const;
     // 判断当前节点的下界是否已经不优于已知最优可行解，可以直接剪枝。
     bool shouldPrune(double bound, double best_cost) const;
     // 最近邻 + 2-opt + LK，生成一个可行上界，帮助早剪枝。
@@ -185,9 +203,9 @@ private:
 
     // ── BP (Branch Partitioning) 搜索 ──
     // 在当前 1-tree 上执行 BP 划分：依次测试前缀禁止约束并返回关键边集合 B。
-    std::vector<Edge> bpPartition(PartialSol& node,
-                                  const std::vector<Edge>& branch_candidates,
-                                  const OneTree& current_tree);
+    std::vector<BranchChoice> bpPartition(PartialSol& node,
+                                          const std::vector<Edge>& branch_candidates,
+                                          const OneTree& current_tree);
     // BP 递归搜索：在每个节点执行 BP 划分后枚举“前缀 forbid + 当前 force”子节点。
     void search(PartialSol& node,
                 std::vector<Edge>& branch_candidates,
@@ -198,6 +216,9 @@ private:
     int n_ = 0;
     // 距离矩阵，dist[i][j] 是顶点 i 和 j 之间的距离；dist[i][i] 必须为 0。
     std::vector<std::vector<double>> dist_;
+    // 所有有限边均为精确整数且任意 n 边和不超过 2^53 时，成本求和本身
+    // 精确，可安全执行 bound >= incumbent 的等值剪枝。
+    bool exact_integer_costs_ = false;
     // 与顶点 0 相连的所有有限边，按权重升序排列。
     // 在 computeOneTree 中取前 2 条未被禁止的边作为 1-tree 的 root edges。
     std::vector<Edge> root_candidates_sorted_;

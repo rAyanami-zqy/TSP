@@ -27,7 +27,6 @@ struct RunResult {
     std::string method;
     std::string problem_name;
     int dimension = 0;
-    bool exact = false;
 };
 
 // 去掉 batch 清单行首尾空白，便于处理空行和注释行。
@@ -76,7 +75,7 @@ std::string formatDouble(double value)
         return {};
     }
     std::ostringstream out;
-    out << std::setprecision(10) << value;
+    out << std::setprecision(std::numeric_limits<double>::max_digits10) << value;
     return out.str();
 }
 
@@ -106,7 +105,7 @@ std::string formatTourLimited(const std::vector<int>& tour, std::size_t max_vert
     return out.str();
 }
 
-// 统一的单实例求解入口：自动识别矩阵或 TSPLIB，进行精确求解
+// 统一的单实例求解入口：自动识别矩阵或 TSPLIB，进行精确求解。
 RunResult solveInput(std::istream& input, const CliOptions& options)
 {
     tsp::TspProblem problem = tsp::readTspProblem(input);
@@ -115,7 +114,6 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
     output.method = "exact";
     output.problem_name = problem.name;
     output.dimension = dimension;
-    output.exact = true;
 
     if (options.debug) {
         std::cerr << "[tsp-debug] problem loaded: name=" << output.problem_name
@@ -123,7 +121,6 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
                   << " method=" << output.method << '\n';
     }
 
-    
     auto distance = problem.toDenseMatrix(options.exact_max_n);
     tsp::BranchBoundSolver solver(std::move(distance));
     if (options.debug) {
@@ -137,30 +134,26 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
 void printHumanResult(const RunResult& run)
 {
     const tsp::SolveResult& result = run.result;
-    std::cout << std::setprecision(10);
+    // Preserve enough digits for an independently verified double result to
+    // round-trip through the command-line output.
+    std::cout << std::setprecision(std::numeric_limits<double>::max_digits10);
     std::cout << "Problem: " << run.problem_name << '\n';
     std::cout << "Dimension: " << run.dimension << '\n';
     std::cout << "Method: " << run.method << '\n';
 
-    if (run.exact) {
-        std::cout << "Root lower bound: " << result.stats.root_lower_bound << '\n';
-        std::cout << "Initial upper bound: " << result.stats.initial_upper_bound << '\n';
-        std::cout << "Nodes created: " << result.stats.nodes_created << '\n';
-        std::cout << "Nodes expanded: " << result.stats.nodes_expanded << '\n';
-        std::cout << "Pruned by bound: " << result.stats.nodes_pruned_by_bound << '\n';
-        std::cout << "Pruned infeasible: " << result.stats.nodes_pruned_infeasible << '\n';
-    }
+    std::cout << "Root lower bound: " << result.stats.root_lower_bound << '\n';
+    std::cout << "Initial upper bound: " << result.stats.initial_upper_bound << '\n';
+    std::cout << "Nodes created: " << result.stats.nodes_created << '\n';
+    std::cout << "Nodes expanded: " << result.stats.nodes_expanded << '\n';
+    std::cout << "Pruned by bound: " << result.stats.nodes_pruned_by_bound << '\n';
+    std::cout << "Pruned infeasible: " << result.stats.nodes_pruned_infeasible << '\n';
 
     if (!result.feasible) {
         std::cout << "No feasible Hamiltonian tour found.\n";
         return;
     }
 
-    if (run.exact) {
-        std::cout << "Optimal cost: " << result.cost << '\n';
-    } else {
-        std::cout << "Heuristic cost: " << result.cost << '\n';
-    }
+    std::cout << "Optimal cost: " << result.cost << '\n';
     std::cout << "Tour: " << formatTourLimited(result.tour) << '\n';
 }
 
@@ -266,9 +259,7 @@ int runBatch(const std::string& list_path, const CliOptions& options)
 
             RunResult run = solveInput(input, options);
             if (run.result.feasible) {
-                const std::string status = run.exact ? "ok" : "heuristic";
-                const std::string message = run.exact ? std::string{} : "not proven optimal";
-                printBatchRow(path, status, &run, message);
+                printBatchRow(path, "ok", &run, "");
             } else {
                 all_ok = false;
                 printBatchRow(path, "infeasible", &run, "no feasible Hamiltonian tour");
@@ -296,9 +287,20 @@ void printUsage(const char* program)
 
 std::size_t parseSizeOption(const std::string& value, const std::string& name)
 {
+    if (value.empty()
+        || !std::all_of(value.begin(), value.end(), [](char ch) { return ch >= '0' && ch <= '9'; })) {
+        throw std::runtime_error("invalid numeric value for " + name + ": " + value);
+    }
+
     std::size_t parsed = 0;
-    const unsigned long long result = std::stoull(value, &parsed);
-    if (parsed != value.size()) {
+    unsigned long long result = 0;
+    try {
+        result = std::stoull(value, &parsed);
+    } catch (const std::exception&) {
+        throw std::runtime_error("invalid numeric value for " + name + ": " + value);
+    }
+    if (parsed != value.size()
+        || result > static_cast<unsigned long long>(std::numeric_limits<std::size_t>::max())) {
         throw std::runtime_error("invalid numeric value for " + name + ": " + value);
     }
     return static_cast<std::size_t>(result);
@@ -323,10 +325,16 @@ CliOptions parseArgs(int argc, char** argv)
             options.batch_path = require_value(arg);
         } else if (arg == "--exact-max-n") {
             options.exact_max_n = parseSizeOption(require_value(arg), arg);
+            if (options.exact_max_n == 0) {
+                throw std::runtime_error("--exact-max-n must be greater than zero");
+            }
         } else if (arg == "--debug") {
             options.debug = true;
         } else if (arg == "--debug-interval") {
             options.debug_interval = parseSizeOption(require_value(arg), arg);
+            if (options.debug_interval == 0) {
+                throw std::runtime_error("--debug-interval must be greater than zero");
+            }
         } else if (!arg.empty() && arg[0] == '-') {
             throw std::runtime_error("unknown option: " + arg);
         } else if (options.input_path.empty()) {
