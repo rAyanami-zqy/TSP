@@ -1,0 +1,58 @@
+tsp_bb 2026-07-14 deg（正确性基线，推荐使用）
+
+## 代码基
+
+e6a862d — Fix prefix-forbidden edge leak in child 1-tree, add 07_13 variants
+（与 07_13_02 完全一致）
+
+## 分支策略
+
+kUseMinEdgeFromOneTree = false
+
+从 1-tree 中度数 > 2 的违规顶点出发，取该顶点关联的最小权重未决边作为分支边。
+若所有顶点度数均为 2，则 1-tree 已是合法 TSP 回路，无需分支。
+
+## 候选集管理
+
+buildBranchCandidates 全量 O(n²) 重建（resize 方式）
+
+每进入子节点时，从 prefix_candidates 拷贝一份子节点副本，调用 buildBranchCandidates 全量扫描所有边：
+- 移除 forced/forbidden 边
+- 移除端点度数已达 2 的关联边
+- 移除与 forced 分量形成子回路的边（dsu_root[u]==dsu_root[v] && size<n）
+- 验证各顶点仍有足够候选边达到度数 2
+
+过滤后的向量被 resize 为仅含 active 边，computeOneTree 直接 range-for 遍历，无需 nextActiveCandidate / candidate_mask / forced / forbidden 等额外检查。
+
+## 1-tree 维护方式
+
+增量更新（子节点继承父节点 1-tree）
+
+- 子节点从 current_tree（父节点 1-tree）出发
+- 将被 buildBranchCandidates 移除的树边 + 前缀禁止的 B 集边合并为 all_removed
+- 调用 updateOneTreeAfterCandidateRemoval 批量处理：对每条被删树边，通过位图邻接矩阵 DFS 标记 cut 分量（markMstComponentWithoutEdge），从 lower_bound(weight(e)) 位置扫描候选找最轻跨割边作为 replacement
+- 若增量更新失败（找不到 replacement），传 nullptr 给子节点触发 computeOneTree 全量重算
+
+## Replacement 方法
+
+位图邻接矩阵 + DFS + epoch 标记
+
+- OneTree 携带 mst_adjacency_bits（n × ceil(n/64) uint64_t 位图）表示内部 MST 邻接关系
+- 删除树边后，在位图上从 u 做非递归 DFS（忽略被删边），用 epoch 递增标记一侧分量
+- 候选扫描从 lower_bound(weight(e)) 开始，每条候选只需比较 mark[u]==epoch 与 mark[v]==epoch
+- replaceOneTreeEdge 同步更新位图（cut 旧边、link 新边）
+
+## BP 划分
+
+bpPartition 在 work_tree（current_tree 副本）上顺序 forbid 并找 replacement，返回 B 集边列表（vector<Edge>）。
+search() 枚举前缀 forbid + force 子节点，prefix_candidates 累积累积前缀约束。
+
+## 正确性验证
+
+- 36 个 complete/sparse 随机实例 (n=5..8) 与暴力搜索一致
+- BP regression 用例返回最优值 1920
+- 验证构建确认每棵复用的子树包含所有 forced 边且 cost 与全量重建一致
+
+## 编译
+
+g++ via CMake/Make, Linux x86_64

@@ -1,0 +1,36 @@
+tsp_bb 2026-07-14 min-edge（正确性基线，备选策略）
+
+## 代码基
+
+e6a862d — Fix prefix-forbidden edge leak in child 1-tree, add 07_13 variants
+（与 07_13_01 完全一致）
+
+## 分支策略
+
+kUseMinEdgeFromOneTree = true
+
+从 1-tree 所有未决边中直接选取最小权重边作为分支边。不再按度数违规顶点筛选。
+
+## 候选集管理
+
+与 deg 版本相同：buildBranchCandidates 全量 O(n²) 重建（resize 方式）。
+
+## 1-tree 维护方式
+
+与 deg 版本相同：增量更新（子节点继承父节点 1-tree）。
+
+## Replacement 方法
+
+与 deg 版本相同：位图邻接矩阵 + DFS + epoch 标记。
+
+## BP 划分
+
+与 deg 版本相同：bpPartition 返回 vector<Edge>，search() 枚举前缀 forbid + force。
+
+## 正确性验证
+
+与 deg 版本相同：brute-force 对拍 36 实例 + BP regression + 验证构建。
+
+## 编译
+
+g++ via CMake/Make, Linux x86_64

@@ -1,9 +1,0 @@
-tsp_bb 2026-07-08 variant 02
-
-Base: 7e6b034 Refine BP branch enumeration (07-10 code)
-
-Change:
-- kUseMinEdgeFromOneTree = false
-- Reverts BP edge selection to the classic strategy instead of new min-edge-from-1-tree strategy
-
-Purpose: Comparison baseline against the 07-09 new strategy (kUseMinEdgeFromOneTree = true)

@@ -1,0 +1,62 @@
+--------------------------------------------------------------------------------
+Profile data file '/home/wj/code/TSP/docs/heatmap/fri26_26071402/callgrind.out' (creator: callgrind-3.22.0)
+--------------------------------------------------------------------------------
+I1 cache: 
+D1 cache: 
+LL cache: 
+Timerange: Basic block 0 - 2380923261
+Trigger: Program termination
+Profiled target:  /home/wj/code/TSP/solver/tsp_bb_26_07_14_02/tsp_bb --exact-max-n 100 /home/wj/code/TSP/data/classic/tsplib/fri26.tsp (PID 3564554, part 1)
+Events recorded:  Ir
+Events shown:     Ir
+Event sort order: Ir
+Thresholds:       99
+Include dirs:     
+User annotated:   
+Auto-annotation:  on
+
+--------------------------------------------------------------------------------
+Ir                      
+--------------------------------------------------------------------------------
+11,591,064,512 (100.0%)  PROGRAM TOTALS
+
+--------------------------------------------------------------------------------
+Ir                        file:function
+--------------------------------------------------------------------------------
+110,252,127,423 (951.2%)  ???:tsp::BranchBoundSolver::search(tsp::BranchBoundSolver::PartialSol&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> > const&, int, tsp::BranchBoundSolver::OneTree const*)'2 [/home/wj/code/TSP/solver/tsp_bb_26_07_14_02/tsp_bb]
+ 11,591,064,512 (100.0%)  ???:0x000000000001f540 [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+ 11,589,078,492 (99.98%)  ???:(below main) [/home/wj/code/TSP/solver/tsp_bb_26_07_14_02/tsp_bb]
+ 11,589,078,480 (99.98%)  ./csu/../csu/libc-start.c:__libc_start_main@@GLIBC_2.34 [/usr/lib/x86_64-linux-gnu/libc.so.6]
+ 11,589,078,306 (99.98%)  ./csu/../sysdeps/nptl/libc_start_call_main.h:(below main) [/usr/lib/x86_64-linux-gnu/libc.so.6]
+ 11,589,068,063 (99.98%)  ???:main [/home/wj/code/TSP/solver/tsp_bb_26_07_14_02/tsp_bb]
+ 11,589,012,164 (99.98%)  ???:(anonymous namespace)::solveInput(std::istream&, (anonymous namespace)::CliOptions const&) [/home/wj/code/TSP/solver/tsp_bb_26_07_14_02/tsp_bb]
+ 11,587,075,200 (99.97%)  ???:tsp::BranchBoundSolver::solve() [/home/wj/code/TSP/solver/tsp_bb_26_07_14_02/tsp_bb]
+ 11,570,813,739 (99.83%)  ???:tsp::BranchBoundSolver::search(tsp::BranchBoundSolver::PartialSol&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> > const&, int, tsp::BranchBoundSolver::OneTree const*) [/home/wj/code/TSP/solver/tsp_bb_26_07_14_02/tsp_bb]
+  5,581,929,344 (48.16%)  ???:tsp::BranchBoundSolver::updateOneTreeAfterCandidateRemoval(tsp::BranchBoundSolver::PartialSol const&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> > const&, tsp::BranchBoundSolver::OneTree&, std::vector<unsigned long, std::allocator<unsigned long> > const&) const [/home/wj/code/TSP/solver/tsp_bb_26_07_14_02/tsp_bb]
+  3,895,879,634 (33.61%)  ???:tsp::BranchBoundSolver::findMstReplacement(tsp::BranchBoundSolver::PartialSol const&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> > const&, tsp::BranchBoundSolver::OneTree const&, tsp::BranchBoundSolver::Edge const&) const [/home/wj/code/TSP/solver/tsp_bb_26_07_14_02/tsp_bb]
+  3,073,281,451 (26.51%)  ???:tsp::BranchBoundSolver::bpPartition(tsp::BranchBoundSolver::PartialSol&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> > const&, tsp::BranchBoundSolver::OneTree const&) [/home/wj/code/TSP/solver/tsp_bb_26_07_14_02/tsp_bb]
+  2,392,057,710 (20.64%)  ???:tsp::BranchBoundSolver::updateOneTreeAfterForbid(tsp::BranchBoundSolver::PartialSol const&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> > const&, tsp::BranchBoundSolver::OneTree&, tsp::BranchBoundSolver::Edge const&) const [/home/wj/code/TSP/solver/tsp_bb_26_07_14_02/tsp_bb]
+  1,309,584,143 (11.30%)  ???:tsp::BranchBoundSolver::deactivateCandidatesAfterForce(tsp::BranchBoundSolver::PartialSol&, tsp::BranchBoundSolver::Edge const&, int, int, std::vector<unsigned long, std::allocator<unsigned long> >&) const [/home/wj/code/TSP/solver/tsp_bb_26_07_14_02/tsp_bb]
+    762,846,967 ( 6.58%)  ???:tsp::BranchBoundSolver::deactivateCandidate(tsp::BranchBoundSolver::PartialSol&, unsigned long, std::vector<unsigned long, std::allocator<unsigned long> >&) const [/home/wj/code/TSP/solver/tsp_bb_26_07_14_02/tsp_bb]
+    551,227,022 ( 4.76%)  ???:0x000000000010b7a0 [???]
+    540,461,936 ( 4.66%)  ???:operator delete(void*, unsigned long) [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+    529,698,948 ( 4.57%)  ???:0x00000000048f0430 [???]
+    518,933,209 ( 4.48%)  ???:operator delete(void*) [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+    512,751,387 ( 4.42%)  ???:tsp::BranchBoundSolver::restoreCandidates(tsp::BranchBoundSolver::PartialSol&, std::vector<unsigned long, std::allocator<unsigned long> > const&) const [/home/wj/code/TSP/solver/tsp_bb_26_07_14_02/tsp_bb]
+    508,168,081 ( 4.38%)  ???:0x00000000048f0c60 [???]
+    497,402,172 ( 4.29%)  ./malloc/./malloc/malloc.c:free [/usr/lib/x86_64-linux-gnu/libc.so.6]
+    401,910,249 ( 3.47%)  ???:0x000000000010b790 [???]
+    391,150,776 ( 3.37%)  ???:operator new(unsigned long) [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+    330,542,657 ( 2.85%)  ./malloc/./malloc/malloc.c:_int_free [/usr/lib/x86_64-linux-gnu/libc.so.6]
+    305,032,471 ( 2.63%)  ???:0x00000000048f0210 [???]
+    294,266,794 ( 2.54%)  ./malloc/./malloc/malloc.c:malloc [/usr/lib/x86_64-linux-gnu/libc.so.6]
+    121,538,895 ( 1.05%)  ???:std::vector<unsigned long, std::allocator<unsigned long> >::reserve(unsigned long) [/home/wj/code/TSP/solver/tsp_bb_26_07_14_02/tsp_bb]
+     69,158,506 ( 0.60%)  ???:tsp::BranchBoundSolver::replaceOneTreeEdge(tsp::BranchBoundSolver::OneTree&, unsigned long, tsp::BranchBoundSolver::Edge const&) const [/home/wj/code/TSP/solver/tsp_bb_26_07_14_02/tsp_bb]
+
+--------------------------------------------------------------------------------
+The following files chosen for auto-annotation could not be found:
+--------------------------------------------------------------------------------
+  ./csu/../csu/libc-start.c
+  ./csu/../sysdeps/nptl/libc_start_call_main.h
+  ./malloc/./malloc/malloc.c
+

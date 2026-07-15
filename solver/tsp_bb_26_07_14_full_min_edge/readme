@@ -1,0 +1,31 @@
+tsp_bb 2026-07-14 full-min-edge（对照版本：全量重算 1-tree + min-edge 策略）
+
+## 代码基
+
+e6a862d — Fix prefix-forbidden edge leak in child 1-tree, add 07_13 variants
+
+## 分支策略
+
+kUseMinEdgeFromOneTree = true（min-edge from entire 1-tree）
+
+## 候选集管理
+
+与 min_edge 版本相同：buildBranchCandidates 全量 O(n²) 重建（resize 方式）。
+
+## 1-tree 维护方式
+
+**全量重算**（每个子节点从零构建 1-tree）
+
+与 full_deg 版本相同：search() 始终传 nullptr，子节点全量 computeOneTree。
+
+## 与 min_edge 版本的唯一差异
+
+传入 search() 的 precomputed_tree 始终为 nullptr。
+
+## 用途
+
+对照实验：min-edge 策略下增量 vs 全量重算的影响。
+
+## 编译
+
+g++ via CMake/Make, Linux x86_64

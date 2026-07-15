@@ -1,0 +1,30 @@
+rank,kind,function,file,calls,self_ir,self_pct_total,self_est_sec,inclusive_ir,inclusive_pct_total,inclusive_est_sec
+1,solver,"tsp::BranchBoundSolver::updateOneTreeAfterCandidateRemoval(tsp::BranchBoundSolver::PartialSol const&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> > const&, tsp::BranchBoundSolver::OneTree&, std::vector<unsigned long, std::allocator<unsigned long> > const&) const",solver/tsp_bb_26_07_14_02/tsp_bb,0,3917135589,33.790000,0.524528397,5581929344,48.160000,0.747596555
+2,solver,"tsp::BranchBoundSolver::findMstReplacement(tsp::BranchBoundSolver::PartialSol const&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> > const&, tsp::BranchBoundSolver::OneTree const&, tsp::BranchBoundSolver::Edge const&) const",solver/tsp_bb_26_07_14_02/tsp_bb,0,3508780655,30.270000,0.469886788,3895879634,33.610000,0.521734224
+3,solver,"tsp::BranchBoundSolver::deactivateCandidate(tsp::BranchBoundSolver::PartialSol&, unsigned long, std::vector<unsigned long, std::allocator<unsigned long> >&) const",solver/tsp_bb_26_07_14_02/tsp_bb,0,762846967,6.580000,0.102142553,762846967,6.580000,0.102142553
+4,solver,"tsp::BranchBoundSolver::deactivateCandidatesAfterForce(tsp::BranchBoundSolver::PartialSol&, tsp::BranchBoundSolver::Edge const&, int, int, std::vector<unsigned long, std::allocator<unsigned long> >&) const",solver/tsp_bb_26_07_14_02/tsp_bb,0,561001119,4.840000,0.075132212,1309584143,11.300000,0.175411982
+5,solver,"tsp::BranchBoundSolver::search(tsp::BranchBoundSolver::PartialSol&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> > const&, int, tsp::BranchBoundSolver::OneTree const*)",solver/tsp_bb_26_07_14_02/tsp_bb,0,530021960,4.570000,0.070940952,110252127423,951.200000,14.765652884
+6,solver,"tsp::BranchBoundSolver::restoreCandidates(tsp::BranchBoundSolver::PartialSol&, std::vector<unsigned long, std::allocator<unsigned long> > const&) const",solver/tsp_bb_26_07_14_02/tsp_bb,0,512751387,4.420000,0.068612475,512751387,4.420000,0.068612475
+7,solver,"tsp::BranchBoundSolver::bpPartition(tsp::BranchBoundSolver::PartialSol&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> > const&, tsp::BranchBoundSolver::OneTree const&)",solver/tsp_bb_26_07_14_02/tsp_bb,0,465032174,4.010000,0.062247969,3073281451,26.510000,0.411519615
+8,runtime,./malloc/./malloc/malloc.c:_int_free,lib/x86_64-linux-gnu/libc.so.6,0,298838462,2.580000,0.040049815,330542657,2.850000,0.044241075
+9,runtime,./malloc/./malloc/malloc.c:malloc,lib/x86_64-linux-gnu/libc.so.6,0,241697731,2.090000,0.032443455,294266794,2.540000,0.039428888
+10,runtime,./malloc/./malloc/malloc.c:free,lib/x86_64-linux-gnu/libc.so.6,0,150711820,1.300000,0.020180140,497402172,4.290000,0.066594461
+11,solver,"tsp::BranchBoundSolver::updateOneTreeAfterForbid(tsp::BranchBoundSolver::PartialSol const&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> > const&, tsp::BranchBoundSolver::OneTree&, tsp::BranchBoundSolver::Edge const&) const",solver/tsp_bb_26_07_14_02/tsp_bb,0,104462236,0.900000,0.013970866,2392057710,20.640000,0.320398523
+12,runtime,operator new(unsigned long),lib/x86_64-linux-gnu/libstdc++.so.6.0.33,0,86121024,0.740000,0.011487156,391150776,3.370000,0.052313131
+13,solver,"tsp::BranchBoundSolver::replaceOneTreeEdge(tsp::BranchBoundSolver::OneTree&, unsigned long, tsp::BranchBoundSolver::Edge const&) const",solver/tsp_bb_26_07_14_02/tsp_bb,0,69158506,0.600000,0.009313911,69158506,0.600000,0.009313911
+14,runtime,./malloc/./malloc/malloc.c:_int_malloc,lib/x86_64-linux-gnu/libc.so.6,0,51200308,0.440000,0.006830201,0,0.000000,0.000000000
+15,runtime,./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:__memcpy_avx_unaligned_erms,lib/x86_64-linux-gnu/libc.so.6,0,47852351,0.410000,0.006364506,0,0.000000,0.000000000
+16,runtime,./string/../sysdeps/x86_64/multiarch/memset-vec-unaligned-erms.S:__memset_avx2_unaligned_erms,lib/x86_64-linux-gnu/libc.so.6,0,39295028,0.340000,0.005277883,0,0.000000,0.000000000
+17,runtime,"std::vector<unsigned long, std::allocator<unsigned long> >::reserve(unsigned long)",solver/tsp_bb_26_07_14_02/tsp_bb,0,35581560,0.310000,0.004812187,121538895,1.050000,0.016299343
+18,solver,tsp::BranchBoundSolver::isTour(tsp::BranchBoundSolver::OneTree const&) const,solver/tsp_bb_26_07_14_02/tsp_bb,0,30730741,0.270000,0.004191260,0,0.000000,0.000000000
+19,runtime,"std::vector<int, std::allocator<int> >::operator=(std::vector<int, std::allocator<int> > const&)",solver/tsp_bb_26_07_14_02/tsp_bb,0,22704785,0.200000,0.003104637,0,0.000000,0.000000000
+20,runtime,./malloc/./malloc/malloc.c:_int_free_merge_chunk,lib/x86_64-linux-gnu/libc.so.6,0,22323664,0.190000,0.002949405,0,0.000000,0.000000000
+21,runtime,./malloc/./malloc/arena.c:free,???,0,16147695,0.140000,0.002173246,0,0.000000,0.000000000
+22,solver,(below main),solver/tsp_bb_26_07_14_02/tsp_bb,0,0,0.000000,0.000000000,11589078492,99.980000,1.552007964
+23,solver,./csu/../csu/libc-start.c:__libc_start_main@@GLIBC_2.34,lib/x86_64-linux-gnu/libc.so.6,0,0,0.000000,0.000000000,11589078480,99.980000,1.552007964
+24,solver,./csu/../sysdeps/nptl/libc_start_call_main.h:(below main),lib/x86_64-linux-gnu/libc.so.6,0,0,0.000000,0.000000000,11589078306,99.980000,1.552007964
+25,solver,main,solver/tsp_bb_26_07_14_02/tsp_bb,0,0,0.000000,0.000000000,11589068063,99.980000,1.552007964
+26,solver,"(anonymous namespace)::solveInput(std::istream&, (anonymous namespace)::CliOptions const&)",solver/tsp_bb_26_07_14_02/tsp_bb,0,0,0.000000,0.000000000,11589012164,99.980000,1.552007964
+27,solver,tsp::BranchBoundSolver::solve(),solver/tsp_bb_26_07_14_02/tsp_bb,0,0,0.000000,0.000000000,11587075200,99.970000,1.551852732
+28,runtime,"operator delete(void*, unsigned long)",lib/x86_64-linux-gnu/libstdc++.so.6.0.33,0,0,0.000000,0.000000000,540461936,4.660000,0.072338039
+29,runtime,operator delete(void*),lib/x86_64-linux-gnu/libstdc++.so.6.0.33,0,0,0.000000,0.000000000,518933209,4.480000,0.069543866
