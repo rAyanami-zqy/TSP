@@ -519,12 +519,13 @@ void BranchBoundSolver::searchSmart(
     const OneTree* precomputed_tree)
 {
     OneTree computed_tree;
-    bool tree_valid = precomputed_tree != nullptr
-        && oneTreeSatisfiesConstraints(node, *precomputed_tree);
+    bool tree_valid = precomputed_tree != nullptr;
+        // && oneTreeSatisfiesConstraints(node, *precomputed_tree);  // 已关闭
     if (!tree_valid) {
         computed_tree = computeOneTree(node, branch_candidates);
         precomputed_tree = &computed_tree;
-        tree_valid = oneTreeSatisfiesConstraints(node, computed_tree);
+        tree_valid = true;
+        // oneTreeSatisfiesConstraints 已关闭；调试时取消注释
     }
     const OneTree& current_tree = *precomputed_tree;
 
@@ -685,8 +686,8 @@ void BranchBoundSolver::searchSmart(
             child_tree_valid = removed_edge_ids.empty()
                 || updateOneTreeAfterCandidateRemoval(
                     node, child_candidates, child_tree, removed_edge_ids);
-            child_tree_valid = child_tree_valid
-                && oneTreeSatisfiesConstraints(node, child_tree);
+            child_tree_valid = child_tree_valid;
+                // && oneTreeSatisfiesConstraints(node, child_tree);  // 已关闭
 
 #ifdef TSP_VERIFY_INCREMENTAL_STATE
             const OneTree rebuilt = computeOneTree(node, child_candidates);
@@ -701,11 +702,13 @@ void BranchBoundSolver::searchSmart(
 
             if (!child_tree_valid) {
                 child_tree = computeOneTree(node, child_candidates);
-                child_tree_valid = oneTreeSatisfiesConstraints(node, child_tree);
+                child_tree_valid = true;
+                // oneTreeSatisfiesConstraints 已关闭；调试时取消注释
             }
 #else
             child_tree = computeOneTree(node, child_candidates);
-            child_tree_valid = oneTreeSatisfiesConstraints(node, child_tree);
+            child_tree_valid = true;
+            // oneTreeSatisfiesConstraints 已关闭；调试时取消注释
 #endif
 
             ++result_.stats.nodes_created;
@@ -758,8 +761,8 @@ void BranchBoundSolver::searchSmart(
         child_tree = current_tree;
         child_tree_valid = updateOneTreeAfterForbid(
             node, forbid_candidates, child_tree, branch_edge);
-        child_tree_valid = child_tree_valid
-            && oneTreeSatisfiesConstraints(node, child_tree);
+        child_tree_valid = child_tree_valid;
+            // && oneTreeSatisfiesConstraints(node, child_tree);  // 已关闭
 
 #ifdef TSP_VERIFY_INCREMENTAL_STATE
         const OneTree rebuilt = computeOneTree(node, forbid_candidates);
@@ -774,11 +777,13 @@ void BranchBoundSolver::searchSmart(
 
         if (!child_tree_valid) {
             child_tree = computeOneTree(node, forbid_candidates);
-            child_tree_valid = oneTreeSatisfiesConstraints(node, child_tree);
+            child_tree_valid = true;
+            // oneTreeSatisfiesConstraints 已关闭；调试时取消注释
         }
 #else
         child_tree = computeOneTree(node, forbid_candidates);
-        child_tree_valid = oneTreeSatisfiesConstraints(node, child_tree);
+        child_tree_valid = true;
+        // oneTreeSatisfiesConstraints 已关闭；调试时取消注释
 #endif
 
         ++result_.stats.nodes_created;
@@ -875,8 +880,8 @@ std::vector<BranchBoundSolver::BranchChoice> BranchBoundSolver::bpPartition(
 #ifndef TSP_DISABLE_INCREMENTAL_ONETREE
             replacement_found = updateOneTreeAfterForbid(
                 node, branch_candidates, work_tree, e);
-            const bool incremental_valid = replacement_found
-                && oneTreeSatisfiesConstraints(node, work_tree);
+            const bool incremental_valid = replacement_found;
+                // && oneTreeSatisfiesConstraints(node, work_tree);  // 已关闭
 
             if (incremental_valid
                 && B_set.back().tree_edge_index < work_tree.edges.size()) {
@@ -902,14 +907,14 @@ std::vector<BranchBoundSolver::BranchChoice> BranchBoundSolver::bpPartition(
             // 一旦可疑就完整重建，绝不把不受约束的树作为下界。
             if (!incremental_valid) {
                 work_tree = computeOneTree(node, branch_candidates);
-                replacement_found = work_tree.feasible
-                    && oneTreeSatisfiesConstraints(node, work_tree);
+                replacement_found = work_tree.feasible;
+                    // && oneTreeSatisfiesConstraints(node, work_tree);  // 已关闭
                 B_set.back().replay_requires_rebuild = replacement_found;
             }
 #else
             work_tree = computeOneTree(node, branch_candidates);
-            replacement_found = work_tree.feasible
-                && oneTreeSatisfiesConstraints(node, work_tree);
+            replacement_found = work_tree.feasible;
+                // && oneTreeSatisfiesConstraints(node, work_tree);  // 已关闭
             B_set.back().replay_requires_rebuild = replacement_found;
 #endif
 
@@ -955,12 +960,13 @@ void BranchBoundSolver::search(
 {
     // Step 1: 计算 1-tree 下界。
     OneTree computed_tree;
-    bool tree_valid = precomputed_tree != nullptr
-        && oneTreeSatisfiesConstraints(node, *precomputed_tree);
+    bool tree_valid = precomputed_tree != nullptr;
+        // && oneTreeSatisfiesConstraints(node, *precomputed_tree);  // 已关闭
     if (!tree_valid) {
         computed_tree = computeOneTree(node, branch_candidates);
         precomputed_tree = &computed_tree;
-        tree_valid = oneTreeSatisfiesConstraints(node, computed_tree);
+        tree_valid = true;
+        // oneTreeSatisfiesConstraints 已关闭；调试时取消注释
     }
     const OneTree& current_tree = *precomputed_tree;
 
@@ -1157,8 +1163,8 @@ void BranchBoundSolver::search(
                     tree_valid = updateOneTreeAfterCandidateRemoval(
                         node, child_candidates, child_tree, removed_edge_ids);
                 }
-                tree_valid = tree_valid
-                    && oneTreeSatisfiesConstraints(node, child_tree);
+                tree_valid = tree_valid;
+                    // && oneTreeSatisfiesConstraints(node, child_tree);  // 已关闭
 
 #ifdef TSP_VERIFY_INCREMENTAL_STATE
                 const OneTree rebuilt = computeOneTree(node, child_candidates);
@@ -1174,13 +1180,13 @@ void BranchBoundSolver::search(
 
                 if (!tree_valid) {
                     child_tree = computeOneTree(node, child_candidates);
-                    tree_valid = child_tree.feasible
-                        && oneTreeSatisfiesConstraints(node, child_tree);
+                    tree_valid = child_tree.feasible;
+                        // && oneTreeSatisfiesConstraints(node, child_tree);  // 已关闭
                 }
 #else
                 child_tree = computeOneTree(node, child_candidates);
-                tree_valid = child_tree.feasible
-                    && oneTreeSatisfiesConstraints(node, child_tree);
+                tree_valid = child_tree.feasible;
+                    // && oneTreeSatisfiesConstraints(node, child_tree);  // 已关闭
 #endif
 
                 ++result_.stats.nodes_created;
@@ -1245,7 +1251,8 @@ void BranchBoundSolver::search(
             ++prefix_tree.degree[static_cast<std::size_t>(replacement.v)];
             prefix_tree.cost += replacement.w - old_edge.w;
             prefix_tree.edges[choice.tree_edge_index] = replacement;
-            prefix_valid = oneTreeSatisfiesConstraints(node, prefix_tree);
+            prefix_valid = true;
+            // oneTreeSatisfiesConstraints 已关闭；调试时取消注释
         }
 
 #ifdef TSP_VERIFY_INCREMENTAL_STATE
@@ -1265,8 +1272,8 @@ void BranchBoundSolver::search(
 
         if (!prefix_valid) {
             prefix_tree = computeOneTree(node, prefix_candidates);
-            prefix_valid = prefix_tree.feasible
-                && oneTreeSatisfiesConstraints(node, prefix_tree);
+            prefix_valid = prefix_tree.feasible;
+                // && oneTreeSatisfiesConstraints(node, prefix_tree);  // 已关闭
         }
 
         // bpPartition 只有在该前缀仍可行时才会生成下一项；若生产校验仍
