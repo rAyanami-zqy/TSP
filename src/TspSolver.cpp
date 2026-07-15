@@ -968,6 +968,12 @@ void BranchBoundSolver::search(
             }
         }
 #endif
+#else
+        // full 变体：force 子节点始终从 computeOneTree 完整重建，
+        // 不继承 prefix_tree。bpPartition 已对 forbid 前缀完成了
+        // feasible / bound 验证，此处仅需维护 node.forbidden 与
+        // prefix_candidates 等约束状态，1-tree 不必重复计算。
+        prefix_valid = true;
 #endif
 
         if (!prefix_valid) {
