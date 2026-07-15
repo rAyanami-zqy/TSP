@@ -1,48 +1,50 @@
-tsp_bb 2026-07-14 full-deg（对照版本：全量重算 1-tree）
+# tsp_bb 2026-07-14 full-deg
 
-## 代码基
+这是 `07_14` 的对照配置：degree 分支策略 + 每个子节点完整重建 1-tree。
 
-e6a862d — Fix prefix-forbidden edge leak in child 1-tree, add 07_13 variants
+## 配置
 
-## 分支策略
+- 分支策略：与默认 `deg` 相同，从度数大于 2 的违规顶点选择最轻未决树边。
+- 1-tree：禁用父树增量复用；每个子节点依据当前 forced/forbidden 约束完整执行受约束 Kruskal 重建。
+- 编译宏：定义 `TSP_DISABLE_INCREMENTAL_ONETREE=1`，不定义 `TSP_BRANCH_STRATEGY_MIN_EDGE`。
 
-kUseMinEdgeFromOneTree = false（degree-violation vertex only）
+该配置用于隔离增量维护对性能的影响，与默认配置共享同一份源码。
 
-## 候选集管理
+## 可复现源码提交
 
-与 deg 版本相同：buildBranchCandidates 全量 O(n²) 重建（resize 方式）。
+- 源码提交：`313143543b29a3ed469e5296f5356b4ddc12109d`
+- 提交说明：`Fix 07_14 BP correctness and reproducible builds`
+- CMake 目标：`tsp_bb_26_07_14_full_deg`
 
-## 1-tree 维护方式
+在其他系统编译前，先确认工作树基于该提交：
 
-**全量重算**（每个子节点从零构建 1-tree）
-
-- 子节点不继承父节点 1-tree
-- search() 始终传 nullptr 给子节点
-- 子节点进入 search 后调用 computeOneTree 全量 Kruskal + forced edges 重建 1-tree
-- 不使用 updateOneTreeAfterCandidateRemoval 增量更新
-- 不维护 prefix_tree
-
-## 与 deg 版本的唯一差异
-
-```
-deg 版本:   search(node, ..., tree_valid ? &child_tree : nullptr);
-full 版本:  search(node, ..., nullptr);
+```bash
+git checkout --detach 313143543b29a3ed469e5296f5356b4ddc12109d
+git rev-parse HEAD
 ```
 
-其余代码完全相同。
+第二条命令必须输出上述完整 hash。若该提交尚未出现在目标系统的仓库中，需要先从包含它的远端执行 `git fetch`。
 
-## Replacement 方法
+## 从固定提交构建
 
-与 deg 版本相同：位图邻接矩阵 + DFS + epoch 标记。
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target tsp_bb_26_07_14_full_deg
+```
 
-## BP 划分
+生成物是 `build/tsp_bb_26_07_14_full_deg`。本目录中的 `tsp_bb` 是历史归档产物，并非上述提交在当前系统上的构建结果；验证时应重新构建。
 
-与 deg 版本相同。
+一次构建四个实验变体可运行：
 
-## 用途
+```bash
+cmake --build build --target tsp_bb_variants
+```
 
-对照实验：量化增量 1-tree 维护 vs 全量重算对搜索树大小的影响。
+## 正确性验证
 
-## 编译
+默认 CTest 目标覆盖主 `deg + incremental` 配置，并在验证模式下用本配置所代表的完整重建结果检查增量树。也可直接用本目标配合独立 Held-Karp 校验：
 
-g++ via CMake/Make, Linux x86_64
+```bash
+python3 tools/verify_instances.py --batch-list examples/batch.txt \
+  --solver ./build/tsp_bb_26_07_14_full_deg
+```

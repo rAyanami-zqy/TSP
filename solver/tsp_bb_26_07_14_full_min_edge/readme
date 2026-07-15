@@ -1,31 +1,50 @@
-tsp_bb 2026-07-14 full-min-edge（对照版本：全量重算 1-tree + min-edge 策略）
+# tsp_bb 2026-07-14 full-min-edge
 
-## 代码基
+这是 `07_14` 的对照配置：min-edge 分支策略 + 每个子节点完整重建 1-tree。
 
-e6a862d — Fix prefix-forbidden edge leak in child 1-tree, add 07_13 variants
+## 配置
 
-## 分支策略
+- 分支策略：从当前 1-tree 的全部未决边中选择最轻边。
+- 1-tree：禁用父树增量复用；每个子节点依据当前 forced/forbidden 约束完整执行受约束 Kruskal 重建。
+- 编译宏：同时定义 `TSP_BRANCH_STRATEGY_MIN_EDGE=1` 与 `TSP_DISABLE_INCREMENTAL_ONETREE=1`。
 
-kUseMinEdgeFromOneTree = true（min-edge from entire 1-tree）
+该配置用于隔离 min-edge 策略下增量维护对性能的影响，与其他三个变体共享同一份源码。
 
-## 候选集管理
+## 可复现源码提交
 
-与 min_edge 版本相同：buildBranchCandidates 全量 O(n²) 重建（resize 方式）。
+- 源码提交：`313143543b29a3ed469e5296f5356b4ddc12109d`
+- 提交说明：`Fix 07_14 BP correctness and reproducible builds`
+- CMake 目标：`tsp_bb_26_07_14_full_min_edge`
 
-## 1-tree 维护方式
+在其他系统编译前，先确认工作树基于该提交：
 
-**全量重算**（每个子节点从零构建 1-tree）
+```bash
+git checkout --detach 313143543b29a3ed469e5296f5356b4ddc12109d
+git rev-parse HEAD
+```
 
-与 full_deg 版本相同：search() 始终传 nullptr，子节点全量 computeOneTree。
+第二条命令必须输出上述完整 hash。若该提交尚未出现在目标系统的仓库中，需要先从包含它的远端执行 `git fetch`。
 
-## 与 min_edge 版本的唯一差异
+## 从固定提交构建
 
-传入 search() 的 precomputed_tree 始终为 nullptr。
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target tsp_bb_26_07_14_full_min_edge
+```
 
-## 用途
+生成物是 `build/tsp_bb_26_07_14_full_min_edge`。本目录中的 `tsp_bb` 是历史归档产物，并非上述提交在当前系统上的构建结果；验证时应重新构建。
 
-对照实验：min-edge 策略下增量 vs 全量重算的影响。
+一次构建四个实验变体可运行：
 
-## 编译
+```bash
+cmake --build build --target tsp_bb_variants
+```
 
-g++ via CMake/Make, Linux x86_64
+## 正确性验证
+
+默认 CTest 目标验证主 `deg + incremental` 配置。要验证本策略，可用命名目标配合 `tools/verify_instances.py` 对小实例执行 Held-Karp 独立校验：
+
+```bash
+python3 tools/verify_instances.py --batch-list examples/batch.txt \
+  --solver ./build/tsp_bb_26_07_14_full_min_edge
+```

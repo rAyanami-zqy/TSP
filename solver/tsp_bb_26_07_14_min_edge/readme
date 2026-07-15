@@ -1,36 +1,53 @@
-tsp_bb 2026-07-14 min-edge（正确性基线，备选策略）
+# tsp_bb 2026-07-14 min-edge
 
-## 代码基
+这是 `07_14` 的 min-edge 分支策略 + 增量 1-tree 实验配置。
 
-e6a862d — Fix prefix-forbidden edge leak in child 1-tree, add 07_13 variants
-（与 07_13_01 完全一致）
+## 配置
 
-## 分支策略
+- 分支策略：从当前 1-tree 的全部未决边中选择最轻边，不先限定度数违规顶点。
+- 1-tree：子节点优先继承父节点 1-tree，并对被移除的树边做增量 replacement。
+- 安全回退：增量结果不能满足当前 forced/forbidden 约束或结构校验时，从当前节点约束完整重建 1-tree。
+- 编译宏：定义 `TSP_BRANCH_STRATEGY_MIN_EDGE=1`，不定义 `TSP_DISABLE_INCREMENTAL_ONETREE`。
 
-kUseMinEdgeFromOneTree = true
+它与默认 `deg` 配置共享同一份源码，差异由编译宏控制。
 
-从 1-tree 所有未决边中直接选取最小权重边作为分支边。不再按度数违规顶点筛选。
+## 可复现源码提交
 
-## 候选集管理
+- 源码提交：`313143543b29a3ed469e5296f5356b4ddc12109d`
+- 提交说明：`Fix 07_14 BP correctness and reproducible builds`
+- CMake 目标：`tsp_bb_26_07_14_min_edge`
 
-与 deg 版本相同：buildBranchCandidates 全量 O(n²) 重建（resize 方式）。
+在其他系统编译前，先确认工作树基于该提交：
 
-## 1-tree 维护方式
+```bash
+git checkout --detach 313143543b29a3ed469e5296f5356b4ddc12109d
+git rev-parse HEAD
+```
 
-与 deg 版本相同：增量更新（子节点继承父节点 1-tree）。
+第二条命令必须输出上述完整 hash。若该提交尚未出现在目标系统的仓库中，需要先从包含它的远端执行 `git fetch`。
 
-## Replacement 方法
+## 从固定提交构建
 
-与 deg 版本相同：位图邻接矩阵 + DFS + epoch 标记。
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target tsp_bb_26_07_14_min_edge
+```
 
-## BP 划分
+生成物是 `build/tsp_bb_26_07_14_min_edge`。本目录中的 `tsp_bb` 是历史归档产物，并非上述提交在当前系统上的构建结果；验证时应重新构建。
 
-与 deg 版本相同：bpPartition 返回 vector<Edge>，search() 枚举前缀 forbid + force。
+一次构建四个实验变体可运行：
+
+```bash
+cmake --build build --target tsp_bb_variants
+```
 
 ## 正确性验证
 
-与 deg 版本相同：brute-force 对拍 36 实例 + BP regression + 验证构建。
+默认 `tsp_solver_tests` 验证主 `deg + incremental` 配置。要验证本策略的端到端结果，可用本目标配合 `tools/verify_instances.py` 对小实例执行 Held-Karp 独立校验：
 
-## 编译
+```bash
+python3 tools/verify_instances.py --batch-list examples/batch.txt \
+  --solver ./build/tsp_bb_26_07_14_min_edge
+```
 
-g++ via CMake/Make, Linux x86_64
+不再引用无法由当前测试命令复现的历史通过次数。

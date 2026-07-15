@@ -1,58 +1,54 @@
-tsp_bb 2026-07-14 deg（正确性基线，推荐使用）
+# tsp_bb 2026-07-14 deg
 
-## 代码基
+这是当前源码的默认/主配置，也是 `tsp_bb` 对应的 `07_14` 版本：degree 分支策略 + 增量 1-tree。
 
-e6a862d — Fix prefix-forbidden edge leak in child 1-tree, add 07_13 variants
-（与 07_13_02 完全一致）
+## 配置
 
-## 分支策略
+- 分支策略：从 1-tree 中选择度数大于 2 的违规顶点，再取该顶点关联的最轻未决树边。
+- 1-tree：子节点优先继承父节点 1-tree，并对被移除的树边做增量 replacement。
+- 安全回退：增量结果不能满足当前 forced/forbidden 约束或结构校验时，从当前节点约束完整重建 1-tree。
+- 编译宏：均不定义（`TSP_BRANCH_STRATEGY_MIN_EDGE` 与 `TSP_DISABLE_INCREMENTAL_ONETREE` 都关闭）。
 
-kUseMinEdgeFromOneTree = false
+四个 `07_14` 变体共享 `src/TspSolver.cpp`，目录中不保存独立源码。
 
-从 1-tree 中度数 > 2 的违规顶点出发，取该顶点关联的最小权重未决边作为分支边。
-若所有顶点度数均为 2，则 1-tree 已是合法 TSP 回路，无需分支。
+## 可复现源码提交
 
-## 候选集管理
+- 源码提交：`313143543b29a3ed469e5296f5356b4ddc12109d`
+- 提交说明：`Fix 07_14 BP correctness and reproducible builds`
+- CMake 目标：`tsp_bb_26_07_14_deg`（默认目标 `tsp_bb` 与它配置相同）
 
-buildBranchCandidates 全量 O(n²) 重建（resize 方式）
+在其他系统编译前，先确认工作树基于该提交：
 
-每进入子节点时，从 prefix_candidates 拷贝一份子节点副本，调用 buildBranchCandidates 全量扫描所有边：
-- 移除 forced/forbidden 边
-- 移除端点度数已达 2 的关联边
-- 移除与 forced 分量形成子回路的边（dsu_root[u]==dsu_root[v] && size<n）
-- 验证各顶点仍有足够候选边达到度数 2
+```bash
+git checkout --detach 313143543b29a3ed469e5296f5356b4ddc12109d
+git rev-parse HEAD
+```
 
-过滤后的向量被 resize 为仅含 active 边，computeOneTree 直接 range-for 遍历，无需 nextActiveCandidate / candidate_mask / forced / forbidden 等额外检查。
+第二条命令必须输出上述完整 hash。若该提交尚未出现在目标系统的仓库中，需要先从包含它的远端执行 `git fetch`。
 
-## 1-tree 维护方式
+## 从固定提交构建
 
-增量更新（子节点继承父节点 1-tree）
+构建默认目标：
 
-- 子节点从 current_tree（父节点 1-tree）出发
-- 将被 buildBranchCandidates 移除的树边 + 前缀禁止的 B 集边合并为 all_removed
-- 调用 updateOneTreeAfterCandidateRemoval 批量处理：对每条被删树边，通过位图邻接矩阵 DFS 标记 cut 分量（markMstComponentWithoutEdge），从 lower_bound(weight(e)) 位置扫描候选找最轻跨割边作为 replacement
-- 若增量更新失败（找不到 replacement），传 nullptr 给子节点触发 computeOneTree 全量重算
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target tsp_bb
+```
 
-## Replacement 方法
+构建带版本名的同配置目标：
 
-位图邻接矩阵 + DFS + epoch 标记
+```bash
+cmake --build build --target tsp_bb_26_07_14_deg
+```
 
-- OneTree 携带 mst_adjacency_bits（n × ceil(n/64) uint64_t 位图）表示内部 MST 邻接关系
-- 删除树边后，在位图上从 u 做非递归 DFS（忽略被删边），用 epoch 递增标记一侧分量
-- 候选扫描从 lower_bound(weight(e)) 开始，每条候选只需比较 mark[u]==epoch 与 mark[v]==epoch
-- replaceOneTreeEdge 同步更新位图（cut 旧边、link 新边）
-
-## BP 划分
-
-bpPartition 在 work_tree（current_tree 副本）上顺序 forbid 并找 replacement，返回 B 集边列表（vector<Edge>）。
-search() 枚举前缀 forbid + force 子节点，prefix_candidates 累积累积前缀约束。
+生成物分别是 `build/tsp_bb` 和 `build/tsp_bb_26_07_14_deg`。本目录中的 `tsp_bb` 是历史归档产物，并非上述提交在当前系统上的构建结果；验证时应重新构建。
 
 ## 正确性验证
 
-- 36 个 complete/sparse 随机实例 (n=5..8) 与暴力搜索一致
-- BP regression 用例返回最优值 1920
-- 验证构建确认每棵复用的子树包含所有 forced 边且 cost 与全量重建一致
+```bash
+cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target tsp_solver_tests
+ctest --test-dir build --output-on-failure
+```
 
-## 编译
-
-g++ via CMake/Make, Linux x86_64
+测试目标使用本配置，并通过 `TSP_VERIFY_INCREMENTAL_STATE` 将搜索中复用的增量 1-tree 与完整重建结果对比。测试还覆盖 BP 前缀约束、已知 5 点错解、极小权重和固定随机种子的完整图/稀疏图穷举对拍。这里不再引用无法由当前测试命令复现的历史通过次数。
