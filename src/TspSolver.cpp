@@ -563,17 +563,24 @@ std::vector<BranchBoundSolver::BranchChoice> BranchBoundSolver::bpPartition(
         auto test = [&](Edge e) -> bool {
             const std::size_t eid = edgeId(e.u, e.v);
 
-            // 记录 forbid 当前边在 prefix_tree 中要替换的位置；search 会在
+            // 记录 forbid 当前边在 work_tree 中要替换的位置；search 会在
             // 兄弟分支间顺序重放该 delta，而不是复制 |B| 棵完整 1-tree。
-            const auto removed = std::find_if(
-                work_tree.edges.begin(), work_tree.edges.end(),
-                [&](const Edge& edge) {
-                    return edgeId(edge.u, edge.v) == eid;
-                });
+            // O(1) 查表替代 find_if 扫描。
+            std::size_t tree_edge_idx;
+            if (!work_tree.edge_index_in_tree.empty()) {
+                tree_edge_idx = static_cast<std::size_t>(work_tree.edge_index_in_tree[eid]);
+            } else {
+                const auto removed = std::find_if(
+                    work_tree.edges.begin(), work_tree.edges.end(),
+                    [&](const Edge& edge) {
+                        return edgeId(edge.u, edge.v) == eid;
+                    });
+                tree_edge_idx = static_cast<std::size_t>(
+                    std::distance(work_tree.edges.begin(), removed));
+            }
             BranchChoice choice;
             choice.edge = e;
-            choice.tree_edge_index = static_cast<std::size_t>(
-                std::distance(work_tree.edges.begin(), removed));
+            choice.tree_edge_index = tree_edge_idx;
             B_set.push_back(choice);
 
             node.forbidden[eid] = 1;
@@ -1141,6 +1148,15 @@ BranchBoundSolver::OneTree BranchBoundSolver::computeOneTree(
     result.cost = cost;
     result.edges = std::move(edges);
 #ifndef TSP_DISABLE_INCREMENTAL_ONETREE
+    // 填充 O(1) 边→索引映射，替代增量路径中的 find_if 扫描。
+    {
+        const std::size_t edge_state_size = static_cast<std::size_t>(n_) * static_cast<std::size_t>(n_);
+        result.edge_index_in_tree.assign(edge_state_size, -1);
+        for (std::size_t i = 0; i < result.edges.size(); ++i) {
+            const std::size_t eid = edgeId(result.edges[i].u, result.edges[i].v);
+            result.edge_index_in_tree[eid] = static_cast<int>(i);
+        }
+    }
     initializeDynamicMst(result);
 #endif
     return result;
@@ -1157,19 +1173,28 @@ bool BranchBoundSolver::updateOneTreeAfterForbid(
         return false;
     }
 
-    auto removed = std::find_if(tree.edges.begin(), tree.edges.end(),
-        [&](const Edge& edge) {
-            return edgeId(edge.u, edge.v) == forbidden_id;
-        });
-
-    // 禁用非树边不会改变当前最小 1-tree。BP 当前只传入树边，保留此分支使函数语义完整。
-    if (removed == tree.edges.end()) {
-        return true;
+    // O(1) 查表替代 find_if 扫描。
+    std::size_t removed_index;
+    if (!tree.edge_index_in_tree.empty()) {
+        const int idx = tree.edge_index_in_tree[forbidden_id];
+        if (idx < 0) {
+            // 禁用非树边不会改变当前最小 1-tree。
+            return true;
+        }
+        removed_index = static_cast<std::size_t>(idx);
+    } else {
+        auto removed = std::find_if(tree.edges.begin(), tree.edges.end(),
+            [&](const Edge& edge) {
+                return edgeId(edge.u, edge.v) == forbidden_id;
+            });
+        if (removed == tree.edges.end()) {
+            return true;
+        }
+        removed_index = static_cast<std::size_t>(
+            std::distance(tree.edges.begin(), removed));
     }
 
-    const Edge old_edge = *removed;
-    const std::size_t removed_index = static_cast<std::size_t>(
-        std::distance(tree.edges.begin(), removed));
+    const Edge old_edge = tree.edges[removed_index];
     const Edge* replacement = nullptr;
 
     if (old_edge.u == 0 || old_edge.v == 0) {
@@ -1218,15 +1243,23 @@ bool BranchBoundSolver::updateOneTreeAfterCandidateRemoval(
     for (const std::size_t removed_id : removed_edge_ids) {
         if (node.forced[removed_id]) continue;
 
-        auto it = std::find_if(tree.edges.begin(), tree.edges.end(),
-            [&](const Edge& e) {
-                return edgeId(e.u, e.v) == removed_id;
-            });
-        if (it == tree.edges.end()) continue;
+        // O(1) 查表替代 find_if 扫描。
+        std::size_t removed_index;
+        if (!tree.edge_index_in_tree.empty()) {
+            const int idx = tree.edge_index_in_tree[removed_id];
+            if (idx < 0) continue;
+            removed_index = static_cast<std::size_t>(idx);
+        } else {
+            auto it = std::find_if(tree.edges.begin(), tree.edges.end(),
+                [&](const Edge& e) {
+                    return edgeId(e.u, e.v) == removed_id;
+                });
+            if (it == tree.edges.end()) continue;
+            removed_index = static_cast<std::size_t>(
+                std::distance(tree.edges.begin(), it));
+        }
 
-        const Edge old_edge = *it;
-        const std::size_t removed_index = static_cast<std::size_t>(
-            std::distance(tree.edges.begin(), it));
+        const Edge old_edge = tree.edges[removed_index];
         const Edge* replacement = nullptr;
 
         if (old_edge.u == 0 || old_edge.v == 0) {
@@ -1369,6 +1402,13 @@ void BranchBoundSolver::replaceOneTreeEdge(
     ++tree.degree[static_cast<std::size_t>(replacement.v)];
     tree.cost += replacement.w - old_edge.w;
     tree.edges[edge_index] = replacement;
+#ifndef TSP_DISABLE_INCREMENTAL_ONETREE
+    // 维护 O(1) 边→索引映射。
+    if (!tree.edge_index_in_tree.empty()) {
+        tree.edge_index_in_tree[edgeId(old_edge.u, old_edge.v)] = -1;
+        tree.edge_index_in_tree[edgeId(replacement.u, replacement.v)] = static_cast<int>(edge_index);
+    }
+#endif
 #ifdef TSP_VERIFY_INCREMENTAL_STATE
     if (tree.feasible && !dynamicMstMatchesEdges(tree)) {
         throw std::logic_error("dynamic MST cut/link produced an invalid tree");
