@@ -1134,7 +1134,9 @@ BranchBoundSolver::OneTree BranchBoundSolver::computeOneTree(
     result.feasible = true;
     result.cost = cost;
     result.edges = std::move(edges);
+#ifndef TSP_DISABLE_INCREMENTAL_ONETREE
     initializeDynamicMst(result);
+#endif
     return result;
 }
 
