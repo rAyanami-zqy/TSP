@@ -101,6 +101,10 @@ private:
         // 顶点 1..n-1 上当前 MST 的动态邻接位图（按行存储）。
         // 根边不进入该状态；子节点复制 OneTree 时一并继承。
         std::vector<std::uint64_t> mst_adjacency_bits;
+        // 边在 edges 中的位置，-1 表示不在此 1-tree 中。
+        // 大小为 n_×n_，下标为 edgeId(u,v)。computeOneTree / replaceOneTreeEdge 维护。
+        // 增量更新路径用此做 O(1) 存在性查询，替代 O(n) 的 find_if 扫描。
+        std::vector<int> edge_index_in_tree;
     };
 
     // BP 链中的一项。记录 forbid edge 对前缀树的一步变换；search 只维护
