@@ -2,7 +2,7 @@
 
 本项目使用 C++ 实现旅行商问题（TSP）的分支定界算法。当前版本面向**对称 TSP**，输入可以是完整距离矩阵、带缺边的对称距离矩阵或受支持的 TSPLIB 文件。
 
-默认可执行文件 `tsp_bb` 对应 `solver/tsp_bb_26_07_14_deg` 的配置：按度数违规顶点选择分支边，并增量维护子节点的 1-tree。四个 `07_14` 实验变体都由同一份 `src/TspSolver.cpp` 编译，不再依赖四份彼此独立的源码。
+默认 CMake 目标 `tsp_bb` 编译产物命名为 `07-20-MST`：按度数违规顶点选择分支边，并使用当前增量 MST / 1-tree 优化。四个 `07_14` 实验变体仍由同一份 `src/TspSolver.cpp` 编译，用于历史策略对比。
 
 核心设计：
 
@@ -45,7 +45,7 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --target tsp_bb
 ```
 
-主可执行文件为 `./build/tsp_bb`。它固定使用 `07_14_deg` 配置，即 degree 分支策略和增量 1-tree。
+主可执行文件为 `./build/07-20-MST`。CMake 目标名仍为 `tsp_bb`，使用 degree 分支策略和当前增量 MST / 1-tree 实现。
 
 四个可复现实验目标如下：
 

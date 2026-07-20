@@ -117,6 +117,25 @@ private:
         Edge forbid_replacement;
     };
 
+    // DFS 热路径只维护一棵可变 1-tree。每次交换记录足够的信息，子节点
+    // 返回时按 checkpoint 逆序恢复，避免复制 OneTree 中的 O(n^2) 索引表。
+    struct TreeUndo {
+        std::size_t edge_index = 0;
+        Edge old_edge;
+        Edge new_edge;
+        double old_cost = 0.0;
+        bool old_feasible = false;
+        bool state_only = false;
+        bool full_snapshot = false;
+    };
+
+    struct CandidateUndo {
+        std::size_t edge_id = 0;
+        std::size_t index = 0;
+        std::size_t previous = 0;
+        std::size_t next = 0;
+    };
+
     // 分支定界节点（部分解 P）：
     // forced 表示必须选择的边，forbidden 表示禁止选择的边。
     // 同时维护 forced 边的并查集和度数统计，加速 1-tree 计算与候选集筛选。
@@ -130,6 +149,9 @@ private:
         std::vector<int> forced_parent;   // parent[i] = parent of vertex i
         std::vector<int> forced_rank;     // rank[i] = rank of component rooted at i
         std::vector<int> forced_comp_size; // comp_size[i] = size of component rooted at i
+        // 每个 forced DSU 根的成员列表；union 时只向胜方追加，rollback 时
+        // resize，败方列表保持不变，供局部枚举新产生的分量内边。
+        std::vector<std::vector<int>> forced_members;
         // 各顶点在 forced 边子图中的度数。
         std::vector<int> forced_degree;
         // forced 边列表与 MST 部分（不含顶点 0 的边）的权值和及计数。
@@ -139,7 +161,8 @@ private:
         // 候选集快速查找表（大小 n*n），由 buildBranchCandidates 维护，
         // chooseBranchEdge 直接读取，避免重复分配 O(n²) 的掩码数组。
         std::vector<unsigned char> candidate_mask;
-        // 按当前 branch_candidates 权重顺序保存 active 位，支持 64 条一组跳过。
+        // 按全局 immutable candidates_sorted_ 的稳定下标保存 active 位。
+        // bitset 支持 lower_bound 后定位；有序 active 链负责顺序扫描。
         std::vector<std::uint64_t> candidate_bits;
         std::size_t candidate_bit_count = 0;
     };
@@ -164,7 +187,8 @@ private:
     bool updateOneTreeAfterForbid(const PartialSol& node,
                                   const std::vector<Edge>& branch_candidates,
                                   OneTree& tree,
-                                  const Edge& forbidden_edge) const;
+                                  const Edge& forbidden_edge,
+                                  bool record_undo = false) const;
     // force 分支后，buildBranchCandidates 移除的候选边中若包含当前 1-tree 的边，
     // 则为每条被移除的树边寻找替代边，增量更新 1-tree，避免从零重算 MST。
     // 返回 false 表示存在无法替代的树边，调用者应回退到完整 computeOneTree。
@@ -172,7 +196,13 @@ private:
         const PartialSol& node,
         const std::vector<Edge>& branch_candidates,
         OneTree& tree,
-        const std::vector<std::size_t>& removed_edge_ids) const;
+        const std::vector<std::size_t>& removed_edge_ids,
+        bool record_undo = false) const;
+    bool updateOneTreeAfterActiveRemoval(
+        const PartialSol& node, OneTree& tree, bool record_undo) const;
+    bool updateOneTreeAfterRemovedCandidate(
+        const PartialSol& node, const std::vector<Edge>& branch_candidates,
+        OneTree& tree, std::size_t removed_id, bool record_undo) const;
     const Edge* findMstReplacement(const PartialSol& node,
                                    const std::vector<Edge>& branch_candidates,
                                    const OneTree& tree,
@@ -181,7 +211,11 @@ private:
     void initializeDynamicMst(OneTree& tree) const;
     void setDynamicMstEdge(OneTree& tree, int u, int v, bool present) const;
     void replaceOneTreeEdge(OneTree& tree, std::size_t edge_index,
-                            const Edge& replacement) const;
+                            const Edge& replacement,
+                            bool record_undo = false) const;
+    void markOneTreeInfeasible(OneTree& tree, bool record_undo) const;
+    void replaceOneTreeWithRebuild(OneTree& tree, OneTree rebuilt) const;
+    void rollbackOneTree(OneTree& tree, std::size_t checkpoint) const;
     bool markMstComponentWithoutEdge(const OneTree& tree,
                                      const Edge& removed_edge) const;
     bool dynamicMstMatchesEdges(const OneTree& tree) const;
@@ -197,10 +231,23 @@ private:
     bool buildBranchCandidates(const PartialSol& node,
                                std::vector<Edge>& branch_candidates,
                                std::vector<std::size_t>* removed_edge_ids = nullptr) const;
+    // 生产搜索路径使用稳定的全局候选表：过滤同步摘除 active bit/链节点，
+    // 并将实际发生的 active->inactive 变化写入 candidate_undo_。
+    bool filterActiveCandidates(
+        PartialSol& node, int merged_scan_root = -1,
+        std::size_t merged_scan_count = 0,
+        std::vector<std::size_t>* removed_edge_ids = nullptr) const;
+    void deactivateCandidate(PartialSol& node, std::size_t edge_id) const;
+    void deactivateCandidateByIndex(
+        PartialSol& node, std::size_t candidate_index) const;
+    void rollbackCandidates(PartialSol& node, std::size_t checkpoint) const;
+    void adjustAvailableDegree(int vertex, int delta) const;
     // 在当前候选 bitset 中查找下一个 active 候选；未初始化 bitset 时回退逐项扫描。
     void resetCandidateBits(PartialSol& node, std::size_t candidate_count) const;
     std::size_t nextActiveCandidate(const PartialSol& node, std::size_t begin,
                                     std::size_t candidate_count) const;
+    std::size_t firstActiveCandidate() const;
+    std::size_t activeCandidateAfter(std::size_t index) const;
     // 精确恢复 DFS force 前的 MST 缓存；不能用 +w/-w 逆运算，因为不同
     // 动态范围的浮点数相加会丢失旧值。
     void restoreForcedMstCache(PartialSol& node, double old_cost,
@@ -231,13 +278,9 @@ private:
     // ── BP (Branch Partitioning) 搜索 ──
     // 在当前 1-tree 上执行 BP 划分：依次测试前缀禁止约束并返回关键边集合 B。
     std::vector<BranchChoice> bpPartition(PartialSol& node,
-                                          const std::vector<Edge>& branch_candidates,
-                                          const OneTree& current_tree);
+                                          OneTree& current_tree);
     // BP 递归搜索：在每个节点执行 BP 划分后枚举“前缀 forbid + 当前 force”子节点。
-    void search(PartialSol& node,
-                std::vector<Edge>& branch_candidates,
-                int depth,
-                const OneTree* precomputed_tree = nullptr);
+    void search(PartialSol& node, OneTree& current_tree, int depth);
 
     // 顶点数。
     int n_ = 0;
@@ -249,6 +292,26 @@ private:
     // 与顶点 0 相连的所有有限边，按权重升序排列。
     // 在 computeOneTree 中取前 2 条未被禁止的边作为 1-tree 的 root edges。
     std::vector<Edge> root_candidates_sorted_;
+    // solve() 期间唯一一份按权重排序的候选边表。edge_rank_by_id_ 将无向
+    // edgeId 映射到稳定下标，使 active bitset/链可原地修改并精确回滚。
+    std::vector<Edge> candidates_sorted_;
+    std::vector<int> edge_rank_by_id_;
+    mutable std::vector<CandidateUndo> candidate_undo_;
+    // 当前 1-tree 中失效且非 forced 的边；最多 n 条，仅对这些边按全局
+    // candidate rank 排序，避免排序本轮过滤删除的全部候选边。
+    mutable std::vector<std::size_t> removed_candidate_scratch_;
+    mutable std::vector<std::size_t> candidate_next_;
+    mutable std::vector<std::size_t> candidate_previous_;
+    mutable std::size_t candidate_sentinel_ = 0;
+    // 每个顶点的不可变 incident candidate 位图。与节点 active 位图相交后
+    // 只枚举仍然可用的关联边，避免反复扫描已经失效的静态候选下标。
+    std::vector<std::uint64_t> candidate_incident_bits_;
+    std::size_t candidate_word_count_ = 0;
+    mutable std::vector<int> available_degree_;
+    mutable int insufficient_degree_count_ = 0;
+    mutable std::vector<TreeUndo> tree_undo_;
+    // 完整重建仅是增量更新失败时的冷路径；只有该路径保存完整快照。
+    mutable std::vector<OneTree> tree_snapshot_undo_;
     // 动态 MST cut 查询复用的分量标记与 DFS 栈，epoch 避免每次清零 O(n)。
     mutable std::vector<std::uint32_t> mst_component_mark_;
     mutable std::uint32_t mst_component_epoch_ = 0;

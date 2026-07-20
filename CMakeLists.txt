@@ -51,8 +51,10 @@ function(tsp_add_solver target)
     endif()
 endfunction()
 
-# Default/main executable: 2026-07-14 degree strategy + incremental 1-tree.
+# Default/main target: the optimized 2026-07-20 MST build is emitted as
+# `07-20-MST`; the stable CMake target name remains `tsp_bb`.
 tsp_add_solver(tsp_bb)
+set_target_properties(tsp_bb PROPERTIES OUTPUT_NAME "07-20-MST")
 
 # Reproducible named experiment targets. They are excluded from the default
 # build; build one by name or use the aggregate `tsp_bb_variants` target.
