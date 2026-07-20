@@ -51,10 +51,9 @@ function(tsp_add_solver target)
     endif()
 endfunction()
 
-# Default/main target: the optimized 2026-07-20 MST build is emitted as
-# `07-20-MST`; the stable CMake target name remains `tsp_bb`.
+# Default/main target: optimized 2026-07-20 MST implementation.
+# The archived executable keeps the `tsp_bb` name under `solver/07-20-MST/`.
 tsp_add_solver(tsp_bb)
-set_target_properties(tsp_bb PROPERTIES OUTPUT_NAME "07-20-MST")
 
 # Reproducible named experiment targets. They are excluded from the default
 # build; build one by name or use the aggregate `tsp_bb_variants` target.
