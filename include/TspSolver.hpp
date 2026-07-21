@@ -179,6 +179,10 @@ private:
     // 在 forced / forbidden 约束下构造最小 1-tree，作为该节点的下界。
     OneTree computeOneTree(const PartialSol& node,
                            const std::vector<Edge>& branch_candidates) const;
+    // 仅在根节点用次梯度法优化一次 Held-Karp 顶点势；搜索期间固定不变，
+    // 因而候选排序和动态 MST replacement 仍可复用。
+    void optimizeRootPotentials(double upper_bound);
+    double adjustedEdgeWeight(int u, int v) const;
     // 禁用当前 1-tree 中的一条未强制边后，使用 MST replacement edge 增量更新。
     // 根边可用性由生产 active bitset（局部兼容路径为 candidate_mask）判定。
     bool updateOneTreeAfterForbid(const PartialSol& node,
@@ -287,8 +291,13 @@ private:
     int n_ = 0;
     // 距离矩阵，dist[i][j] 是顶点 i 和 j 之间的距离；dist[i][i] 必须为 0。
     std::vector<std::vector<double>> dist_;
-    // 所有有限边均为精确整数且任意 n 边和不超过 2^53 时，成本求和本身
-    // 精确，可安全执行 bound >= incumbent 的等值剪枝。
+    // 固定 Held-Karp 顶点势。搜索边权为 dist(u,v)+pi[u]+pi[v]，所有
+    // 1-tree 成本统一减去 2*sum(pi) 后才作为原问题下界。
+    std::vector<double> vertex_potential_;
+    double potential_correction_ = 0.0;
+    double potential_roundoff_guard_ = 0.0;
+    // 原问题所有有限边均为精确整数且任意 n 边和不超过 2^53 时，tour
+    // 成本为精确整数；Held-Karp 浮点下界可向上取整后参与安全剪枝。
     bool exact_integer_costs_ = false;
     // 与顶点 0 相连的所有有限边，按权重升序排列。
     // 在 computeOneTree 中取前 2 条未被禁止的边作为 1-tree 的 root edges。

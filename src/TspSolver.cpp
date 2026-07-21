@@ -424,6 +424,177 @@ void BranchBoundSolver::disableDebugOutput()
     debug_ = {};
 }
 
+double BranchBoundSolver::adjustedEdgeWeight(int u, int v) const
+{
+    const double original = dist_[u][v];
+    if (!isFinite(original)
+        || vertex_potential_.size() != static_cast<std::size_t>(n_)) {
+        return original;
+    }
+    return original
+        + vertex_potential_[static_cast<std::size_t>(u)]
+        + vertex_potential_[static_cast<std::size_t>(v)];
+}
+
+void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
+{
+    vertex_potential_.assign(static_cast<std::size_t>(n_), 0.0);
+    potential_correction_ = 0.0;
+    potential_roundoff_guard_ = 0.0;
+    if (!isFinite(upper_bound)) return;
+
+    // 极端动态范围会让修改权重与势修正发生灾难性消减；这类输入保留
+    // 原始 1-tree，既避免不可靠下界，也维持混合数量级回归路径。
+    double smallest_positive = std::numeric_limits<double>::infinity();
+    double largest_weight = 0.0;
+    for (int u = 0; u < n_; ++u) {
+        for (int v = u + 1; v < n_; ++v) {
+            const double weight = dist_[u][v];
+            if (!isFinite(weight)) continue;
+            if (weight > 0.0) smallest_positive = std::min(smallest_positive, weight);
+            largest_weight = std::max(largest_weight, weight);
+        }
+    }
+    if (isFinite(smallest_positive)
+        && largest_weight / smallest_positive > 1e12) {
+        return;
+    }
+
+    std::vector<double> potentials(static_cast<std::size_t>(n_), 0.0);
+    std::vector<double> best_potentials = potentials;
+    std::vector<Edge> internal_edges;
+    internal_edges.reserve(
+        static_cast<std::size_t>(n_ - 1) * static_cast<std::size_t>(n_ - 2) / 2);
+    std::vector<int> degree(static_cast<std::size_t>(n_), 0);
+
+    double best_bound = -std::numeric_limits<double>::infinity();
+    double step_scale = 2.0;
+    int no_improvement = 0;
+    constexpr int kMaxIterations = 400;
+    constexpr int kStagnationIterations = 12;
+    constexpr int kMinIterationsBeforeGapStop = 100;
+
+    for (int iteration = 0; iteration < kMaxIterations; ++iteration) {
+        internal_edges.clear();
+        for (int u = 1; u < n_; ++u) {
+            for (int v = u + 1; v < n_; ++v) {
+                if (!isFinite(dist_[u][v])) continue;
+                internal_edges.push_back(Edge{
+                    u, v,
+                    dist_[u][v]
+                        + potentials[static_cast<std::size_t>(u)]
+                        + potentials[static_cast<std::size_t>(v)]});
+            }
+        }
+        std::sort(internal_edges.begin(), internal_edges.end(),
+                  [](const Edge& a, const Edge& b) { return a.w < b.w; });
+
+        std::fill(degree.begin(), degree.end(), 0);
+        DisjointSet components(n_);
+        int mst_edge_count = 0;
+        double modified_cost = 0.0;
+        for (const Edge& edge : internal_edges) {
+            if (!components.unite(edge.u, edge.v)) continue;
+            modified_cost += edge.w;
+            ++degree[static_cast<std::size_t>(edge.u)];
+            ++degree[static_cast<std::size_t>(edge.v)];
+            if (++mst_edge_count == n_ - 2) break;
+        }
+        if (mst_edge_count != n_ - 2) return;
+
+        std::array<Edge, 2> root_edges{};
+        std::size_t root_edge_count = 0;
+        for (int vertex = 1; vertex < n_; ++vertex) {
+            if (!isFinite(dist_[0][vertex])) continue;
+            const Edge edge{
+                0, vertex,
+                dist_[0][vertex]
+                    + potentials[0]
+                    + potentials[static_cast<std::size_t>(vertex)]};
+            if (root_edge_count < root_edges.size()) {
+                root_edges[root_edge_count++] = edge;
+                if (root_edge_count == root_edges.size()
+                    && root_edges[1].w < root_edges[0].w) {
+                    std::swap(root_edges[0], root_edges[1]);
+                }
+            } else if (edge.w < root_edges[1].w) {
+                root_edges[1] = edge;
+                if (root_edges[1].w < root_edges[0].w) {
+                    std::swap(root_edges[0], root_edges[1]);
+                }
+            }
+        }
+        if (root_edge_count != root_edges.size()) return;
+        for (const Edge& edge : root_edges) {
+            modified_cost += edge.w;
+            ++degree[static_cast<std::size_t>(edge.u)];
+            ++degree[static_cast<std::size_t>(edge.v)];
+        }
+
+        const double correction = 2.0
+            * std::accumulate(potentials.begin(), potentials.end(), 0.0);
+        const double bound = modified_cost - correction;
+        const double tolerance = scaledRoundoffTolerance(
+            bound, upper_bound, static_cast<std::size_t>(n_));
+        if (bound > best_bound + tolerance) {
+            best_bound = bound;
+            best_potentials = potentials;
+            no_improvement = 0;
+        } else {
+            ++no_improvement;
+        }
+
+        double subgradient_norm = 0.0;
+        for (const int value : degree) {
+            const double deviation = static_cast<double>(value - 2);
+            subgradient_norm += deviation * deviation;
+        }
+        if (subgradient_norm == 0.0 || bound >= upper_bound - tolerance) break;
+        if (iteration + 1 >= kMinIterationsBeforeGapStop
+            && upper_bound - best_bound
+                <= 0.01 * std::fabs(upper_bound)) {
+            break;
+        }
+
+        const double gap = upper_bound - bound;
+        const double step = step_scale * gap / subgradient_norm;
+        if (!isFinite(step) || step <= 0.0) break;
+        for (int vertex = 0; vertex < n_; ++vertex) {
+            potentials[static_cast<std::size_t>(vertex)] += step
+                * static_cast<double>(degree[static_cast<std::size_t>(vertex)] - 2);
+        }
+
+        if (no_improvement >= kStagnationIterations) {
+            step_scale *= 0.5;
+            no_improvement = 0;
+            if (step_scale < 1e-5) break;
+        }
+    }
+
+    vertex_potential_ = std::move(best_potentials);
+    potential_correction_ = 2.0
+        * std::accumulate(vertex_potential_.begin(), vertex_potential_.end(), 0.0);
+    const bool has_nonzero_potential = std::any_of(
+        vertex_potential_.begin(), vertex_potential_.end(),
+        [](double value) { return value != 0.0; });
+    if (has_nonzero_potential) {
+        double largest_adjusted_weight = 0.0;
+        for (int u = 0; u < n_; ++u) {
+            for (int v = u + 1; v < n_; ++v) {
+                if (!isFinite(dist_[u][v])) continue;
+                largest_adjusted_weight = std::max(
+                    largest_adjusted_weight,
+                    std::fabs(adjustedEdgeWeight(u, v)));
+            }
+        }
+        const double modified_sum_scale =
+            static_cast<double>(n_) * largest_adjusted_weight;
+        potential_roundoff_guard_ = scaledRoundoffTolerance(
+            modified_sum_scale, potential_correction_,
+            static_cast<std::size_t>(n_));
+    }
+}
+
 SolveResult BranchBoundSolver::solve()
 {
     const std::size_t edge_state_size = static_cast<std::size_t>(n_) * static_cast<std::size_t>(n_);
@@ -449,6 +620,9 @@ SolveResult BranchBoundSolver::solve()
         result_.stats.initial_upper_bound = std::numeric_limits<double>::infinity();
         writeDebugLine(debug_, "initial incumbent: unavailable");
     }
+    // 根节点优化一次 Held-Karp 顶点势，随后整个 DFS 固定该组势。
+    // 固定权重保持候选顺序和动态 MST replacement 的正确性。
+    optimizeRootPotentials(best_cost_);
     PartialSol root;
     root.depth = 0;
     root.forced.assign(edge_state_size, 0);
@@ -474,7 +648,7 @@ SolveResult BranchBoundSolver::solve()
             if (!isFinite(dist_[u][v])) {
                 continue;
             }
-            candidates_sorted_.push_back(Edge{u, v, dist_[u][v]});
+            candidates_sorted_.push_back(Edge{u, v, adjustedEdgeWeight(u, v)});
         }
     }
     std::sort(candidates_sorted_.begin(), candidates_sorted_.end(),
@@ -518,7 +692,8 @@ SolveResult BranchBoundSolver::solve()
     root_candidates_sorted_.reserve(static_cast<std::size_t>(n_ - 1));
     for (int v = 1; v < n_; ++v) {
         if (isFinite(dist_[0][v])) {
-            root_candidates_sorted_.push_back(Edge{0, v, dist_[0][v]});
+            root_candidates_sorted_.push_back(
+                Edge{0, v, adjustedEdgeWeight(0, v)});
         }
     }
     std::sort(root_candidates_sorted_.begin(), root_candidates_sorted_.end(),
@@ -890,7 +1065,7 @@ void BranchBoundSolver::search(
 
         node.forced_edges.push_back(e);
         if (e.u != 0 && e.v != 0) {
-            node.forced_mst_cost += dist_[e.u][e.v];
+            node.forced_mst_cost += e.w;
             ++node.forced_mst_count;
         }
         return true;
@@ -1193,7 +1368,7 @@ BranchBoundSolver::OneTree BranchBoundSolver::computeOneTree(
     }
 
     result.feasible = true;
-    result.cost = cost;
+    result.cost = cost - potential_correction_ - potential_roundoff_guard_;
     result.edges = std::move(edges);
 #ifndef TSP_DISABLE_INCREMENTAL_ONETREE
     // 填充 O(1) 边→索引映射，替代增量路径中的 find_if 扫描。
@@ -1795,7 +1970,8 @@ bool BranchBoundSolver::oneTreeSatisfiesConstraints(
     for (const Edge& edge : tree.edges) {
         if (edge.u < 0 || edge.u >= n_ || edge.v < 0 || edge.v >= n_
             || edge.u == edge.v || !isFinite(edge.w)
-            || !costsNumericallyEqual(edge.w, dist_[edge.u][edge.v], 1)) {
+            || !costsNumericallyEqual(
+                edge.w, adjustedEdgeWeight(edge.u, edge.v), 1)) {
             return false;
         }
 
@@ -1830,7 +2006,8 @@ bool BranchBoundSolver::oneTreeSatisfiesConstraints(
     if (root_edge_count != 2 || internal_edge_count != n_ - 2
         || degree != tree.degree
         || !costsNumericallyEqual(
-            recomputed_cost, tree.cost,
+            recomputed_cost - potential_correction_ - potential_roundoff_guard_,
+            tree.cost,
             static_cast<std::size_t>(n_))) {
         return false;
     }
@@ -2244,8 +2421,8 @@ void BranchBoundSolver::restoreForcedMstCache(
 bool BranchBoundSolver::shouldPrune(double bound, double best_cost) const
 {
     // 固定绝对 epsilon 会在 1e-12 等小尺度权重上吞掉整个有效差值。
-    // 只有 2^53 安全域内的整数和允许直接等值剪枝；普通 double 下界略高
-    // 时则必须超过 n 项求和的尺度化舍入余量，避免误剪更优回路。
+    // 2^53 安全域内的整数 tour 可用保守 ceil 下界剪枝；普通 double
+    // 下界略高时必须超过 n 项求和的尺度化舍入余量，避免误剪更优回路。
     if (!isFinite(best_cost)) {
         return false;
     }
@@ -2253,7 +2430,12 @@ bool BranchBoundSolver::shouldPrune(double bound, double best_cost) const
         return true;
     }
     if (exact_integer_costs_) {
-        return bound >= best_cost;
+        // 原问题的所有 tour 成本都是整数。固定 Held-Karp 势会让下界
+        // 变为浮点数，但 ceil(lower_bound) 仍是有效整数下界；先减去
+        // 求和舍入余量，避免数值误差跨过整数边界。
+        const double tolerance = scaledRoundoffTolerance(
+            bound, best_cost, static_cast<std::size_t>(n_));
+        return std::ceil(bound - tolerance) >= best_cost;
     }
     // 普通 double 的不同加法顺序可能把略有差异的真实和舍入成相同值；
     // 因而非整数安全域内，等值和相差少量 ULP 都保守地继续搜索。
