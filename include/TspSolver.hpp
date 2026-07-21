@@ -130,10 +130,7 @@ private:
     };
 
     struct CandidateUndo {
-        std::size_t edge_id = 0;
         std::size_t index = 0;
-        std::size_t previous = 0;
-        std::size_t next = 0;
     };
 
     // 分支定界节点（部分解 P）：
@@ -158,11 +155,11 @@ private:
         std::vector<Edge> forced_edges;
         double forced_mst_cost = 0.0;
         int forced_mst_count = 0;
-        // 候选集快速查找表（大小 n*n），由 buildBranchCandidates 维护，
-        // chooseBranchEdge 直接读取，避免重复分配 O(n²) 的掩码数组。
+        // 仅供局部候选向量/单元测试的兼容掩码。生产 DFS 留空并以
+        // candidate_bits 为唯一 active 状态，避免每次删除的 n*n 随机写。
         std::vector<unsigned char> candidate_mask;
         // 按全局 immutable candidates_sorted_ 的稳定下标保存 active 位。
-        // bitset 支持 lower_bound 后定位；有序 active 链负责顺序扫描。
+        // 顺序枚举、incident 过滤和 MST cut 查询均直接使用该 bitset。
         std::vector<std::uint64_t> candidate_bits;
         std::size_t candidate_bit_count = 0;
     };
@@ -183,7 +180,7 @@ private:
     OneTree computeOneTree(const PartialSol& node,
                            const std::vector<Edge>& branch_candidates) const;
     // 禁用当前 1-tree 中的一条未强制边后，使用 MST replacement edge 增量更新。
-    // node.candidate_mask 必须与 branch_candidates 保持同步，根边可用性由该 mask 判定。
+    // 根边可用性由生产 active bitset（局部兼容路径为 candidate_mask）判定。
     bool updateOneTreeAfterForbid(const PartialSol& node,
                                   const std::vector<Edge>& branch_candidates,
                                   OneTree& tree,
@@ -216,6 +213,8 @@ private:
     void markOneTreeInfeasible(OneTree& tree, bool record_undo) const;
     void replaceOneTreeWithRebuild(OneTree& tree, OneTree rebuilt) const;
     void rollbackOneTree(OneTree& tree, std::size_t checkpoint) const;
+    // 从被删树边两端交替遍历，标记先完成（即较小）的分量。生产搜索随后
+    // 将该分量的 incident candidate 位图异或成 fundamental cut 位图。
     bool markMstComponentWithoutEdge(const OneTree& tree,
                                      const Edge& removed_edge) const;
     bool dynamicMstMatchesEdges(const OneTree& tree) const;
@@ -231,7 +230,7 @@ private:
     bool buildBranchCandidates(const PartialSol& node,
                                std::vector<Edge>& branch_candidates,
                                std::vector<std::size_t>* removed_edge_ids = nullptr) const;
-    // 生产搜索路径使用稳定的全局候选表：过滤同步摘除 active bit/链节点，
+    // 生产搜索路径使用稳定的全局候选表：过滤原地清除 active bit，
     // 并将实际发生的 active->inactive 变化写入 candidate_undo_。
     bool filterActiveCandidates(
         PartialSol& node, int merged_scan_root = -1,
@@ -240,14 +239,16 @@ private:
     void deactivateCandidate(PartialSol& node, std::size_t edge_id) const;
     void deactivateCandidateByIndex(
         PartialSol& node, std::size_t candidate_index) const;
+    void deactivateCandidateBits(
+        PartialSol& node, std::size_t word_index,
+        std::uint64_t candidate_bits) const;
     void rollbackCandidates(PartialSol& node, std::size_t checkpoint) const;
     void adjustAvailableDegree(int vertex, int delta) const;
+    bool isCandidateActive(const PartialSol& node, std::size_t edge_id) const;
     // 在当前候选 bitset 中查找下一个 active 候选；未初始化 bitset 时回退逐项扫描。
     void resetCandidateBits(PartialSol& node, std::size_t candidate_count) const;
     std::size_t nextActiveCandidate(const PartialSol& node, std::size_t begin,
                                     std::size_t candidate_count) const;
-    std::size_t firstActiveCandidate() const;
-    std::size_t activeCandidateAfter(std::size_t index) const;
     // 精确恢复 DFS force 前的 MST 缓存；不能用 +w/-w 逆运算，因为不同
     // 动态范围的浮点数相加会丢失旧值。
     void restoreForcedMstCache(PartialSol& node, double old_cost,
@@ -293,29 +294,34 @@ private:
     // 在 computeOneTree 中取前 2 条未被禁止的边作为 1-tree 的 root edges。
     std::vector<Edge> root_candidates_sorted_;
     // solve() 期间唯一一份按权重排序的候选边表。edge_rank_by_id_ 将无向
-    // edgeId 映射到稳定下标，使 active bitset/链可原地修改并精确回滚。
+    // edgeId 映射到稳定下标，使 active bitset 可原地修改并精确回滚。
     std::vector<Edge> candidates_sorted_;
     std::vector<int> edge_rank_by_id_;
     mutable std::vector<CandidateUndo> candidate_undo_;
     // 当前 1-tree 中失效且非 forced 的边；最多 n 条，仅对这些边按全局
     // candidate rank 排序，避免排序本轮过滤删除的全部候选边。
     mutable std::vector<std::size_t> removed_candidate_scratch_;
-    mutable std::vector<std::size_t> candidate_next_;
-    mutable std::vector<std::size_t> candidate_previous_;
-    mutable std::size_t candidate_sentinel_ = 0;
     // 每个顶点的不可变 incident candidate 位图。与节点 active 位图相交后
     // 只枚举仍然可用的关联边，避免反复扫描已经失效的静态候选下标。
     std::vector<std::uint64_t> candidate_incident_bits_;
+    // 仅包含非根候选边，replacement cut 位图与其相交后可直接跳过根边。
+    std::vector<std::uint64_t> internal_candidate_bits_;
     std::size_t candidate_word_count_ = 0;
     mutable std::vector<int> available_degree_;
     mutable int insufficient_degree_count_ = 0;
     mutable std::vector<TreeUndo> tree_undo_;
     // 完整重建仅是增量更新失败时的冷路径；只有该路径保存完整快照。
     mutable std::vector<OneTree> tree_snapshot_undo_;
-    // 动态 MST cut 查询复用的分量标记与 DFS 栈，epoch 避免每次清零 O(n)。
+    // 动态 MST cut 查询复用的双向遍历、分量标记与候选 cut 位图。
+    // epoch 避免每次清零 O(n)；从被删边两端交替扩展，先完成的一侧
+    // 必然是不大于另一侧的分量。
     mutable std::vector<std::uint32_t> mst_component_mark_;
     mutable std::uint32_t mst_component_epoch_ = 0;
-    mutable std::vector<int> mst_component_stack_;
+    mutable std::uint32_t mst_selected_component_epoch_ = 0;
+    mutable std::vector<int> mst_component_left_;
+    mutable std::vector<int> mst_component_right_;
+    mutable bool mst_selected_component_is_left_ = true;
+    mutable std::vector<std::uint64_t> mst_cut_candidate_bits_;
     DebugOptions debug_;
 
     // LK 候选集：每个顶点的 K 近邻，惰性初始化。
