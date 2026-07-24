@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <iosfwd>
@@ -117,6 +118,55 @@ private:
         Edge forbid_replacement;
     };
 
+    // BP 集绝大多数只有 1~4 项。内联常见情况，只有更长的 BP 链才回退
+    // heap vector，避免每个扩展节点都为短 B 集分配内存。
+    struct BranchSet {
+        static constexpr std::size_t kInlineCapacity = 4;
+
+        void push_back(const BranchChoice& choice)
+        {
+            if (overflow.empty() && inline_size < kInlineCapacity) {
+                inline_choices[inline_size++] = choice;
+                return;
+            }
+            if (overflow.empty()) {
+                overflow.reserve(kInlineCapacity * 2);
+                overflow.insert(
+                    overflow.end(), inline_choices.begin(),
+                    inline_choices.begin()
+                        + static_cast<std::ptrdiff_t>(inline_size));
+            }
+            overflow.push_back(choice);
+        }
+
+        std::size_t size() const
+        {
+            return overflow.empty() ? inline_size : overflow.size();
+        }
+
+        bool empty() const { return size() == 0; }
+
+        BranchChoice& back()
+        {
+            return overflow.empty()
+                ? inline_choices[inline_size - 1] : overflow.back();
+        }
+
+        const BranchChoice& front() const
+        {
+            return overflow.empty() ? inline_choices[0] : overflow.front();
+        }
+
+        const BranchChoice& operator[](std::size_t index) const
+        {
+            return overflow.empty() ? inline_choices[index] : overflow[index];
+        }
+
+        std::array<BranchChoice, kInlineCapacity> inline_choices{};
+        std::vector<BranchChoice> overflow;
+        std::size_t inline_size = 0;
+    };
+
     // DFS 热路径只维护一棵可变 1-tree。每次交换记录足够的信息，子节点
     // 返回时按 checkpoint 逆序恢复，避免复制 OneTree 中的 O(n^2) 索引表。
     struct TreeUndo {
@@ -133,6 +183,13 @@ private:
         std::size_t index = 0;
     };
 
+    struct RootTreeFixingStats {
+        std::size_t tested = 0;
+        std::size_t fixed_one = 0;
+        std::size_t active_after = 0;
+        bool proves_no_improvement = false;
+    };
+
     // 分支定界节点（部分解 P）：
     // forced 表示必须选择的边，forbidden 表示禁止选择的边。
     // 同时维护 forced 边的并查集和度数统计，加速 1-tree 计算与候选集筛选。
@@ -146,8 +203,11 @@ private:
         std::vector<int> forced_parent;   // parent[i] = parent of vertex i
         std::vector<int> forced_rank;     // rank[i] = rank of component rooted at i
         std::vector<int> forced_comp_size; // comp_size[i] = size of component rooted at i
+        // n <= 64 的生产热路径用一个 word 保存每个 DSU 根的成员集合，
+        // union/rollback 均为 O(1)，并可直接枚举较小分量。
+        std::vector<std::uint64_t> forced_member_bits;
         // 每个 forced DSU 根的成员列表；union 时只向胜方追加，rollback 时
-        // resize，败方列表保持不变，供局部枚举新产生的分量内边。
+        // resize；n > 64 及局部测试兼容路径使用。
         std::vector<std::vector<int>> forced_members;
         // 各顶点在 forced 边子图中的度数。
         std::vector<int> forced_degree;
@@ -196,7 +256,8 @@ private:
         const std::vector<std::size_t>& removed_edge_ids,
         bool record_undo = false) const;
     bool updateOneTreeAfterActiveRemoval(
-        const PartialSol& node, OneTree& tree, bool record_undo) const;
+        const PartialSol& node, OneTree& tree,
+        std::size_t candidate_checkpoint, bool record_undo) const;
     bool updateOneTreeAfterRemovedCandidate(
         const PartialSol& node, const std::vector<Edge>& branch_candidates,
         OneTree& tree, std::size_t removed_id, bool record_undo) const;
@@ -235,6 +296,7 @@ private:
     bool filterActiveCandidates(
         PartialSol& node, int merged_scan_root = -1,
         std::size_t merged_scan_count = 0,
+        std::uint64_t merged_scan_bits = 0,
         std::vector<std::size_t>* removed_edge_ids = nullptr) const;
     void deactivateCandidate(PartialSol& node, std::size_t edge_id) const;
     void deactivateCandidateByIndex(
@@ -242,6 +304,7 @@ private:
     void deactivateCandidateBits(
         PartialSol& node, std::size_t word_index,
         std::uint64_t candidate_bits) const;
+    void deactivateIncidentCandidates(PartialSol& node, int vertex) const;
     void rollbackCandidates(PartialSol& node, std::size_t checkpoint) const;
     void adjustAvailableDegree(int vertex, int delta) const;
     bool isCandidateActive(const PartialSol& node, std::size_t edge_id) const;
@@ -255,6 +318,10 @@ private:
                                int old_count) const;
     // 判断当前节点的下界是否已经不优于已知最优可行解，可以直接剪枝。
     bool shouldPrune(double bound, double best_cost) const;
+    // 对根 1-tree 的树边做 forbid sensitivity；若禁用某边后的最小
+    // 1-tree 已无法改善 incumbent，则该边可永久固定为 x_e=1。
+    RootTreeFixingStats applyRootTreeEdgeFixing(
+        PartialSol& root, OneTree& root_tree) const;
     // 最近邻 + 2-opt + LK，生成一个可行上界，帮助早剪枝。
     bool findInitialTour(std::vector<int>& tour, double& cost);
     // 计算一个 tour 的总成本。
@@ -278,10 +345,10 @@ private:
 
     // ── BP (Branch Partitioning) 搜索 ──
     // 在当前 1-tree 上执行 BP 划分：依次测试前缀禁止约束并返回关键边集合 B。
-    std::vector<BranchChoice> bpPartition(PartialSol& node,
-                                          OneTree& current_tree);
+    BranchSet bpPartition(PartialSol& node, OneTree& current_tree);
     // BP 递归搜索：在每个节点执行 BP 划分后枚举“前缀 forbid + 当前 force”子节点。
-    void search(PartialSol& node, OneTree& current_tree, int depth);
+    void search(PartialSol& node, OneTree& current_tree, int depth,
+                bool count_node = true);
 
     // 顶点数。
     int n_ = 0;
@@ -318,6 +385,7 @@ private:
     mutable std::vector<std::uint32_t> mst_component_mark_;
     mutable std::uint32_t mst_component_epoch_ = 0;
     mutable std::uint32_t mst_selected_component_epoch_ = 0;
+    mutable std::uint64_t mst_selected_component_bits_ = 0;
     mutable std::vector<int> mst_component_left_;
     mutable std::vector<int> mst_component_right_;
     mutable bool mst_selected_component_is_left_ = true;

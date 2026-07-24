@@ -829,6 +829,71 @@ void testExactIntegerPruningDomain()
     }
 }
 
+void testRootTreeEdgeFixing()
+{
+    const std::vector<std::vector<double>> matrix = {
+        {0, 21, 162, 194, 159, 193},
+        {21, 0, 151, 95, 44, 183},
+        {162, 151, 0, 151, 100, 174},
+        {194, 95, 151, 0, 165, 71},
+        {159, 44, 100, 165, 0, 151},
+        {193, 183, 174, 71, 151, 0},
+    };
+    tsp::BranchBoundSolver solver(matrix);
+    std::ostringstream debug;
+    solver.setDebugOutput(debug, 1000);
+    const tsp::SolveResult result = solver.solve();
+    if (!result.feasible || result.cost != 580.0) {
+        throw std::runtime_error("root tree-edge fixing changed the exact optimum");
+    }
+    if (debug.str().find(
+            "root tree-edge fixing: tested=6 fixed_one=2")
+        == std::string::npos) {
+        throw std::runtime_error("root tree-edge fixing regression did not trigger");
+    }
+}
+
+void testLargeRootTreeEdgeFixingFallback()
+{
+    constexpr int n = 65;
+    std::vector<std::vector<double>> matrix(
+        n, std::vector<double>(n, inf));
+    for (int vertex = 0; vertex < n; ++vertex) {
+        matrix[static_cast<std::size_t>(vertex)]
+              [static_cast<std::size_t>(vertex)] = 0.0;
+    }
+    auto add_edge = [&](int u, int v, double weight) {
+        matrix[static_cast<std::size_t>(u)]
+              [static_cast<std::size_t>(v)] = weight;
+        matrix[static_cast<std::size_t>(v)]
+              [static_cast<std::size_t>(u)] = weight;
+    };
+    for (int vertex = 0; vertex < n; ++vertex) {
+        add_edge(vertex, (vertex + 1) % n, 1.0);
+    }
+    add_edge(30, 31, 10.0);
+    // chord 比它跨越的高权 cycle edge 便宜、会降低根 1-tree，但在两个
+    // 端点都比相邻 cycle edge 贵，因此 nearest-neighbor 仍能给出上界。
+    // 只有一条 chord，无法替代唯一 Hamilton 环中的边。
+    // 该规模强制走 n>64 的通用 component/forced-members 回退路径。
+    add_edge(1, 31, 5.0);
+
+    tsp::BranchBoundSolver solver(matrix);
+    std::ostringstream debug;
+    solver.setDebugOutput(debug, 1000);
+    const tsp::SolveResult result = solver.solve();
+    if (!result.feasible || result.cost != 74.0) {
+        throw std::runtime_error(
+            "large root tree-edge fixing fallback changed the exact optimum");
+    }
+    if (debug.str().find("root tree-edge fixing: tested=65")
+        == std::string::npos) {
+        throw std::runtime_error(
+            "large root tree-edge fixing fallback did not trigger: "
+            + debug.str());
+    }
+}
+
 } // namespace
 
 int main()
@@ -854,6 +919,8 @@ int main()
         testProblemParsingDoesNotWriteStdout();
         testDistanceMatrixSymmetryIsExact();
         testExactIntegerPruningDomain();
+        testRootTreeEdgeFixing();
+        testLargeRootTreeEdgeFixingFallback();
     } catch (const std::exception& error) {
         std::cerr << "tsp_solver_tests failed: " << error.what() << '\n';
         return 1;
