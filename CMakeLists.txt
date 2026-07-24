@@ -81,7 +81,10 @@ if(BUILD_TESTING)
     # No strategy macro: tests exercise the same degree/incremental
     # implementation as the default `tsp_bb` executable. Verification mode
     # additionally rebuilds reused 1-trees and checks the incremental result.
-    target_compile_definitions(tsp_solver_tests PRIVATE TSP_VERIFY_INCREMENTAL_STATE=1)
+    target_compile_definitions(tsp_solver_tests PRIVATE
+        TSP_VERIFY_INCREMENTAL_STATE=1
+        TSP_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+    )
     add_dependencies(tsp_solver_tests tsp_bb)
     add_test(NAME tsp_solver_tests COMMAND tsp_solver_tests)
 

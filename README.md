@@ -12,7 +12,12 @@
 - 每个搜索节点维护 `forced` 必选边、`forbidden` 排除边及经过约束过滤的候选边。
 - 默认 `deg` 策略从当前 1-tree 的度数违规顶点选择未决边；`min_edge` 策略从整个 1-tree 选择最轻未决边。
 - 下界使用受约束 `1-tree`：在顶点 `1..n-1` 上构造 MST，再给顶点 `0` 加两条可用的最短关联边。
-- 初始上界使用最近邻启发式加 `2-opt` 改进。
+- 根 1-tree 建立后使用 Held–Karp reduced cost 检查所有边：若强制一条
+  非树边的下界已不能改善 incumbent，就永久停用该边；若禁止一条树边的
+  replacement 下界已不能改善 incumbent，就将其强制为 `x_e=1` 并重建根树。
+- 初始上界使用多起点最近邻、`2-opt` 和 LK；不同的 NN+2-opt 局部最优
+  会进入候选池，搜索节点超过自适应预算后追加多启动 LK。若上界改善，
+  当前 DFS 会完整回退，并用新上界重新优化根势后重启。
 - 支持单实例、批处理、随机实例生成、独立精确校验和 TSPLIB 直接读取。
 
 ## 总体架构
@@ -21,7 +26,7 @@
 flowchart TD
     A["main.cpp<br/>命令行入口"] --> B["readTspProblem<br/>读取矩阵或 TSPLIB"]
     B --> D["BranchBoundSolver<br/>精确分支定界求解器"]
-    D --> R["findInitialTour<br/>最近邻 + 2-opt 初始上界"]
+    D --> R["findInitialTour<br/>NN + 2-opt + 自适应多启动 LK"]
     D --> E["computeOneTree<br/>受约束 1-tree 下界"]
     E --> F["DisjointSet<br/>Kruskal / 环检测"]
     D --> G["Recursive DFS + BP<br/>深度优先递归搜索"]

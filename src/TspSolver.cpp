@@ -16,6 +16,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 #if defined(_MSC_VER)
 #include <intrin.h>
@@ -603,6 +604,9 @@ SolveResult BranchBoundSolver::solve()
     result_ = SolveResult{};
     best_cost_ = std::numeric_limits<double>::infinity();
     best_tour_.clear();
+    initial_tour_alternatives_.clear();
+    diversified_tour_attempted_ = false;
+    restart_search_requested_ = false;
     candidate_undo_.clear();
     tree_undo_.clear();
     tree_snapshot_undo_.clear();
@@ -610,7 +614,8 @@ SolveResult BranchBoundSolver::solve()
     writeDebugLine(debug_, "exact solve started: vertices=" + std::to_string(n_));
 
     // 先用启发式得到一个上界。
-    if (findInitialTour(best_tour_, best_cost_)) {
+    if (findInitialTour(
+            best_tour_, best_cost_, initial_tour_alternatives_)) {
         // 启发式内部会做多次增量 delta 更新。精确搜索的 incumbent 必须以
         // 返回回路逐边重算的真实成本为准，不能沿用可能漂移的缓存值。
         best_cost_ = tourCost(best_tour_);
@@ -620,107 +625,156 @@ SolveResult BranchBoundSolver::solve()
         result_.stats.initial_upper_bound = std::numeric_limits<double>::infinity();
         writeDebugLine(debug_, "initial incumbent: unavailable");
     }
-    // 根节点优化一次 Held-Karp 顶点势，随后整个 DFS 固定该组势。
-    // 固定权重保持候选顺序和动态 MST replacement 的正确性。
-    optimizeRootPotentials(best_cost_);
-    PartialSol root;
-    root.depth = 0;
-    root.forced.assign(edge_state_size, 0);
-    root.forbidden.assign(edge_state_size, 0);
-    // 初始化 forced 边的并查集和度数统计。
-    root.forced_parent.resize(static_cast<std::size_t>(n_));
-    std::iota(root.forced_parent.begin(), root.forced_parent.end(), 0);
-    root.forced_rank.assign(static_cast<std::size_t>(n_), 0);
-    root.forced_comp_size.assign(static_cast<std::size_t>(n_), 1);
-    root.forced_members.resize(static_cast<std::size_t>(n_));
-    for (int vertex = 0; vertex < n_; ++vertex) {
-        root.forced_members[static_cast<std::size_t>(vertex)].push_back(vertex);
-    }
-    root.forced_degree.assign(static_cast<std::size_t>(n_), 0);
-    root.forced_edges.reserve(static_cast<std::size_t>(n_));
-    // 边候选集初始化：全局只保留这一份按权重排序的不可变边表。
-    // DFS 通过 active bitset 原地删除，并用 undo 恢复。
-    candidates_sorted_.clear();
-    candidates_sorted_.reserve(edge_state_size / 2);
-    edge_rank_by_id_.assign(edge_state_size, -1);
-    for (int u = 0; u < n_; ++u) {
-        for (int v = u + 1; v < n_; ++v) {
-            if (!isFinite(dist_[u][v])) {
-                continue;
+    // 自适应多启动 LK 若在探测搜索后改善 incumbent，会完整回退当前
+    // DFS，再用更紧上界重新优化根势并重启；单轮搜索内势始终固定。
+    while (true) {
+        optimizeRootPotentials(best_cost_);
+        PartialSol root;
+        root.depth = 0;
+        root.forced.assign(edge_state_size, 0);
+        root.forbidden.assign(edge_state_size, 0);
+        // 初始化 forced 边的并查集和度数统计。
+        root.forced_parent.resize(static_cast<std::size_t>(n_));
+        std::iota(root.forced_parent.begin(), root.forced_parent.end(), 0);
+        root.forced_rank.assign(static_cast<std::size_t>(n_), 0);
+        root.forced_comp_size.assign(static_cast<std::size_t>(n_), 1);
+        if (n_ <= 64) {
+            root.forced_member_bits.resize(static_cast<std::size_t>(n_));
+            for (int vertex = 0; vertex < n_; ++vertex) {
+                root.forced_member_bits[static_cast<std::size_t>(vertex)] =
+                    std::uint64_t{1} << static_cast<unsigned>(vertex);
             }
-            candidates_sorted_.push_back(Edge{u, v, adjustedEdgeWeight(u, v)});
+        } else {
+            root.forced_members.resize(static_cast<std::size_t>(n_));
+            for (int vertex = 0; vertex < n_; ++vertex) {
+                root.forced_members[static_cast<std::size_t>(vertex)].push_back(vertex);
+            }
         }
-    }
-    std::sort(candidates_sorted_.begin(), candidates_sorted_.end(),
-              [](const Edge& a, const Edge& b) { return a.w < b.w; });
-    candidate_undo_.reserve(candidates_sorted_.size());
-    tree_undo_.reserve(candidates_sorted_.size());
-    tree_snapshot_undo_.reserve(static_cast<std::size_t>(n_));
-    candidate_word_count_ = (candidates_sorted_.size() + 63) / 64;
-    candidate_incident_bits_.assign(
-        static_cast<std::size_t>(n_) * candidate_word_count_, 0);
-    internal_candidate_bits_.assign(candidate_word_count_, 0);
-    available_degree_.assign(static_cast<std::size_t>(n_), 0);
-    insufficient_degree_count_ = 0;
-    // 生产搜索仅维护 active bitset；candidate_mask 只留给局部候选兼容路径。
-    root.candidate_mask.clear();
-    resetCandidateBits(root, candidates_sorted_.size());
-    for (std::size_t index = 0; index < candidates_sorted_.size(); ++index) {
-        const Edge& e = candidates_sorted_[index];
-        const std::size_t eid = edgeId(e.u, e.v);
-        edge_rank_by_id_[eid] = static_cast<int>(index);
-        const std::size_t word_index = index / 64;
-        const std::uint64_t bit = std::uint64_t{1} << (index % 64);
-        candidate_incident_bits_[
-            static_cast<std::size_t>(e.u) * candidate_word_count_ + word_index]
-            |= bit;
-        candidate_incident_bits_[
-            static_cast<std::size_t>(e.v) * candidate_word_count_ + word_index]
-            |= bit;
-        if (e.u != 0 && e.v != 0) {
-            internal_candidate_bits_[word_index] |= bit;
+        root.forced_degree.assign(static_cast<std::size_t>(n_), 0);
+        root.forced_edges.reserve(static_cast<std::size_t>(n_));
+        // 边候选集初始化：全局只保留这一份按权重排序的不可变边表。
+        // DFS 通过 active bitset 原地删除，并用 undo 恢复。
+        candidates_sorted_.clear();
+        candidates_sorted_.reserve(edge_state_size / 2);
+        edge_rank_by_id_.assign(edge_state_size, -1);
+        for (int u = 0; u < n_; ++u) {
+            for (int v = u + 1; v < n_; ++v) {
+                if (!isFinite(dist_[u][v])) {
+                    continue;
+                }
+                candidates_sorted_.push_back(Edge{u, v, adjustedEdgeWeight(u, v)});
+            }
         }
-        ++available_degree_[static_cast<std::size_t>(e.u)];
-        ++available_degree_[static_cast<std::size_t>(e.v)];
-    }
-    for (const int degree : available_degree_) {
-        if (degree < 2) ++insufficient_degree_count_;
-    }
-
-    // 预排序与顶点 0 相连的边，computeOneTree 中直接取前两条合法边。
-    root_candidates_sorted_.clear();
-    root_candidates_sorted_.reserve(static_cast<std::size_t>(n_ - 1));
-    for (int v = 1; v < n_; ++v) {
-        if (isFinite(dist_[0][v])) {
-            root_candidates_sorted_.push_back(
-                Edge{0, v, adjustedEdgeWeight(0, v)});
+        std::sort(candidates_sorted_.begin(), candidates_sorted_.end(),
+                  [](const Edge& a, const Edge& b) { return a.w < b.w; });
+        candidate_undo_.reserve(candidates_sorted_.size());
+        tree_undo_.reserve(candidates_sorted_.size());
+        tree_snapshot_undo_.reserve(static_cast<std::size_t>(n_));
+        candidate_word_count_ = (candidates_sorted_.size() + 63) / 64;
+        candidate_incident_bits_.assign(
+            static_cast<std::size_t>(n_) * candidate_word_count_, 0);
+        internal_candidate_bits_.assign(candidate_word_count_, 0);
+        available_degree_.assign(static_cast<std::size_t>(n_), 0);
+        insufficient_degree_count_ = 0;
+        // 生产搜索仅维护 active bitset；candidate_mask 只留给局部候选兼容路径。
+        root.candidate_mask.clear();
+        resetCandidateBits(root, candidates_sorted_.size());
+        for (std::size_t index = 0; index < candidates_sorted_.size(); ++index) {
+            const Edge& e = candidates_sorted_[index];
+            const std::size_t eid = edgeId(e.u, e.v);
+            edge_rank_by_id_[eid] = static_cast<int>(index);
+            const std::size_t word_index = index / 64;
+            const std::uint64_t bit = std::uint64_t{1} << (index % 64);
+            candidate_incident_bits_[
+                static_cast<std::size_t>(e.u) * candidate_word_count_ + word_index]
+                |= bit;
+            candidate_incident_bits_[
+                static_cast<std::size_t>(e.v) * candidate_word_count_ + word_index]
+                |= bit;
+            if (e.u != 0 && e.v != 0) {
+                internal_candidate_bits_[word_index] |= bit;
+            }
+            ++available_degree_[static_cast<std::size_t>(e.u)];
+            ++available_degree_[static_cast<std::size_t>(e.v)];
         }
-    }
-    std::sort(root_candidates_sorted_.begin(), root_candidates_sorted_.end(),
-              [](const Edge& a, const Edge& b) { return a.w < b.w; });
+        for (const int degree : available_degree_) {
+            if (degree < 2) ++insufficient_degree_count_;
+        }
 
-    OneTree root_tree = computeOneTree(root, candidates_sorted_);
-    if (!root_tree.feasible) {
-        result_.feasible = false;
-        result_.cost = std::numeric_limits<double>::infinity();
-        result_.stats.root_lower_bound = std::numeric_limits<double>::infinity();
-        writeDebugLine(debug_, "root 1-tree infeasible; exact solve stopped");
-        return result_;
-    }
-    result_.stats.root_lower_bound = root_tree.cost;
-    root.bound = root_tree.cost;
-    result_.stats.nodes_created = 1;
-    {
-        std::ostringstream line;
-        line << "root: lower_bound=" << formatDebugDouble(root.bound)
-             << " search=bp-chain";
-        writeDebugLine(debug_, line.str());
-    }
+        // 预排序与顶点 0 相连的边，computeOneTree 中直接取前两条合法边。
+        root_candidates_sorted_.clear();
+        root_candidates_sorted_.reserve(static_cast<std::size_t>(n_ - 1));
+        for (int v = 1; v < n_; ++v) {
+            if (isFinite(dist_[0][v])) {
+                root_candidates_sorted_.push_back(
+                    Edge{0, v, adjustedEdgeWeight(0, v)});
+            }
+        }
+        std::sort(root_candidates_sorted_.begin(), root_candidates_sorted_.end(),
+                  [](const Edge& a, const Edge& b) { return a.w < b.w; });
 
-    search(root, root_tree, 0);
-    if (!candidate_undo_.empty() || !tree_undo_.empty()
-        || !tree_snapshot_undo_.empty()) {
-        throw std::logic_error("DFS rollback did not restore the root state");
+        OneTree root_tree = computeOneTree(root, candidates_sorted_);
+        if (!root_tree.feasible) {
+            result_.feasible = false;
+            result_.cost = std::numeric_limits<double>::infinity();
+            result_.stats.root_lower_bound = std::numeric_limits<double>::infinity();
+            writeDebugLine(debug_, "root 1-tree infeasible; exact solve stopped");
+            return result_;
+        }
+        result_.stats.root_lower_bound = root_tree.cost;
+        root.bound = root_tree.cost;
+        ++result_.stats.nodes_created;
+        const bool root_pruned = shouldPrune(root.bound, best_cost_);
+        RootReducedCostStats fixing;
+        if (root_pruned) {
+            // 根下界已经证明初始 incumbent 最优，候选池不再有使用价值。
+            initial_tour_alternatives_.clear();
+        } else {
+            fixing = applyRootReducedCostFixing(root, root_tree);
+            // 根 fixing 是本轮搜索的永久基线，不应被 DFS rollback 恢复。
+            candidate_undo_.clear();
+            if (debug_.output != nullptr) {
+                std::ostringstream line;
+                line << "root reduced-cost fixing: tested=" << fixing.tested
+                     << " fixed_zero=" << fixing.fixed_zero
+                     << " tree_tested=" << fixing.tree_tested
+                     << " fixed_one=" << fixing.fixed_one
+                     << " active=" << fixing.active_after;
+                if (fixing.proves_no_improvement) {
+                    line << " proves_no_improvement=yes";
+                }
+                writeDebugLine(debug_, line.str());
+            }
+        }
+        {
+            std::ostringstream line;
+            line << "root: lower_bound=" << formatDebugDouble(root.bound)
+                 << " search=bp-chain";
+            writeDebugLine(debug_, line.str());
+        }
+
+        restart_search_requested_ = false;
+        if (!root_pruned
+            && (fixing.proves_no_improvement
+                || insufficient_degree_count_ != 0)) {
+            // 所有被删边都已分别证明不可能进入改进 tour；剩余图若有顶点
+            // 度数不足 2，则不存在只由未删边组成的改进 Hamilton 回路。
+            ++result_.stats.nodes_pruned_by_bound;
+        } else {
+            search(root, root_tree, 0);
+        }
+        if (!candidate_undo_.empty() || !tree_undo_.empty()
+            || !tree_snapshot_undo_.empty()) {
+            throw std::logic_error("DFS rollback did not restore the root state");
+        }
+        if (restart_search_requested_) {
+            writeDebugLine(
+                debug_,
+                "restarting exact search with diversified incumbent: cost="
+                    + formatDebugDouble(best_cost_));
+            continue;
+        }
+        break;
     }
 
     // 搜索结束后，best_cost_ 有限且 best_tour_ 非空才算找到可行最优解。
@@ -747,17 +801,13 @@ SolveResult BranchBoundSolver::solve()
 
 // ── BP (Branch Partitioning) 实现 ────────────────────────────────
 
-std::vector<BranchBoundSolver::BranchChoice> BranchBoundSolver::bpPartition(
+BranchBoundSolver::BranchSet BranchBoundSolver::bpPartition(
     PartialSol& node, OneTree& work_tree)
 {
-    std::vector<BranchChoice> B_set;
-    const std::size_t reserve_hint = std::min<std::size_t>(work_tree.edges.size(), 4);
-    B_set.reserve(reserve_hint);
+    BranchSet B_set;
 
     const std::size_t tree_checkpoint = tree_undo_.size();
     const std::size_t candidate_checkpoint = candidate_undo_.size();
-    std::vector<std::size_t> added_forbidden_ids;
-    added_forbidden_ids.reserve(reserve_hint);
 
     while (true) {
         const Edge* deg_best = nullptr;
@@ -826,7 +876,6 @@ std::vector<BranchBoundSolver::BranchChoice> BranchBoundSolver::bpPartition(
 
             node.forbidden[eid] = 1;
             deactivateCandidate(node, eid);
-            added_forbidden_ids.push_back(eid);
 
             bool replacement_found = false;
 #ifndef TSP_DISABLE_INCREMENTAL_ONETREE
@@ -907,18 +956,24 @@ std::vector<BranchBoundSolver::BranchChoice> BranchBoundSolver::bpPartition(
 
     rollbackOneTree(work_tree, tree_checkpoint);
     rollbackCandidates(node, candidate_checkpoint);
-    for (const std::size_t eid : added_forbidden_ids) {
-        node.forbidden[eid] = 0;
+    for (std::size_t index = 0; index < B_set.size(); ++index) {
+        const Edge& edge = B_set[index].edge;
+        node.forbidden[edgeId(edge.u, edge.v)] = 0;
     }
 
     return B_set;
 }
 
 void BranchBoundSolver::search(
-    PartialSol& node, OneTree& current_tree, int depth)
+    PartialSol& node, OneTree& current_tree, int depth, bool count_node)
 {
     if (!current_tree.feasible) {
         ++result_.stats.nodes_pruned_infeasible;
+        return;
+    }
+
+    maybeImproveIncumbentDiversified();
+    if (restart_search_requested_) {
         return;
     }
 
@@ -930,11 +985,14 @@ void BranchBoundSolver::search(
         ++result_.stats.nodes_pruned_by_bound;
         return;
     }
-    ++result_.stats.nodes_expanded;
+    if (count_node) {
+        ++result_.stats.nodes_expanded;
+    }
 
     // 调试输出。
     const std::size_t debug_interval = normalizedDebugInterval(debug_);
-    if (debug_.output != nullptr && result_.stats.nodes_expanded % debug_interval == 0) {
+    if (count_node && debug_.output != nullptr
+        && result_.stats.nodes_expanded % debug_interval == 0) {
         std::ostringstream line;
         line << "progress: expanded=" << result_.stats.nodes_expanded
              << " created=" << result_.stats.nodes_created
@@ -961,7 +1019,7 @@ void BranchBoundSolver::search(
     }
 
     // Step 4: BP 划分 —— 获取 B 集（关键边）。
-    std::vector<BranchChoice> B_set = bpPartition(node, current_tree);
+    BranchSet B_set = bpPartition(node, current_tree);
 
     // B 为空：禁止任意 1-tree 边均超上界，等价于 bound 剪枝。
     if (B_set.empty()) {
@@ -980,6 +1038,8 @@ void BranchBoundSolver::search(
         std::size_t old_merge_member_count = 0;
         int merged_scan_root = -1;
         std::size_t merged_scan_count = 0;
+        std::uint64_t merged_scan_bits = 0;
+        std::uint64_t old_merge_member_bits = 0;
         double old_forced_mst_cost = 0.0;
         int old_forced_mst_count = 0;
     };
@@ -1023,13 +1083,21 @@ void BranchBoundSolver::search(
         changes.old_forced_mst_count = node.forced_mst_count;
 
         if (ru != rv) {
-            const auto& members_u =
-                node.forced_members[static_cast<std::size_t>(ru)];
-            const auto& members_v =
-                node.forced_members[static_cast<std::size_t>(rv)];
-            changes.merged_scan_root = members_u.size() <= members_v.size()
-                ? ru : rv;
-            changes.merged_scan_count = std::min(members_u.size(), members_v.size());
+            if (!node.forced_member_bits.empty()) {
+                changes.merged_scan_bits =
+                    changes.old_size_u <= changes.old_size_v
+                    ? node.forced_member_bits[static_cast<std::size_t>(ru)]
+                    : node.forced_member_bits[static_cast<std::size_t>(rv)];
+            } else {
+                const auto& members_u =
+                    node.forced_members[static_cast<std::size_t>(ru)];
+                const auto& members_v =
+                    node.forced_members[static_cast<std::size_t>(rv)];
+                changes.merged_scan_root = members_u.size() <= members_v.size()
+                    ? ru : rv;
+                changes.merged_scan_count =
+                    std::min(members_u.size(), members_v.size());
+            }
         }
 
         // ru == rv is only allowed when this edge closes a spanning forced
@@ -1042,13 +1110,22 @@ void BranchBoundSolver::search(
                 std::swap(ra, rb);
             }
             changes.merge_root = ra;
-            auto& merge_members =
-                node.forced_members[static_cast<std::size_t>(ra)];
-            const auto& absorbed_members =
-                node.forced_members[static_cast<std::size_t>(rb)];
-            changes.old_merge_member_count = merge_members.size();
-            merge_members.insert(
-                merge_members.end(), absorbed_members.begin(), absorbed_members.end());
+            if (!node.forced_member_bits.empty()) {
+                auto& merge_bits =
+                    node.forced_member_bits[static_cast<std::size_t>(ra)];
+                changes.old_merge_member_bits = merge_bits;
+                merge_bits |=
+                    node.forced_member_bits[static_cast<std::size_t>(rb)];
+            } else {
+                auto& merge_members =
+                    node.forced_members[static_cast<std::size_t>(ra)];
+                const auto& absorbed_members =
+                    node.forced_members[static_cast<std::size_t>(rb)];
+                changes.old_merge_member_count = merge_members.size();
+                merge_members.insert(
+                    merge_members.end(),
+                    absorbed_members.begin(), absorbed_members.end());
+            }
             node.forced_parent[static_cast<std::size_t>(rb)] = ra;
             node.forced_comp_size[static_cast<std::size_t>(ra)]
                 += node.forced_comp_size[static_cast<std::size_t>(rb)];
@@ -1081,8 +1158,15 @@ void BranchBoundSolver::search(
         node.forced_comp_size[static_cast<std::size_t>(changes.root_u)] = changes.old_size_u;
         node.forced_comp_size[static_cast<std::size_t>(changes.root_v)] = changes.old_size_v;
         if (changes.merge_root >= 0) {
-            node.forced_members[static_cast<std::size_t>(changes.merge_root)].resize(
-                changes.old_merge_member_count);
+            if (!node.forced_member_bits.empty()) {
+                node.forced_member_bits[
+                    static_cast<std::size_t>(changes.merge_root)] =
+                    changes.old_merge_member_bits;
+            } else {
+                node.forced_members[
+                    static_cast<std::size_t>(changes.merge_root)].resize(
+                    changes.old_merge_member_count);
+            }
         }
 
         --node.forced_degree[static_cast<std::size_t>(changes.fu)];
@@ -1096,10 +1180,73 @@ void BranchBoundSolver::search(
         node.forced_edges.pop_back();
     };
 
-    struct PrefixForbidChanges {
-        std::size_t edge_id = 0;
-        unsigned char old_forbidden = 0;
-    };
+    // |B|=1 时，BP 已严格证明任何改进 tour 都必须包含这条边。
+    // 直接在当前逻辑节点传播 x_e=1，避免创建只有一个孩子的 BP 节点。
+    if (B_set.size() == 1) {
+        ForceChanges force_changes;
+        if (!apply_force(B_set.front().edge, force_changes)) {
+            ++result_.stats.nodes_pruned_infeasible;
+            return;
+        }
+
+        const std::size_t candidate_checkpoint = candidate_undo_.size();
+        const std::size_t tree_checkpoint = tree_undo_.size();
+        const bool candidates_feasible = filterActiveCandidates(
+            node, force_changes.merged_scan_root,
+            force_changes.merged_scan_count,
+            force_changes.merged_scan_bits);
+        if (candidates_feasible) {
+            bool tree_valid = false;
+#ifndef TSP_DISABLE_INCREMENTAL_ONETREE
+            tree_valid = true;
+            if (candidate_undo_.size() != candidate_checkpoint) {
+                tree_valid = updateOneTreeAfterActiveRemoval(
+                    node, current_tree, candidate_checkpoint, true);
+            }
+
+#ifdef TSP_VERIFY_INCREMENTAL_STATE
+            const OneTree rebuilt = computeOneTree(node, candidates_sorted_);
+            if (tree_valid != rebuilt.feasible
+                || (tree_valid
+                    && !costsNumericallyEqual(
+                        current_tree.cost, rebuilt.cost,
+                        static_cast<std::size_t>(n_)))) {
+                throw std::runtime_error(
+                    "propagated singleton 1-tree differs from a complete rebuild");
+            }
+#endif
+
+            if (!tree_valid) {
+                rollbackOneTree(current_tree, tree_checkpoint);
+                OneTree rebuilt = computeOneTree(node, candidates_sorted_);
+                tree_valid = rebuilt.feasible;
+                if (tree_valid) {
+                    replaceOneTreeWithRebuild(
+                        current_tree, std::move(rebuilt));
+                }
+            }
+#else
+            OneTree rebuilt = computeOneTree(node, candidates_sorted_);
+            tree_valid = rebuilt.feasible;
+            if (tree_valid) {
+                replaceOneTreeWithRebuild(current_tree, std::move(rebuilt));
+            }
+#endif
+
+            if (tree_valid) {
+                search(node, current_tree, depth, false);
+            } else {
+                ++result_.stats.nodes_pruned_infeasible;
+            }
+        } else {
+            ++result_.stats.nodes_pruned_infeasible;
+        }
+
+        rollbackOneTree(current_tree, tree_checkpoint);
+        rollbackCandidates(node, candidate_checkpoint);
+        revert_force(force_changes);
+        return;
+    }
 
     // Step 5: 直接枚举互斥的 force 子节点：
     //   force B[0]
@@ -1107,8 +1254,6 @@ void BranchBoundSolver::search(
     //   ...
     //   forbid B[0..k-2] + force B[k-1]
     // 全部 B 边均 forbidden 的剩余分支已由 bpPartition 的终止测试证明不可改进。
-    std::vector<PrefixForbidChanges> prefix_changes;
-    prefix_changes.reserve(B_set.size());
     const std::size_t parent_candidate_checkpoint = candidate_undo_.size();
     const std::size_t parent_tree_checkpoint = tree_undo_.size();
 
@@ -1122,7 +1267,8 @@ void BranchBoundSolver::search(
 
             const bool ok = filterActiveCandidates(
                 node, force_changes.merged_scan_root,
-                force_changes.merged_scan_count);
+                force_changes.merged_scan_count,
+                force_changes.merged_scan_bits);
             if (ok) {
                 // B[i] 已经位于当前 prefix tree 中。force 后只需增量
                 // 替换因度数/子回路过滤而失效的其他树边。
@@ -1131,7 +1277,8 @@ void BranchBoundSolver::search(
                 tree_valid = true;
                 if (candidate_undo_.size() != child_candidate_checkpoint) {
                     tree_valid = updateOneTreeAfterActiveRemoval(
-                        node, current_tree, true);
+                        node, current_tree,
+                        child_candidate_checkpoint, true);
                 }
 
 #ifdef TSP_VERIFY_INCREMENTAL_STATE
@@ -1178,18 +1325,18 @@ void BranchBoundSolver::search(
             ++result_.stats.nodes_pruned_infeasible;
         }
 
+        if (restart_search_requested_) {
+            break;
+        }
+
         if (idx + 1 == B_set.size()) {
             break;
         }
 
         // 当前 force 子节点完成后，仅把该边加入后续子节点的前缀禁止约束。
         const std::size_t eid = edgeId(branch_edge.u, branch_edge.v);
-        PrefixForbidChanges changes;
-        changes.edge_id = eid;
-        changes.old_forbidden = node.forbidden[eid];
         node.forbidden[eid] = 1;
         deactivateCandidate(node, eid);
-        prefix_changes.push_back(changes);
 
         // 将当前树从“此前 B 边被禁止”的状态推进到“连同当前
         // branch_edge 也被禁止”的状态，供 B[idx+1] 的 force 子节点使用。
@@ -1236,8 +1383,9 @@ void BranchBoundSolver::search(
 
     rollbackOneTree(current_tree, parent_tree_checkpoint);
     rollbackCandidates(node, parent_candidate_checkpoint);
-    for (auto it = prefix_changes.rbegin(); it != prefix_changes.rend(); ++it) {
-        node.forbidden[it->edge_id] = it->old_forbidden;
+    for (std::size_t index = 0; index + 1 < B_set.size(); ++index) {
+        const Edge& edge = B_set[index].edge;
+        node.forbidden[edgeId(edge.u, edge.v)] = 0;
     }
 }
 
@@ -1473,15 +1621,32 @@ bool BranchBoundSolver::updateOneTreeAfterCandidateRemoval(
 }
 
 bool BranchBoundSolver::updateOneTreeAfterActiveRemoval(
-    const PartialSol& node, OneTree& tree, bool record_undo) const
+    const PartialSol& node, OneTree& tree,
+    std::size_t candidate_checkpoint, bool record_undo) const
 {
     removed_candidate_scratch_.clear();
     removed_candidate_scratch_.reserve(tree.edges.size());
-    for (const Edge& edge : tree.edges) {
-        const std::size_t edge_id = edgeId(edge.u, edge.v);
-        if (!node.forced[edge_id]
-            && !isCandidateActive(node, edge_id)) {
-            removed_candidate_scratch_.push_back(edge_id);
+    const std::size_t removed_count =
+        candidate_undo_.size() - candidate_checkpoint;
+    if (!tree.edge_index_in_tree.empty()
+        && removed_count < tree.edges.size()) {
+        for (std::size_t undo_index = candidate_checkpoint;
+             undo_index < candidate_undo_.size(); ++undo_index) {
+            const Edge& removed =
+                candidates_sorted_[candidate_undo_[undo_index].index];
+            const std::size_t edge_id = edgeId(removed.u, removed.v);
+            if (!node.forced[edge_id]
+                && tree.edge_index_in_tree[edge_id] >= 0) {
+                removed_candidate_scratch_.push_back(edge_id);
+            }
+        }
+    } else {
+        for (const Edge& edge : tree.edges) {
+            const std::size_t edge_id = edgeId(edge.u, edge.v);
+            if (!node.forced[edge_id]
+                && !isCandidateActive(node, edge_id)) {
+                removed_candidate_scratch_.push_back(edge_id);
+            }
         }
     }
     std::sort(
@@ -1575,9 +1740,7 @@ const BranchBoundSolver::Edge* BranchBoundSolver::findMstReplacement(
             == static_cast<std::size_t>(n_) * candidate_word_count_
         && internal_candidate_bits_.size() == candidate_word_count_) {
         mst_cut_candidate_bits_.assign(candidate_word_count_, 0);
-        const std::vector<int>& component = mst_selected_component_is_left_
-            ? mst_component_left_ : mst_component_right_;
-        for (const int vertex : component) {
+        auto add_component_vertex = [&](int vertex) {
             const std::size_t row_begin =
                 static_cast<std::size_t>(vertex) * candidate_word_count_;
             for (std::size_t word_index = 0;
@@ -1586,6 +1749,20 @@ const BranchBoundSolver::Edge* BranchBoundSolver::findMstReplacement(
                 // 只出现一次，因此异或结果恰好是 fundamental cut。
                 mst_cut_candidate_bits_[word_index] ^=
                     candidate_incident_bits_[row_begin + word_index];
+            }
+        };
+        if (mst_selected_component_bits_ != 0) {
+            std::uint64_t component = mst_selected_component_bits_;
+            while (component != 0) {
+                const unsigned vertex = trailingZeroCount(component);
+                component &= component - 1;
+                add_component_vertex(static_cast<int>(vertex));
+            }
+        } else {
+            const std::vector<int>& component = mst_selected_component_is_left_
+                ? mst_component_left_ : mst_component_right_;
+            for (const int vertex : component) {
+                add_component_vertex(vertex);
             }
         }
 
@@ -1622,12 +1799,18 @@ const BranchBoundSolver::Edge* BranchBoundSolver::findMstReplacement(
         if (node.forced[candidate_id] || node.forbidden[candidate_id]) continue;
         if (!node.candidate_mask.empty() && !node.candidate_mask[candidate_id]) continue;
 
-        const bool u_in_component =
-            mst_component_mark_[static_cast<std::size_t>(candidate.u)]
-            == mst_selected_component_epoch_;
-        const bool v_in_component =
-            mst_component_mark_[static_cast<std::size_t>(candidate.v)]
-            == mst_selected_component_epoch_;
+        const bool u_in_component = mst_selected_component_bits_ != 0
+            ? (mst_selected_component_bits_
+               & (std::uint64_t{1}
+                  << static_cast<unsigned>(candidate.u))) != 0
+            : mst_component_mark_[static_cast<std::size_t>(candidate.u)]
+                == mst_selected_component_epoch_;
+        const bool v_in_component = mst_selected_component_bits_ != 0
+            ? (mst_selected_component_bits_
+               & (std::uint64_t{1}
+                  << static_cast<unsigned>(candidate.v))) != 0
+            : mst_component_mark_[static_cast<std::size_t>(candidate.v)]
+                == mst_selected_component_epoch_;
         if (u_in_component != v_in_component) {
             return &candidate;
         }
@@ -1813,6 +1996,72 @@ bool BranchBoundSolver::markMstComponentWithoutEdge(
         return false;
     }
 
+    // n <= 64 时每个邻接行只有一个 machine word。直接用 seen/frontier
+    // bitset 完成双向扩展，避免通用路径为每个访问顶点写 epoch、
+    // push 两个动态 vector，并在只有一个 word 时仍执行内层 word 循环。
+    if (words_per_row == 1) {
+        std::uint64_t left_seen =
+            std::uint64_t{1} << static_cast<unsigned>(removed_edge.u);
+        std::uint64_t right_seen =
+            std::uint64_t{1} << static_cast<unsigned>(removed_edge.v);
+        std::uint64_t left_frontier = left_seen;
+        std::uint64_t right_frontier = right_seen;
+
+        auto expand_fast = [&](std::uint64_t& frontier,
+                               std::uint64_t& own_seen,
+                               std::uint64_t other_seen) {
+            const int vertex =
+                static_cast<int>(trailingZeroCount(frontier));
+            frontier &= frontier - 1;
+            std::uint64_t neighbors =
+                tree.mst_adjacency_bits[static_cast<std::size_t>(vertex)];
+            if (vertex == removed_edge.u) {
+                neighbors &= ~(
+                    std::uint64_t{1}
+                    << static_cast<unsigned>(removed_edge.v));
+            } else if (vertex == removed_edge.v) {
+                neighbors &= ~(
+                    std::uint64_t{1}
+                    << static_cast<unsigned>(removed_edge.u));
+            }
+            if ((neighbors & other_seen) != 0) {
+                return false;
+            }
+            neighbors &= ~own_seen;
+            own_seen |= neighbors;
+            frontier |= neighbors;
+            return true;
+        };
+
+        bool selected_left = true;
+        while (true) {
+            if (!expand_fast(
+                    left_frontier,
+                    left_seen, right_seen)) {
+                return false;
+            }
+            if (left_frontier == 0) {
+                mst_selected_component_bits_ = left_seen;
+                break;
+            }
+
+            if (!expand_fast(
+                    right_frontier,
+                    right_seen, left_seen)) {
+                return false;
+            }
+            if (right_frontier == 0) {
+                mst_selected_component_bits_ = right_seen;
+                selected_left = false;
+                break;
+            }
+        }
+
+        mst_selected_component_is_left_ = selected_left;
+        return true;
+    }
+
+    mst_selected_component_bits_ = 0;
     if (mst_component_mark_.size() != static_cast<std::size_t>(n_)) {
         mst_component_mark_.assign(static_cast<std::size_t>(n_), 0);
         mst_component_epoch_ = 0;
@@ -2149,6 +2398,7 @@ bool BranchBoundSolver::buildBranchCandidates(
 bool BranchBoundSolver::filterActiveCandidates(
     PartialSol& node, int merged_scan_root,
     std::size_t merged_scan_count,
+    std::uint64_t merged_scan_bits,
     std::vector<std::size_t>* removed_edge_ids) const
 {
     const std::size_t undo_begin = candidate_undo_.size();
@@ -2170,25 +2420,43 @@ bool BranchBoundSolver::filterActiveCandidates(
             }
         }
     };
-    auto deactivate_incident = [&](int vertex) {
-        const std::size_t row_begin =
-            static_cast<std::size_t>(vertex) * candidate_word_count_;
-        for (std::size_t word_index = 0;
-             word_index < candidate_word_count_; ++word_index) {
-            const std::uint64_t pending = node.candidate_bits[word_index]
-                & candidate_incident_bits_[row_begin + word_index];
-            deactivateCandidateBits(node, word_index, pending);
-        }
-    };
     if (node.forced_degree[static_cast<std::size_t>(forced_edge.u)] >= 2) {
-        deactivate_incident(forced_edge.u);
+        deactivateIncidentCandidates(node, forced_edge.u);
     }
     if (forced_edge.v != forced_edge.u
         && node.forced_degree[static_cast<std::size_t>(forced_edge.v)] >= 2) {
-        deactivate_incident(forced_edge.v);
+        deactivateIncidentCandidates(node, forced_edge.v);
     }
 
-    if (merged_scan_root >= 0 && merged_scan_count != 0) {
+    if (merged_scan_bits != 0 && !node.forced_member_bits.empty()) {
+        auto forced_root = [&](int vertex) {
+            while (node.forced_parent[static_cast<std::size_t>(vertex)] != vertex) {
+                vertex = node.forced_parent[static_cast<std::size_t>(vertex)];
+            }
+            return vertex;
+        };
+        const int combined_root = forced_root(forced_edge.u);
+        if (node.forced_comp_size[static_cast<std::size_t>(combined_root)] < n_) {
+            const std::uint64_t combined_bits =
+                node.forced_member_bits[static_cast<std::size_t>(combined_root)];
+            while (merged_scan_bits != 0) {
+                const unsigned vertex_index =
+                    trailingZeroCount(merged_scan_bits);
+                merged_scan_bits &= merged_scan_bits - 1;
+                const int vertex = static_cast<int>(vertex_index);
+                for_each_active_incident(vertex, [&](std::size_t index) {
+                    const Edge& edge = candidates_sorted_[index];
+                    if (edge.u == 0 || edge.v == 0) return;
+                    const int other = edge.u == vertex ? edge.v : edge.u;
+                    if ((combined_bits
+                         & (std::uint64_t{1}
+                            << static_cast<unsigned>(other))) != 0) {
+                        deactivateCandidateByIndex(node, index);
+                    }
+                });
+            }
+        }
+    } else if (merged_scan_root >= 0 && merged_scan_count != 0) {
         const auto& members =
             node.forced_members[static_cast<std::size_t>(merged_scan_root)];
         auto forced_root = [&](int vertex) {
@@ -2198,6 +2466,15 @@ bool BranchBoundSolver::filterActiveCandidates(
             return vertex;
         };
         const int combined_root = forced_root(members.front());
+        std::uint64_t combined_member_bits = 0;
+        if (n_ <= 64) {
+            const auto& combined_members =
+                node.forced_members[static_cast<std::size_t>(combined_root)];
+            for (const int vertex : combined_members) {
+                combined_member_bits |=
+                    std::uint64_t{1} << static_cast<unsigned>(vertex);
+            }
+        }
         if (node.forced_comp_size[static_cast<std::size_t>(combined_root)] < n_) {
             for (std::size_t member_index = 0;
                  member_index < merged_scan_count; ++member_index) {
@@ -2206,7 +2483,12 @@ bool BranchBoundSolver::filterActiveCandidates(
                     const Edge& edge = candidates_sorted_[index];
                     if (edge.u == 0 || edge.v == 0) return;
                     const int other = edge.u == vertex ? edge.v : edge.u;
-                    if (forced_root(other) == combined_root) {
+                    const bool other_in_component = n_ <= 64
+                        ? (combined_member_bits
+                           & (std::uint64_t{1}
+                              << static_cast<unsigned>(other))) != 0
+                        : forced_root(other) == combined_root;
+                    if (other_in_component) {
                         deactivateCandidateByIndex(node, index);
                     }
                 });
@@ -2320,6 +2602,41 @@ void BranchBoundSolver::deactivateCandidateBits(
         adjustAvailableDegree(edge.u, -1);
         adjustAvailableDegree(edge.v, -1);
         candidate_undo_.push_back(CandidateUndo{index});
+    }
+}
+
+void BranchBoundSolver::deactivateIncidentCandidates(
+    PartialSol& node, int vertex) const
+{
+    const std::size_t row_begin =
+        static_cast<std::size_t>(vertex) * candidate_word_count_;
+    int removed_count = 0;
+    for (std::size_t word_index = 0;
+         word_index < candidate_word_count_; ++word_index) {
+        std::uint64_t removed_bits = node.candidate_bits[word_index]
+            & candidate_incident_bits_[row_begin + word_index];
+        node.candidate_bits[word_index] &= ~removed_bits;
+        while (removed_bits != 0) {
+            const unsigned bit_index = trailingZeroCount(removed_bits);
+            removed_bits &= removed_bits - 1;
+            const std::size_t index = word_index * 64 + bit_index;
+            const Edge& edge = candidates_sorted_[index];
+            if (!node.candidate_mask.empty()) {
+                const std::size_t edge_id = edgeId(edge.u, edge.v);
+                if (!node.candidate_mask[edge_id]) {
+                    throw std::logic_error(
+                        "candidate active bit and mask are inconsistent");
+                }
+                node.candidate_mask[edge_id] = 0;
+            }
+            const int other = edge.u == vertex ? edge.v : edge.u;
+            adjustAvailableDegree(other, -1);
+            candidate_undo_.push_back(CandidateUndo{index});
+            ++removed_count;
+        }
+    }
+    if (removed_count != 0) {
+        adjustAvailableDegree(vertex, -removed_count);
     }
 }
 
@@ -2446,11 +2763,307 @@ bool BranchBoundSolver::shouldPrune(double bound, double best_cost) const
         > scaledRoundoffTolerance(bound, best_cost, static_cast<std::size_t>(n_));
 }
 
-bool BranchBoundSolver::findInitialTour(std::vector<int>& tour, double& cost)
+BranchBoundSolver::RootReducedCostStats
+BranchBoundSolver::applyRootReducedCostFixing(
+    PartialSol& root, OneTree& root_tree) const
 {
-    bool found = false;
+    RootReducedCostStats stats;
+    if (!root_tree.feasible || !isFinite(best_cost_)
+        || root_tree.edge_index_in_tree.size()
+            != static_cast<std::size_t>(n_) * static_cast<std::size_t>(n_)) {
+        return stats;
+    }
+
+    // 顶点 1..n-1 上的内部部分是一棵 MST。对每个起点做一次树 DFS，
+    // 预计算路径最大边；根节点规模下这是 O(n^2)，之后每条非树边 O(1)。
+    const double negative_infinity =
+        -std::numeric_limits<double>::infinity();
+    std::vector<std::vector<std::pair<int, double>>> adjacency(
+        static_cast<std::size_t>(n_));
+    double heaviest_root_edge = negative_infinity;
+    for (const Edge& edge : root_tree.edges) {
+        if (edge.u == 0 || edge.v == 0) {
+            heaviest_root_edge = std::max(heaviest_root_edge, edge.w);
+            continue;
+        }
+        adjacency[static_cast<std::size_t>(edge.u)].push_back(
+            {edge.v, edge.w});
+        adjacency[static_cast<std::size_t>(edge.v)].push_back(
+            {edge.u, edge.w});
+    }
+
+    const std::size_t state_size =
+        static_cast<std::size_t>(n_) * static_cast<std::size_t>(n_);
+    std::vector<double> path_max(state_size, negative_infinity);
+    std::vector<int> parent(static_cast<std::size_t>(n_), -1);
+    std::vector<int> stack;
+    stack.reserve(static_cast<std::size_t>(n_));
+    for (int start = 1; start < n_; ++start) {
+        std::fill(parent.begin(), parent.end(), -1);
+        stack.clear();
+        parent[static_cast<std::size_t>(start)] = start;
+        stack.push_back(start);
+        while (!stack.empty()) {
+            const int vertex = stack.back();
+            stack.pop_back();
+            const double prefix_max = path_max[
+                static_cast<std::size_t>(start) * static_cast<std::size_t>(n_)
+                + static_cast<std::size_t>(vertex)];
+            for (const auto& [next, weight] :
+                 adjacency[static_cast<std::size_t>(vertex)]) {
+                if (parent[static_cast<std::size_t>(next)] >= 0) continue;
+                parent[static_cast<std::size_t>(next)] = vertex;
+                path_max[
+                    static_cast<std::size_t>(start)
+                        * static_cast<std::size_t>(n_)
+                    + static_cast<std::size_t>(next)] =
+                    std::max(prefix_max, weight);
+                stack.push_back(next);
+            }
+        }
+    }
+
+    std::vector<std::size_t> fixed_indices;
+    fixed_indices.reserve(candidates_sorted_.size());
+    for (std::size_t index = nextActiveCandidate(
+             root, 0, candidates_sorted_.size());
+         index < candidates_sorted_.size();
+         index = nextActiveCandidate(
+             root, index + 1, candidates_sorted_.size())) {
+        const Edge& edge = candidates_sorted_[index];
+        const std::size_t eid = edgeId(edge.u, edge.v);
+        if (root_tree.edge_index_in_tree[eid] >= 0) continue;
+
+        ++stats.tested;
+        const double support_weight = edge.u == 0 || edge.v == 0
+            ? heaviest_root_edge
+            : path_max[
+                static_cast<std::size_t>(edge.u)
+                    * static_cast<std::size_t>(n_)
+                + static_cast<std::size_t>(edge.v)];
+        if (!isFinite(support_weight)) continue;
+
+        // MST 性质保证 delta >= 0。减去一次运算尺度误差，使构造出的
+        // forced-edge 下界只可能偏低，绝不因相消误差错误固定边。
+        const double delta_guard = scaledRoundoffTolerance(
+            edge.w, support_weight, static_cast<std::size_t>(n_));
+        const double safe_delta = std::max(
+            0.0, edge.w - support_weight - delta_guard);
+        if (shouldPrune(root_tree.cost + safe_delta, best_cost_)) {
+            fixed_indices.push_back(index);
+        }
+    }
+
+    for (const std::size_t index : fixed_indices) {
+        deactivateCandidateByIndex(root, index);
+    }
+    stats.fixed_zero = fixed_indices.size();
+    if (insufficient_degree_count_ != 0) {
+        stats.proves_no_improvement = true;
+        stats.active_after = candidates_sorted_.size() - candidate_undo_.size();
+        return stats;
+    }
+    // 对根 1-tree 的每条边做一次单边 forbid sensitivity。若禁止该边后
+    // 最小受约束 1-tree 已无法改善 incumbent，则所有改进 tour 都必须
+    // 包含它，可安全固定为 x_e=1。
+    std::vector<Edge> mandatory_edges;
+    mandatory_edges.reserve(root_tree.edges.size());
+    for (const Edge& edge : root_tree.edges) {
+        ++stats.tree_tested;
+        const std::size_t eid = edgeId(edge.u, edge.v);
+        const std::size_t candidate_checkpoint = candidate_undo_.size();
+        root.forbidden[eid] = 1;
+        deactivateCandidate(root, eid);
+        const bool structurally_mandatory = insufficient_degree_count_ != 0;
+
+        const Edge* replacement = nullptr;
+        if (!structurally_mandatory) {
+            if (edge.u == 0 || edge.v == 0) {
+                for (const Edge& candidate : root_candidates_sorted_) {
+                    const std::size_t candidate_id =
+                        edgeId(candidate.u, candidate.v);
+                    if (!isCandidateActive(root, candidate_id)
+                        || root_tree.edge_index_in_tree[candidate_id] >= 0) {
+                        continue;
+                    }
+                    replacement = &candidate;
+                    break;
+                }
+            } else {
+                replacement = findMstReplacement(
+                    root, candidates_sorted_, root_tree, edge);
+            }
+        }
+        const bool replacement_found = replacement != nullptr;
+        double replacement_bound =
+            std::numeric_limits<double>::infinity();
+#ifdef TSP_VERIFY_INCREMENTAL_STATE
+        double raw_replacement_bound = replacement_bound;
+#endif
+        if (replacement_found) {
+#ifdef TSP_VERIFY_INCREMENTAL_STATE
+            raw_replacement_bound =
+                root_tree.cost + replacement->w - edge.w;
+#endif
+            const double delta_guard = scaledRoundoffTolerance(
+                replacement->w, edge.w, static_cast<std::size_t>(n_));
+            const double safe_delta = std::max(
+                0.0, replacement->w - edge.w - delta_guard);
+            replacement_bound = root_tree.cost + safe_delta;
+        }
+
+#ifdef TSP_VERIFY_INCREMENTAL_STATE
+        if (!structurally_mandatory) {
+            const OneTree rebuilt = computeOneTree(root, candidates_sorted_);
+            if (replacement_found != rebuilt.feasible
+                || (replacement_found
+                    && !costsNumericallyEqual(
+                        raw_replacement_bound, rebuilt.cost,
+                        static_cast<std::size_t>(n_)))) {
+                throw std::runtime_error(
+                    "root tree-edge fixing replacement differs from rebuild");
+            }
+        }
+#endif
+
+        const bool mandatory = structurally_mandatory
+            || !replacement_found
+            || shouldPrune(replacement_bound, best_cost_);
+        rollbackCandidates(root, candidate_checkpoint);
+        root.forbidden[eid] = 0;
+        if (mandatory) mandatory_edges.push_back(edge);
+    }
+    stats.fixed_one = mandatory_edges.size();
+
+    auto forced_find = [&](int vertex) {
+        while (root.forced_parent[static_cast<std::size_t>(vertex)] != vertex) {
+            vertex = root.forced_parent[static_cast<std::size_t>(vertex)];
+        }
+        return vertex;
+    };
+    for (const Edge& edge : mandatory_edges) {
+        if (root.forced_degree[static_cast<std::size_t>(edge.u)] >= 2
+            || root.forced_degree[static_cast<std::size_t>(edge.v)] >= 2) {
+            stats.proves_no_improvement = true;
+            break;
+        }
+
+        int root_u = forced_find(edge.u);
+        int root_v = forced_find(edge.v);
+        if (root_u == root_v
+            && root.forced_comp_size[static_cast<std::size_t>(root_u)] < n_) {
+            stats.proves_no_improvement = true;
+            break;
+        }
+
+        const std::size_t eid = edgeId(edge.u, edge.v);
+        root.forced[eid] = 1;
+        root.forced_edges.push_back(edge);
+        ++root.forced_degree[static_cast<std::size_t>(edge.u)];
+        ++root.forced_degree[static_cast<std::size_t>(edge.v)];
+        // available_degree_ 统计 forced + active optional；随后移除候选中的
+        // forced edge 会抵消这次 +1，使该强制关联仍计入可用度数。
+        adjustAvailableDegree(edge.u, 1);
+        adjustAvailableDegree(edge.v, 1);
+        if (edge.u != 0 && edge.v != 0) {
+            root.forced_mst_cost += edge.w;
+            ++root.forced_mst_count;
+        }
+
+        if (root_u != root_v) {
+            if (root.forced_rank[static_cast<std::size_t>(root_u)]
+                < root.forced_rank[static_cast<std::size_t>(root_v)]) {
+                std::swap(root_u, root_v);
+            }
+            if (!root.forced_member_bits.empty()) {
+                root.forced_member_bits[static_cast<std::size_t>(root_u)] |=
+                    root.forced_member_bits[static_cast<std::size_t>(root_v)];
+            } else {
+                auto& members_u =
+                    root.forced_members[static_cast<std::size_t>(root_u)];
+                const auto& members_v =
+                    root.forced_members[static_cast<std::size_t>(root_v)];
+                members_u.insert(
+                    members_u.end(), members_v.begin(), members_v.end());
+            }
+            root.forced_parent[static_cast<std::size_t>(root_v)] = root_u;
+            root.forced_comp_size[static_cast<std::size_t>(root_u)]
+                += root.forced_comp_size[static_cast<std::size_t>(root_v)];
+            if (root.forced_rank[static_cast<std::size_t>(root_u)]
+                == root.forced_rank[static_cast<std::size_t>(root_v)]) {
+                ++root.forced_rank[static_cast<std::size_t>(root_u)];
+            }
+        }
+    }
+
+    if (!stats.proves_no_improvement && !mandatory_edges.empty()) {
+        // 根 fixing 不需要增量回滚。一次全量扫描删除 forced、度满关联边
+        // 和会形成非完整子回路的边，然后完整重建 constrained 1-tree。
+        std::vector<std::size_t> filtered_indices;
+        filtered_indices.reserve(candidates_sorted_.size());
+        for (std::size_t index = nextActiveCandidate(
+                 root, 0, candidates_sorted_.size());
+             index < candidates_sorted_.size();
+             index = nextActiveCandidate(
+                 root, index + 1, candidates_sorted_.size())) {
+            const Edge& edge = candidates_sorted_[index];
+            const std::size_t eid = edgeId(edge.u, edge.v);
+            bool remove = root.forced[eid] != 0
+                || root.forced_degree[static_cast<std::size_t>(edge.u)] >= 2
+                || root.forced_degree[static_cast<std::size_t>(edge.v)] >= 2;
+            if (!remove && edge.u != 0 && edge.v != 0) {
+                const int component_u = forced_find(edge.u);
+                const int component_v = forced_find(edge.v);
+                remove = component_u == component_v
+                    && root.forced_comp_size[
+                        static_cast<std::size_t>(component_u)] < n_;
+            }
+            if (remove) filtered_indices.push_back(index);
+        }
+        for (const std::size_t index : filtered_indices) {
+            deactivateCandidateByIndex(root, index);
+        }
+
+        if (insufficient_degree_count_ != 0) {
+            stats.proves_no_improvement = true;
+        } else {
+            OneTree rebuilt = computeOneTree(root, candidates_sorted_);
+            if (!rebuilt.feasible) {
+                stats.proves_no_improvement = true;
+            } else {
+                root_tree = std::move(rebuilt);
+            }
+        }
+    }
+
+    stats.active_after = candidates_sorted_.size() - candidate_undo_.size();
+    return stats;
+}
+
+bool BranchBoundSolver::findInitialTour(
+    std::vector<int>& tour, double& cost,
+    std::vector<TourCandidate>& alternatives)
+{
+    alternatives.clear();
+    std::map<std::vector<int>, TourCandidate> distinct_tours;
     double best_cost = std::numeric_limits<double>::infinity();
     std::vector<int> best_tour;
+
+    auto canonicalize = [&](const std::vector<int>& candidate) {
+        const auto zero = std::find(candidate.begin(), candidate.end(), 0);
+        if (zero == candidate.end()) return std::vector<int>{};
+        const int zero_index = static_cast<int>(
+            std::distance(candidate.begin(), zero));
+        std::vector<int> forward(static_cast<std::size_t>(n_));
+        std::vector<int> reverse(static_cast<std::size_t>(n_));
+        for (int offset = 0; offset < n_; ++offset) {
+            forward[static_cast<std::size_t>(offset)] = candidate[
+                static_cast<std::size_t>((zero_index + offset) % n_)];
+            reverse[static_cast<std::size_t>(offset)] = candidate[
+                static_cast<std::size_t>((zero_index - offset + n_) % n_)];
+        }
+        return reverse < forward ? reverse : forward;
+    };
 
     // 从每个起点跑一次最近邻，再用 2-opt 局部改进，取最好的可行回路作为初始上界。
     for (int start = 0; start < n_; ++start) {
@@ -2496,15 +3109,57 @@ bool BranchBoundSolver::findInitialTour(std::vector<int>& tour, double& cost)
         // 最近邻只给出初始回路，再用 2-opt 做局部改进。
         twoOpt(candidate, candidate_cost);
 
+        // 保持原实现的严格小于与首次命中语义，确保便宜的首个 LK 起点
+        // 不因候选池的规范化或排序而改变。
         if (candidate_cost < best_cost) {
             best_cost = candidate_cost;
-            best_tour = std::move(candidate);
-            found = true;
+            best_tour = candidate;
+        }
+
+        std::vector<int> canonical = canonicalize(candidate);
+        if (!canonical.empty()) {
+            distinct_tours.try_emplace(
+                std::move(canonical),
+                TourCandidate{candidate_cost, std::move(candidate)});
         }
     }
 
-    if (!found) {
+    if (best_tour.empty()) {
         return false;
+    }
+
+    const std::size_t distinct_tour_count = distinct_tours.size();
+    distinct_tours.erase(canonicalize(best_tour));
+
+    alternatives.reserve(distinct_tours.size());
+    for (auto& [canonical, candidate] : distinct_tours) {
+        (void)canonical;
+        alternatives.push_back(std::move(candidate));
+    }
+    std::sort(
+        alternatives.begin(), alternatives.end(),
+        [](const TourCandidate& left, const TourCandidate& right) {
+            if (left.cost != right.cost) return left.cost < right.cost;
+            return left.tour < right.tour;
+        });
+
+    // 自适应阶段只需保留最有希望的一小组不同局部最优，避免大实例把
+    // 所有 n 个 tour 带入多启动 LK。
+    constexpr std::size_t kInitialCandidatePoolSize = 24;
+    if (alternatives.size() > kInitialCandidatePoolSize) {
+        alternatives.resize(kInitialCandidatePoolSize);
+    }
+
+    if (debug_.output != nullptr) {
+        std::ostringstream line;
+        line << "initial tour pool: distinct=" << distinct_tour_count
+             << " retained=" << alternatives.size()
+             << " best_2opt=" << formatDebugDouble(best_cost);
+        if (!alternatives.empty()) {
+            line << " next_2opt="
+                 << formatDebugDouble(alternatives.front().cost);
+        }
+        writeDebugLine(debug_, line.str());
     }
 
     // 用 Lin-Kernighan 对最佳 NN+2opt 结果做精细优化，获取更紧上界。
@@ -2513,6 +3168,83 @@ bool BranchBoundSolver::findInitialTour(std::vector<int>& tour, double& cost)
     tour = std::move(best_tour);
     cost = best_cost;
     return true;
+}
+
+bool BranchBoundSolver::improveInitialTourDiversified(
+    std::vector<TourCandidate>& alternatives,
+    double root_lower_bound,
+    std::vector<int>& tour, double& cost)
+{
+    constexpr std::size_t kDiversifiedLkStarts = 12;
+    const std::size_t start_count = std::min(
+        alternatives.size(), kDiversifiedLkStarts);
+    bool improved = false;
+    std::size_t starts_run = 0;
+
+    for (std::size_t index = 0; index < start_count; ++index) {
+        std::vector<int> candidate = alternatives[index].tour;
+        double candidate_cost = alternatives[index].cost;
+        linKernighan(candidate, candidate_cost);
+        candidate_cost = tourCost(candidate);
+        ++starts_run;
+
+        if (candidate_cost < cost) {
+            tour = std::move(candidate);
+            cost = candidate_cost;
+            improved = true;
+        }
+        if (isFinite(root_lower_bound)
+            && shouldPrune(root_lower_bound, cost)) {
+            break;
+        }
+    }
+
+    writeDebugLine(
+        debug_,
+        "diversified LK completed: starts=" + std::to_string(starts_run)
+            + " best=" + formatDebugDouble(cost));
+    return improved;
+}
+
+void BranchBoundSolver::maybeImproveIncumbentDiversified()
+{
+    // 先让便宜的精确搜索处理小实例；只有已扩展足够多节点、可确认当前
+    // 子树确实困难时，才支付多启动 LK 成本。
+    constexpr std::size_t kSmallInstanceNodeBudget = 500000;
+    constexpr std::size_t kLargeInstanceNodeBudget = 100000;
+    constexpr int kLargeInstanceDimension = 64;
+    const std::size_t node_budget = n_ >= kLargeInstanceDimension
+        ? kLargeInstanceNodeBudget
+        : kSmallInstanceNodeBudget;
+    if (diversified_tour_attempted_
+        || initial_tour_alternatives_.empty()
+        || result_.stats.nodes_expanded < node_budget) {
+        return;
+    }
+
+    diversified_tour_attempted_ = true;
+    const double old_cost = best_cost_;
+    std::vector<int> old_tour = best_tour_;
+    if (improveInitialTourDiversified(
+            initial_tour_alternatives_, result_.stats.root_lower_bound,
+            best_tour_, best_cost_)) {
+        const double recomputed_cost = tourCost(best_tour_);
+        if (recomputed_cost < old_cost) {
+            best_cost_ = recomputed_cost;
+            writeDebugLine(
+                debug_,
+                "diversified incumbent: cost="
+                    + formatDebugDouble(best_cost_)
+                    + " previous=" + formatDebugDouble(old_cost)
+                    + " expanded="
+                    + std::to_string(result_.stats.nodes_expanded));
+            restart_search_requested_ = true;
+        } else {
+            best_cost_ = old_cost;
+            best_tour_ = std::move(old_tour);
+        }
+    }
+    initial_tour_alternatives_.clear();
 }
 
 double BranchBoundSolver::tourCost(const std::vector<int>& tour) const
@@ -2594,11 +3326,16 @@ void BranchBoundSolver::buildCandidateSets() const
             nb.emplace_back(dist_[i][j], j);
         }
         const int keep = std::min(kLkCandidateSize, static_cast<int>(nb.size()));
-        std::nth_element(nb.begin(), nb.begin() + keep, nb.end(),
-                         [](const auto& a, const auto& b) { return a.first < b.first; });
+        const auto neighbor_less = [](const auto& left, const auto& right) {
+            if (left.first != right.first) return left.first < right.first;
+            return left.second < right.second;
+        };
+        if (keep < static_cast<int>(nb.size())) {
+            std::nth_element(
+                nb.begin(), nb.begin() + keep, nb.end(), neighbor_less);
+        }
         nb.resize(static_cast<std::size_t>(keep));
-        std::sort(nb.begin(), nb.end(),
-                  [](const auto& a, const auto& b) { return a.first < b.first; });
+        std::sort(nb.begin(), nb.end(), neighbor_less);
         candidate_set_[static_cast<std::size_t>(i)].reserve(static_cast<std::size_t>(keep));
         for (const auto& p : nb) {
             candidate_set_[static_cast<std::size_t>(i)].push_back(p.second);
@@ -3054,7 +3791,7 @@ bool looksLikePlainMatrix(const std::string& content)
     const std::string first_line = first_line_end == std::string::npos
         ? trimmed
         : trimmed.substr(0, first_line_end);
-    
+
     return first_line.find(':') == std::string::npos;
 }
 
@@ -3088,7 +3825,7 @@ TspProblem readTspProblem(std::istream& input)
     std::istringstream lines(content);
     std::string line;
     while (std::getline(lines, line)) {
-        
+
         line = trimCopy(line);
         if (line.empty()) {
             continue;

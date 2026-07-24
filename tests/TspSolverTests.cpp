@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <numeric>
@@ -269,6 +270,34 @@ struct BranchBoundSolverTestAccess {
     {
         BranchBoundSolver solver(std::move(matrix));
         return solver.exact_integer_costs_;
+    }
+
+    struct DiversifiedTourStats {
+        double initial_cost = std::numeric_limits<double>::infinity();
+        double diversified_cost = std::numeric_limits<double>::infinity();
+        std::size_t alternative_count = 0;
+        bool improved = false;
+    };
+
+    static DiversifiedTourStats diversifiedTourStats(
+        std::vector<std::vector<double>> matrix)
+    {
+        BranchBoundSolver solver(std::move(matrix));
+        std::vector<int> tour;
+        std::vector<BranchBoundSolver::TourCandidate> alternatives;
+        double cost = std::numeric_limits<double>::infinity();
+        if (!solver.findInitialTour(tour, cost, alternatives)) {
+            return {};
+        }
+
+        DiversifiedTourStats stats;
+        stats.initial_cost = solver.tourCost(tour);
+        stats.alternative_count = alternatives.size();
+        stats.improved = solver.improveInitialTourDiversified(
+            alternatives, -std::numeric_limits<double>::infinity(),
+            tour, cost);
+        stats.diversified_cost = solver.tourCost(tour);
+        return stats;
     }
 };
 
@@ -829,6 +858,67 @@ void testExactIntegerPruningDomain()
     }
 }
 
+void testDiversifiedInitialTourPool()
+{
+    std::ifstream input(
+        std::string(TSP_TEST_SOURCE_DIR)
+        + "/data/classic/tsplib/st70.tsp");
+    if (!input) {
+        throw std::runtime_error("cannot open st70 diversified-tour regression");
+    }
+    const tsp::TspProblem problem = tsp::readTspProblem(input);
+    const auto stats = tsp::BranchBoundSolverTestAccess::diversifiedTourStats(
+        problem.toDenseMatrix(70));
+
+    expectCost(stats.initial_cost, 685.0,
+               "st70 single-start LK upper bound changed unexpectedly");
+    expectCost(stats.diversified_cost, 682.0,
+               "st70 diversified LK did not reproduce the tighter upper bound");
+    if (!stats.improved || stats.alternative_count < 12) {
+        throw std::runtime_error(
+            "st70 diversified-tour pool was not populated or used");
+    }
+}
+
+void testRootReducedCostFixing()
+{
+    std::ifstream input(
+        std::string(TSP_TEST_SOURCE_DIR)
+        + "/data/classic/tsplib/bayg29.tsp");
+    if (!input) {
+        throw std::runtime_error(
+            "cannot open bayg29 reduced-cost regression");
+    }
+    const tsp::TspProblem problem = tsp::readTspProblem(input);
+    tsp::BranchBoundSolver solver(problem.toDenseMatrix(29));
+    std::ostringstream debug;
+    solver.setDebugOutput(debug, std::numeric_limits<std::size_t>::max());
+    const tsp::SolveResult result = solver.solve();
+    expectCost(result.cost, 1610.0,
+               "bayg29 reduced-cost fixing changed the optimum");
+
+    const std::string debug_output = debug.str();
+    const std::string marker = "root reduced-cost fixing: tested=";
+    const std::size_t marker_pos = debug_output.find(marker);
+    if (marker_pos == std::string::npos) {
+        throw std::runtime_error(
+            "bayg29 did not exercise root reduced-cost fixing");
+    }
+    const std::size_t fixed_pos = debug_output.find("fixed_zero=", marker_pos);
+    if (fixed_pos == std::string::npos
+        || std::stoull(debug_output.substr(fixed_pos + 11)) == 0) {
+        throw std::runtime_error(
+            "bayg29 root reduced-cost fixing removed no edges");
+    }
+    const std::size_t forced_pos =
+        debug_output.find("fixed_one=", fixed_pos);
+    if (forced_pos == std::string::npos
+        || std::stoull(debug_output.substr(forced_pos + 10)) == 0) {
+        throw std::runtime_error(
+            "bayg29 root reduced-cost fixing forced no tree edges");
+    }
+}
+
 } // namespace
 
 int main()
@@ -854,6 +944,8 @@ int main()
         testProblemParsingDoesNotWriteStdout();
         testDistanceMatrixSymmetryIsExact();
         testExactIntegerPruningDomain();
+        testDiversifiedInitialTourPool();
+        testRootReducedCostFixing();
     } catch (const std::exception& error) {
         std::cerr << "tsp_solver_tests failed: " << error.what() << '\n';
         return 1;
