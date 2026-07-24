@@ -553,6 +553,44 @@ void testRandomSequentialForbids()
     }
 }
 
+void testPackedMstComponentWordBoundaries()
+{
+    for (const int n : {64, 65, 128, 129}) {
+        std::vector<std::vector<double>> matrix(
+            static_cast<std::size_t>(n),
+            std::vector<double>(static_cast<std::size_t>(n), 0.0));
+        for (int u = 0; u < n; ++u) {
+            for (int v = u + 1; v < n; ++v) {
+                const double weight = static_cast<double>(
+                    100000 + u * n + v);
+                matrix[static_cast<std::size_t>(u)]
+                      [static_cast<std::size_t>(v)] = weight;
+                matrix[static_cast<std::size_t>(v)]
+                      [static_cast<std::size_t>(u)] = weight;
+            }
+        }
+        for (int v = 2; v < n; ++v) {
+            const double weight = static_cast<double>(v);
+            matrix[static_cast<std::size_t>(v - 1)]
+                  [static_cast<std::size_t>(v)] = weight;
+            matrix[static_cast<std::size_t>(v)]
+                  [static_cast<std::size_t>(v - 1)] = weight;
+        }
+        matrix[0][1] = matrix[1][0] = 1.0;
+        matrix[0][static_cast<std::size_t>(n - 1)] =
+            matrix[static_cast<std::size_t>(n - 1)][0] = 2.0;
+
+        Fixture fixture(std::move(matrix));
+        const int left = n == 64 ? 62 : 63;
+        const int right = left + 1;
+        if (!fixture.contains(fixture.tree, left, right)) {
+            throw std::runtime_error(
+                "packed MST boundary fixture missed its path edge");
+        }
+        fixture.forbidAndCompare(left, right);
+    }
+}
+
 void testRandomSparseTiedForbids()
 {
     std::mt19937 generator(20260714);
@@ -935,6 +973,7 @@ int main()
         testOptionalRootReplacementWithForcedRootEdge();
         testMultipleForcedInternalEdges();
         testRandomSequentialForbids();
+        testPackedMstComponentWordBoundaries();
         testRandomSparseTiedForbids();
         testBpPrefixTreeRegressions();
         testScaleSafeExactSearch();
