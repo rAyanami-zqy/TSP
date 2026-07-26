@@ -118,16 +118,6 @@ private:
         Edge forbid_replacement;
     };
 
-    // 当前 1-tree 上一条可分支树边及其独立 best-replacement 代价。
-    // replacement_rank 指向 candidates_sorted_，供 cover 命中首项时直接复用。
-    struct ReplacementCoverCandidate {
-        Edge edge;
-        double safe_delta = 0.0;
-        int subtree_root = -1;
-        int replacement_rank = -1;
-        bool replacement_precomputed = false;
-    };
-
     // BP 集绝大多数只有 1~4 项。内联常见情况，只有更长的 BP 链才回退
     // heap vector，避免每个扩展节点都为短 B 集分配内存。
     struct BranchSet {
@@ -374,11 +364,6 @@ private:
     // ── BP (Branch Partitioning) 搜索 ──
     // 在当前 1-tree 上执行 BP 划分：依次测试前缀禁止约束并返回关键边集合 B。
     BranchSet bpPartition(PartialSol& node, OneTree& current_tree);
-    // 为最高度违规顶点关联的内部树边批量预计算 best replacement。
-    // 按 replacement delta 选择能闭合 incumbent gap 的最短 cover，并用
-    // 实际 prefix delta 验证、生成可直接重放的 B 集；失败则回退顺序 BP。
-    bool tryBestReplacementCover(
-        PartialSol& node, OneTree& current_tree, BranchSet& choices);
     // BP 递归搜索：在每个节点执行 BP 划分后枚举“前缀 forbid + 当前 force”子节点。
     void search(PartialSol& node, OneTree& current_tree, int depth,
                 bool count_node = true);
@@ -432,12 +417,6 @@ private:
     mutable std::vector<int> mst_component_right_;
     mutable bool mst_selected_component_is_left_ = true;
     mutable std::vector<std::uint64_t> mst_cut_candidate_bits_;
-    // replacement-cover 的批量基本割工作区。以违规顶点为根时，
-    // 每条关联树边对应一个互不相交子树，可在一次遍历中同时标记。
-    std::vector<ReplacementCoverCandidate> replacement_cover_candidates_;
-    std::vector<int> replacement_cover_component_;
-    std::vector<int> replacement_cover_stack_;
-    std::vector<std::uint64_t> replacement_cover_cut_bits_;
     DebugOptions debug_;
 
     // LK 候选集：每个顶点的 K 近邻，惰性初始化。
@@ -454,9 +433,6 @@ private:
     bool diversified_tour_attempted_ = false;
     bool restart_search_requested_ = false;
     SolveResult result_;
-    // cover 未闭合并回退顺序 BP 时，复用已预计算的第一步 replacement。
-    int replacement_cover_fallback_edge_rank_ = -1;
-    int replacement_cover_fallback_replacement_rank_ = -1;
 };
 
 // 自动识别本项目矩阵格式或 TSPLIB TSP 格式。

@@ -1,4 +1,36 @@
-# HKMST 2026-07-24 18:23 CST 实验快照
+# HKMST replacement-cover 实验与回退记录
+
+## 2026-07-26 当前分支状态
+
+`HKMST` 当前恢复为原顺序 degree-BP，不再调用最大收益
+replacement-cover。回退删除了 cover 候选、批量基本割、独立 delta
+排序、精确 prefix 验证及其 fallback replacement 缓存；以下优化继续保留：
+
+- 固定 Held-Karp 顶点势及相应安全数值下界；
+- 原 BP 的 singleton 强制传播；
+- 动态 1-tree replacement 与可逆 prefix 重放；
+- 65–128 点 MST 分量的双 64-bit word 快路径；
+- 有界直接 replacement 扫描及完整位图回退；
+- 64、65、128、129 点边界回归。
+
+回退前后均基于提交 `2d44b5a` 的其余代码。Release 构建使用
+AppleClang 17 和 `--exact-max-n 130`；短实例交错运行 25 轮，
+`eil101` 运行 7 轮，另对四实例整套交错运行 5 轮：
+
+| 实例 | cover 开启 | cover 移除 | 移除后变化 |
+|---|---:|---:|---:|
+| st70 | 0.2713 s | 0.2733 s | +0.76% |
+| eil76 | 0.2716 s | 0.2741 s | +0.89% |
+| rat99 | 0.1326 s | 0.1327 s | +0.11% |
+| eil101 | 3.0275 s | 3.0831 s | +1.84% |
+| 四实例整套 | 3.6582 s | 3.7239 s | +1.80% |
+
+两版在四个实例上的最优值、created、expanded、bound prune 和
+infeasible prune 逐项一致。回退约损失 1.8% wall time，但不改变这些实例的
+搜索树规模。当前分支以回退版本为准；下文保留 2026-07-24 cover 实验，
+仅作为历史实现与性能记录。
+
+## 2026-07-24 18:23 CST 实验快照
 
 ## 快照信息
 
@@ -6,7 +38,8 @@
 - 记录时间：2026-07-24 18:23 CST
 - 基线提交：`2825520`（`HKMST 2026-07-24 14:31 CST: preserve reduced-cost and BP hot-path gains`）
 - 内容：最大收益 replacement-cover B 集合、动态 MST replacement 热路径优化及边界回归
-- 状态：本文与对应源码、测试一起提交保存
+- 历史状态：本文曾与对应源码、测试一起提交；cover 已于 2026-07-26
+  从当前 `HKMST` 源码移除
 
 ## 结果摘要
 
