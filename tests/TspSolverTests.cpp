@@ -369,10 +369,12 @@ double bruteForceOptimalCost(const std::vector<std::vector<double>>& matrix)
 
 tsp::SolveResult solveAndCompareWithBruteForce(
     const std::vector<std::vector<double>>& matrix,
-    const std::string& case_name)
+    const std::string& case_name,
+    const tsp::BranchPotentialOptions& branch_potential_options = {})
 {
     const double expected = bruteForceOptimalCost(matrix);
     tsp::BranchBoundSolver solver(matrix);
+    solver.setBranchPotentialOptions(branch_potential_options);
     const tsp::SolveResult result = solver.solve();
 
     if (!std::isfinite(expected)) {
@@ -671,6 +673,62 @@ void testBpPrefixTreeRegressions()
         five_node, "five-node forced-prefix regression");
     expectCost(five_result.cost, 35.0,
                "five-node forced-prefix regression returned the wrong optimum");
+}
+
+void testBranchPotentialUpdatesAgainstBruteForce()
+{
+    tsp::BranchPotentialOptions options;
+    options.max_updates = 4;
+    options.min_gap_shrink_percent = 1.0;
+    options.after_search_incumbent = false;
+    options.reuse_last_one_tree_for_branching = true;
+
+    const std::vector<std::vector<double>> complete = {
+        {0, 585, 792, 891, 348, 768},
+        {585, 0, 249, 83, 294, 778},
+        {792, 249, 0, 14, 340, 834},
+        {891, 83, 14, 0, 530, 399},
+        {348, 294, 340, 530, 0, 325},
+        {768, 778, 834, 399, 325, 0},
+    };
+    const tsp::SolveResult complete_result = solveAndCompareWithBruteForce(
+        complete, "branch-potential complete regression", options);
+
+    const std::vector<std::vector<double>> sparse = {
+        {0, 585, inf, inf, 348, inf},
+        {585, 0, 249, 83, 294, inf},
+        {inf, 249, 0, 14, inf, inf},
+        {inf, 83, 14, 0, inf, 399},
+        {348, 294, inf, inf, 0, 325},
+        {inf, inf, inf, 399, 325, 0},
+    };
+    const tsp::SolveResult sparse_result = solveAndCompareWithBruteForce(
+        sparse, "branch-potential sparse regression", options);
+    (void)complete_result;
+    (void)sparse_result;
+
+    std::ifstream input(
+        std::string(TSP_TEST_SOURCE_DIR)
+        + "/data/classic/tsplib/bayg29.tsp");
+    if (!input) {
+        throw std::runtime_error(
+            "cannot open bayg29 branch-potential regression");
+    }
+    const tsp::TspProblem problem = tsp::readTspProblem(input);
+    tsp::BranchBoundSolver solver(problem.toDenseMatrix(29));
+    options.max_depth = 8;
+    solver.setBranchPotentialOptions(options);
+    const tsp::SolveResult result = solver.solve();
+    expectCost(result.cost, 1610.0,
+               "bayg29 branch-potential regression changed the optimum");
+    if (result.stats.branch_potential_updates == 0) {
+        throw std::runtime_error(
+            "bayg29 branch-potential regression exercised no updates");
+    }
+    if (result.stats.branch_potential_tree_reused == 0) {
+        throw std::runtime_error(
+            "bayg29 FULLHKMST regression reused no final 1-tree");
+    }
 }
 
 void testScaleSafeExactSearch()
@@ -976,6 +1034,7 @@ int main()
         testPackedMstComponentWordBoundaries();
         testRandomSparseTiedForbids();
         testBpPrefixTreeRegressions();
+        testBranchPotentialUpdatesAgainstBruteForce();
         testScaleSafeExactSearch();
         testMixedMagnitudeForceRollback();
         testRandomCompleteSolveAgainstBruteForce();

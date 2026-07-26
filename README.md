@@ -15,6 +15,9 @@
 - 根 1-tree 建立后使用 Held–Karp reduced cost 检查所有边：若强制一条
   非树边的下界已不能改善 incumbent，就永久停用该边；若禁止一条树边的
   replacement 下界已不能改善 incumbent，就将其强制为 `x_e=1` 并重建根树。
+- `FULLHKMST` 默认在每个可扩展节点从根势继续更新 32 轮，并把最后一轮
+  1-tree、局部候选排序和 best replacement 直接用于 BP；可用
+  `--fixed-root-bp` 恢复固定根势 HKMST 对照行为。
 - 初始上界使用多起点最近邻、`2-opt` 和 LK；不同的 NN+2-opt 局部最优
   会进入候选池，搜索节点超过自适应预算后追加多启动 LK。若上界改善，
   当前 DFS 会完整回退，并用新上界重新优化根势后重启。
@@ -108,6 +111,23 @@ cmake --build build --target tsp_bb_variants
 
 分支定界具有指数级最坏复杂度，实际使用仍应优先从小实例开始。
 
+`FULLHKMST` 默认在每个节点固定更新 32 轮，停止阈值为 0。最后一轮势对应的
+1-tree 会直接复用于 BP 的最佳替换边和 B 集获取：
+
+```bash
+./build/tsp_bb data/classic/tsplib/eil101.tsp
+```
+
+`--branch-potential-updates n` 可修改固定轮数；也可用
+`--branch-potential-min-shrink-percent p` 和
+`--branch-potential-shrink-window n` 启用窗口收缩率停止条件。
+`--branch-potential-depth-interval n` 可以只在深度为 `n` 的倍数时更新；
+`--branch-potential-after-search-incumbent` 会延迟到精确搜索首次改善
+incumbent 后再启用。`--fixed-root-bp` 同时关闭节点势更新和最终树 BP
+复用，作为 HKMST 性能对照。该功能是性能实验，当前 wall time 明显慢于
+固定根势版本，详见
+`docs/FULLHKMST-2026-07-26-final-tree-bp.md`。
+
 查看主求解过程中的实时 debug 输出：
 
 ```bash
@@ -138,7 +158,7 @@ debug 信息写到标准错误，不会破坏批处理模式的 CSV 标准输出
 输出是 CSV，字段为：
 
 ```text
-instance,status,method,dimension,cost,root_lower_bound,initial_upper_bound,nodes_created,nodes_expanded,pruned_by_bound,pruned_infeasible,tour,message
+instance,status,method,dimension,cost,root_lower_bound,initial_upper_bound,nodes_created,nodes_expanded,pruned_by_bound,pruned_infeasible,branch_potential_calls,branch_potential_updates,branch_potential_pruned,branch_potential_tree_reused,branch_potential_bound_gain,branch_potential_average_gap_shrink_percent,tour,message
 ```
 
 `status=ok,method=exact` 表示精确求解得到最优 tour；精确搜索证实无解时为 `status=infeasible`。每个实例的 debug 信息仍只写到标准错误。

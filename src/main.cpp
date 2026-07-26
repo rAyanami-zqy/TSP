@@ -20,6 +20,17 @@ struct CliOptions {
     std::size_t exact_max_n = 10000;
     bool debug = false;
     std::size_t debug_interval = 10000;
+    // FULLHKMST 分支默认在每个搜索节点固定更新 32 轮，并把最后一轮
+    // 1-tree 直接交给 BP。0.1% 窗口在实测中会因最终树/BP 顺序变化导致
+    // 灾难性退化，因此默认只使用轮数停止；阈值仍可通过 CLI 显式实验。
+    std::size_t branch_potential_updates = 32;
+    double branch_potential_min_shrink_percent = 0.0;
+    std::size_t branch_potential_max_depth =
+        std::numeric_limits<std::size_t>::max();
+    std::size_t branch_potential_depth_interval = 1;
+    bool branch_potential_after_search_incumbent = false;
+    std::size_t branch_potential_shrink_window = 8;
+    bool reuse_last_one_tree_for_branching = true;
 };
 
 struct RunResult {
@@ -123,6 +134,14 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
 
     auto distance = problem.toDenseMatrix(options.exact_max_n);
     tsp::BranchBoundSolver solver(std::move(distance));
+    solver.setBranchPotentialOptions(tsp::BranchPotentialOptions{
+        options.branch_potential_updates,
+        options.branch_potential_min_shrink_percent,
+        options.branch_potential_max_depth,
+        options.branch_potential_depth_interval,
+        options.branch_potential_after_search_incumbent,
+        options.branch_potential_shrink_window,
+        options.reuse_last_one_tree_for_branching});
     if (options.debug) {
         solver.setDebugOutput(std::cerr, options.debug_interval);
     }
@@ -147,6 +166,22 @@ void printHumanResult(const RunResult& run)
     std::cout << "Nodes expanded: " << result.stats.nodes_expanded << '\n';
     std::cout << "Pruned by bound: " << result.stats.nodes_pruned_by_bound << '\n';
     std::cout << "Pruned infeasible: " << result.stats.nodes_pruned_infeasible << '\n';
+    std::cout << "Branch potential calls: "
+              << result.stats.branch_potential_calls << '\n';
+    std::cout << "Branch potential updates: "
+              << result.stats.branch_potential_updates << '\n';
+    std::cout << "Branch potential pruned: "
+              << result.stats.branch_potential_pruned << '\n';
+    std::cout << "Branch potential trees reused for BP: "
+              << result.stats.branch_potential_tree_reused << '\n';
+    std::cout << "Branch potential bound gain: "
+              << result.stats.branch_potential_bound_gain << '\n';
+    const double average_gap_shrink_percent =
+        result.stats.branch_potential_calls == 0 ? 0.0
+        : result.stats.branch_potential_gap_shrink_percent_sum
+            / static_cast<double>(result.stats.branch_potential_calls);
+    std::cout << "Branch potential average gap shrink percent: "
+              << average_gap_shrink_percent << '\n';
 
     if (!result.feasible) {
         std::cout << "No feasible Hamiltonian tour found.\n";
@@ -185,7 +220,12 @@ void printBatchHeader()
 {
     std::cout
         << "instance,status,method,dimension,cost,root_lower_bound,initial_upper_bound,"
-        << "nodes_created,nodes_expanded,pruned_by_bound,pruned_infeasible,tour,message\n";
+        << "nodes_created,nodes_expanded,pruned_by_bound,pruned_infeasible,"
+        << "branch_potential_calls,branch_potential_updates,branch_potential_pruned,"
+        << "branch_potential_tree_reused,"
+        << "branch_potential_bound_gain,"
+        << "branch_potential_average_gap_shrink_percent,"
+        << "tour,message\n";
 }
 
 // 输出一条批处理记录。result 为空表示文件读取或解析阶段已经失败。
@@ -199,7 +239,7 @@ void printBatchRow(const std::string& path,
 
     if (run == nullptr) {
         // 读取失败、解析失败等情况没有求解统计，只保留错误信息。
-        std::cout << ",,,,,,,,,,"
+        std::cout << ",,,,,,,,,,,,,,,,"
                   << csvQuote(message) << '\n';
         return;
     }
@@ -215,6 +255,15 @@ void printBatchRow(const std::string& path,
               << result.stats.nodes_expanded << ','
               << result.stats.nodes_pruned_by_bound << ','
               << result.stats.nodes_pruned_infeasible << ','
+              << result.stats.branch_potential_calls << ','
+              << result.stats.branch_potential_updates << ','
+              << result.stats.branch_potential_pruned << ','
+              << result.stats.branch_potential_tree_reused << ','
+              << formatDouble(result.stats.branch_potential_bound_gain) << ','
+              << formatDouble(result.stats.branch_potential_calls == 0 ? 0.0
+                     : result.stats.branch_potential_gap_shrink_percent_sum
+                         / static_cast<double>(
+                             result.stats.branch_potential_calls)) << ','
               << csvQuote(formatTourLimited(result.tour)) << ','
               << csvQuote(message) << '\n';
 }
@@ -282,7 +331,15 @@ void printUsage(const char* program)
               << "\nOptions:\n"
               << "  --exact-max-n <n>\n"
               << "  --debug\n"
-              << "  --debug-interval <n>\n";
+              << "  --debug-interval <n>\n"
+              << "  --branch-potential-updates <n>\n"
+              << "  --branch-potential-min-shrink-percent <percent>\n"
+              << "  --branch-potential-max-depth <n>\n"
+              << "  --branch-potential-depth-interval <n>\n"
+              << "  --branch-potential-after-search-incumbent\n"
+              << "  --branch-potential-shrink-window <n>\n"
+              << "  --full-hkmst\n"
+              << "  --fixed-root-bp\n";
 }
 
 std::size_t parseSizeOption(const std::string& value, const std::string& name)
@@ -304,6 +361,23 @@ std::size_t parseSizeOption(const std::string& value, const std::string& name)
         throw std::runtime_error("invalid numeric value for " + name + ": " + value);
     }
     return static_cast<std::size_t>(result);
+}
+
+double parseDoubleOption(const std::string& value, const std::string& name)
+{
+    std::size_t parsed = 0;
+    double result = 0.0;
+    try {
+        result = std::stod(value, &parsed);
+    } catch (const std::exception&) {
+        throw std::runtime_error(
+            "invalid numeric value for " + name + ": " + value);
+    }
+    if (parsed != value.size() || !std::isfinite(result)) {
+        throw std::runtime_error(
+            "invalid numeric value for " + name + ": " + value);
+    }
+    return result;
 }
 
 CliOptions parseArgs(int argc, char** argv)
@@ -335,6 +409,44 @@ CliOptions parseArgs(int argc, char** argv)
             if (options.debug_interval == 0) {
                 throw std::runtime_error("--debug-interval must be greater than zero");
             }
+        } else if (arg == "--branch-potential-updates") {
+            options.branch_potential_updates =
+                parseSizeOption(require_value(arg), arg);
+        } else if (arg == "--branch-potential-min-shrink-percent") {
+            options.branch_potential_min_shrink_percent =
+                parseDoubleOption(require_value(arg), arg);
+            if (options.branch_potential_min_shrink_percent < 0.0) {
+                throw std::runtime_error(
+                    "--branch-potential-min-shrink-percent must be non-negative");
+            }
+        } else if (arg == "--branch-potential-max-depth") {
+            options.branch_potential_max_depth =
+                parseSizeOption(require_value(arg), arg);
+        } else if (arg == "--branch-potential-depth-interval") {
+            options.branch_potential_depth_interval =
+                parseSizeOption(require_value(arg), arg);
+            if (options.branch_potential_depth_interval == 0) {
+                throw std::runtime_error(
+                    "--branch-potential-depth-interval must be greater than zero");
+            }
+        } else if (arg == "--branch-potential-after-search-incumbent") {
+            options.branch_potential_after_search_incumbent = true;
+        } else if (arg == "--branch-potential-shrink-window") {
+            options.branch_potential_shrink_window =
+                parseSizeOption(require_value(arg), arg);
+            if (options.branch_potential_shrink_window == 0) {
+                throw std::runtime_error(
+                    "--branch-potential-shrink-window must be greater than zero");
+            }
+        } else if (arg == "--full-hkmst") {
+            options.reuse_last_one_tree_for_branching = true;
+            if (options.branch_potential_updates == 0) {
+                options.branch_potential_updates = 32;
+            }
+        } else if (arg == "--fixed-root-bp") {
+            options.reuse_last_one_tree_for_branching = false;
+            options.branch_potential_updates = 0;
+            options.branch_potential_min_shrink_percent = 0.0;
         } else if (!arg.empty() && arg[0] == '-') {
             throw std::runtime_error("unknown option: " + arg);
         } else if (options.input_path.empty()) {
@@ -342,6 +454,12 @@ CliOptions parseArgs(int argc, char** argv)
         } else {
             throw std::runtime_error("multiple input files provided");
         }
+    }
+    if (options.branch_potential_min_shrink_percent > 0.0
+        && options.branch_potential_updates == 0) {
+        throw std::runtime_error(
+            "--branch-potential-min-shrink-percent requires "
+            "--branch-potential-updates greater than zero");
     }
     return options;
 }

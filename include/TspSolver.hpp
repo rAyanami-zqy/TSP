@@ -16,6 +16,12 @@ struct SolveStats {
     std::size_t nodes_expanded = 0;
     std::size_t nodes_pruned_by_bound = 0;
     std::size_t nodes_pruned_infeasible = 0;
+    std::size_t branch_potential_calls = 0;
+    std::size_t branch_potential_updates = 0;
+    std::size_t branch_potential_pruned = 0;
+    std::size_t branch_potential_tree_reused = 0;
+    double branch_potential_bound_gain = 0.0;
+    double branch_potential_gap_shrink_percent_sum = 0.0;
     double root_lower_bound = 0.0;
     double initial_upper_bound = 0.0;
 };
@@ -32,6 +38,21 @@ struct SolveResult {
 struct DebugOptions {
     std::ostream* output = nullptr;
     std::size_t interval = 1000;
+};
+
+// 分支节点 Held-Karp 势更新实验。max_updates=0 保持固定根势基线；
+// min_gap_shrink_percent=0 时只由 max_updates 限制更新轮数。否则每个
+// shrink_window 以 (UB-LB) 的相对收缩率衡量收益，低于阈值后停止。
+struct BranchPotentialOptions {
+    std::size_t max_updates = 0;
+    double min_gap_shrink_percent = 0.0;
+    std::size_t max_depth = std::numeric_limits<std::size_t>::max();
+    std::size_t depth_interval = 1;
+    bool after_search_incumbent = false;
+    std::size_t shrink_window = 8;
+    // FULLHKMST：每个节点使用最后一轮势对应的 1-tree 和边权进行 BP，
+    // 不再回到固定根势树。该模式会完整重算子节点，避免跨势复用动态 MST。
+    bool reuse_last_one_tree_for_branching = false;
 };
 
 struct Point {
@@ -80,6 +101,7 @@ public:
     // 开启 / 关闭精确求解过程中的 stderr 等调试输出。
     void setDebugOutput(std::ostream& output, std::size_t progress_interval = 1000);
     void disableDebugOutput();
+    void setBranchPotentialOptions(const BranchPotentialOptions& options);
     // 求解 TSP，返回求解结果和搜索统计。
     SolveResult solve();
 
@@ -116,6 +138,16 @@ private:
         bool replay_requires_rebuild = false;
         std::size_t tree_edge_index = 0;
         Edge forbid_replacement;
+    };
+
+    // 当前 1-tree 上一条可分支树边及其独立 best-replacement 代价。
+    // replacement_rank 指向 candidates_sorted_，供 cover 命中首项时直接复用。
+    struct ReplacementCoverCandidate {
+        Edge edge;
+        double safe_delta = 0.0;
+        int subtree_root = -1;
+        int replacement_rank = -1;
+        bool replacement_precomputed = false;
     };
 
     // BP 集绝大多数只有 1~4 项。内联常见情况，只有更长的 BP 链才回退
@@ -197,6 +229,17 @@ private:
         bool proves_no_improvement = false;
     };
 
+    struct BranchPotentialResult {
+        bool feasible = true;
+        double bound = -std::numeric_limits<double>::infinity();
+        std::size_t updates = 0;
+        double gap_shrink_percent = 0.0;
+        std::vector<double> potentials;
+        std::vector<Edge> candidates;
+        std::vector<Edge> root_candidates;
+        OneTree final_tree;
+    };
+
     // 分支定界节点（部分解 P）：
     // forced 表示必须选择的边，forbidden 表示禁止选择的边。
     // 同时维护 forced 边的并查集和度数统计，加速 1-tree 计算与候选集筛选。
@@ -249,6 +292,20 @@ private:
     // 仅在根节点用次梯度法优化一次 Held-Karp 顶点势；搜索期间固定不变，
     // 因而候选排序和动态 MST replacement 仍可复用。
     void optimizeRootPotentials(double upper_bound);
+    // 从固定根势出发，在当前分支约束下短程更新势。返回值只强化该节点
+    // 的对偶下界；搜索树仍使用固定势的 OneTree，保持动态 MST 排序不变量。
+    BranchPotentialResult optimizeBranchPotentials(
+        const PartialSol& node, const OneTree& current_tree,
+        double upper_bound) const;
+    bool evaluateBranchPotentials(
+        const PartialSol& node, const std::vector<double>& potentials,
+        double& bound, std::vector<int>& degree) const;
+    // 在指定节点势下构造完整的局部候选排序与受约束 1-tree。
+    // FULLHKMST 只在势迭代结束后调用一次，并把该树直接交给 BP。
+    OneTree buildPotentialOneTree(
+        const PartialSol& node, const std::vector<double>& potentials,
+        std::vector<Edge>& candidates,
+        std::vector<Edge>& root_candidates) const;
     double adjustedEdgeWeight(int u, int v) const;
     // 禁用当前 1-tree 中的一条未强制边后，使用 MST replacement edge 增量更新。
     // 根边可用性由生产 active bitset（局部兼容路径为 candidate_mask）判定。
@@ -364,9 +421,32 @@ private:
     // ── BP (Branch Partitioning) 搜索 ──
     // 在当前 1-tree 上执行 BP 划分：依次测试前缀禁止约束并返回关键边集合 B。
     BranchSet bpPartition(PartialSol& node, OneTree& current_tree);
+    BranchSet bpPartitionWithPotentials(
+        PartialSol& node, OneTree current_tree,
+        const std::vector<Edge>& candidates,
+        const std::vector<Edge>& root_candidates);
+    bool tryBestReplacementCoverWithPotentials(
+        PartialSol& node, const OneTree& current_tree,
+        const std::vector<Edge>& candidates,
+        const std::vector<Edge>& root_candidates,
+        BranchSet& choices);
+    const Edge* findMstReplacementWithPotentials(
+        const PartialSol& node, const std::vector<Edge>& candidates,
+        const OneTree& tree, const Edge& removed_edge) const;
+    bool updatePotentialOneTreeAfterForbid(
+        const PartialSol& node, const std::vector<Edge>& candidates,
+        const std::vector<Edge>& root_candidates,
+        OneTree& tree, const Edge& forbidden_edge) const;
+    // 为最高度违规顶点关联的内部树边批量预计算 best replacement。
+    // 按 replacement delta 选择能闭合 incumbent gap 的最短 cover，并用
+    // 实际 prefix delta 验证、生成可直接重放的 B 集；失败则回退顺序 BP。
+    bool tryBestReplacementCover(
+        PartialSol& node, OneTree& current_tree, BranchSet& choices);
     // BP 递归搜索：在每个节点执行 BP 划分后枚举“前缀 forbid + 当前 force”子节点。
     void search(PartialSol& node, OneTree& current_tree, int depth,
                 bool count_node = true);
+    void searchFullHkmst(
+        PartialSol& node, int depth, bool count_node = true);
 
     // 顶点数。
     int n_ = 0;
@@ -377,6 +457,7 @@ private:
     std::vector<double> vertex_potential_;
     double potential_correction_ = 0.0;
     double potential_roundoff_guard_ = 0.0;
+    BranchPotentialOptions branch_potential_options_;
     // 原问题所有有限边均为精确整数且任意 n 边和不超过 2^53 时，tour
     // 成本为精确整数；Held-Karp 浮点下界可向上取整后参与安全剪枝。
     bool exact_integer_costs_ = false;
@@ -417,6 +498,12 @@ private:
     mutable std::vector<int> mst_component_right_;
     mutable bool mst_selected_component_is_left_ = true;
     mutable std::vector<std::uint64_t> mst_cut_candidate_bits_;
+    // replacement-cover 的批量基本割工作区。以违规顶点为根时，
+    // 每条关联树边对应一个互不相交子树，可在一次遍历中同时标记。
+    std::vector<ReplacementCoverCandidate> replacement_cover_candidates_;
+    std::vector<int> replacement_cover_component_;
+    std::vector<int> replacement_cover_stack_;
+    std::vector<std::uint64_t> replacement_cover_cut_bits_;
     DebugOptions debug_;
 
     // LK 候选集：每个顶点的 K 近邻，惰性初始化。
@@ -432,7 +519,11 @@ private:
     std::vector<TourCandidate> initial_tour_alternatives_;
     bool diversified_tour_attempted_ = false;
     bool restart_search_requested_ = false;
+    bool search_incumbent_improved_ = false;
     SolveResult result_;
+    // cover 未闭合并回退顺序 BP 时，复用已预计算的第一步 replacement。
+    int replacement_cover_fallback_edge_rank_ = -1;
+    int replacement_cover_fallback_replacement_rank_ = -1;
 };
 
 // 自动识别本项目矩阵格式或 TSPLIB TSP 格式。
