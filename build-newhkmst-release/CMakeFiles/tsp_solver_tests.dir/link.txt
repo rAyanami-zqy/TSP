@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/tsp_solver_tests.dir/tests/TspSolverTests.cpp.o CMakeFiles/tsp_solver_tests.dir/src/TspSolver.cpp.o -o tsp_solver_tests 

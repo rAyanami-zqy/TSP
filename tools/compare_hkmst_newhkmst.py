@@ -87,13 +87,6 @@ NEWHKMST_DEFAULT_ARGS = (
 # Same source layout as compare_strategies.py, with the requested n < 200 cap.
 INSTANCE_SOURCES: tuple[dict[str, Any], ...] = (
     {
-        "path": "examples",
-        "recursive": True,
-        "skip_dirs": {"tsplib"},
-        "skip_files": set(),
-        "extensions": (".txt", ".tsp"),
-    },
-    {
         "path": "data/classic/tsplib",
         "recursive": False,
         "skip_dirs": set(),

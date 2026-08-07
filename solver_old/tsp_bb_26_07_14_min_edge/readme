@@ -1,0 +1,58 @@
+# tsp_bb 2026-07-14 min-edge
+
+这是 `07_14` 的 min-edge 分支策略 + 增量 1-tree 实验配置。
+
+## 分支
+
+- 开发分支：`main`
+- 当前提交：`69cc86d`
+
+## 配置
+
+- 分支策略：从当前 1-tree 的全部未决边中选择最轻边，不先限定度数违规顶点。
+- 1-tree：子节点优先继承父节点 1-tree，并对被移除的树边做增量 replacement。
+- 安全回退：增量结果不能满足当前 forced/forbidden 约束或结构校验时，从当前节点约束完整重建 1-tree。
+- 编译宏：定义 `TSP_BRANCH_STRATEGY_MIN_EDGE=1`，不定义 `TSP_DISABLE_INCREMENTAL_ONETREE`。
+
+它与默认 `deg` 配置共享同一份源码，差异由编译宏控制。
+
+## 可复现源码提交
+
+- 源码提交：`313143543b29a3ed469e5296f5356b4ddc12109d`
+- 提交说明：`Fix 07_14 BP correctness and reproducible builds`
+- CMake 目标：`tsp_bb_26_07_14_min_edge`
+
+在其他系统编译前，先确认工作树基于该提交：
+
+```bash
+git checkout --detach 313143543b29a3ed469e5296f5356b4ddc12109d
+git rev-parse HEAD
+```
+
+第二条命令必须输出上述完整 hash。若该提交尚未出现在目标系统的仓库中，需要先从包含它的远端执行 `git fetch`。
+
+## 从固定提交构建
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target tsp_bb_26_07_14_min_edge
+```
+
+生成物是 `build/tsp_bb_26_07_14_min_edge`。本目录中的 `tsp_bb` 是历史归档产物，并非上述提交在当前系统上的构建结果；验证时应重新构建。
+
+一次构建四个实验变体可运行：
+
+```bash
+cmake --build build --target tsp_bb_variants
+```
+
+## 正确性验证
+
+默认 `tsp_solver_tests` 验证主 `deg + incremental` 配置。要验证本策略的端到端结果，可用本目标配合 `tools/verify_instances.py` 对小实例执行 Held-Karp 独立校验：
+
+```bash
+python3 tools/verify_instances.py --batch-list examples/batch.txt \
+  --solver ./build/tsp_bb_26_07_14_min_edge
+```
+
+不再引用无法由当前测试命令复现的历史通过次数。

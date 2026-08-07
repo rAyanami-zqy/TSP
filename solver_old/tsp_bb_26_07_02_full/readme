@@ -1,0 +1,80 @@
+# tsp_bb 2026-07-02 rebuilt full — smart DFS + full-rebuild 1-tree
+
+这是 rebuilt `07_02` 的 full 对照版：不执行 BP 划分，只使用历史 smart 选边做 force/forbid 二分 DFS，并在每个子节点完整重建 1-tree。
+
+## 分支与版本
+
+- 实验标签：`26_07_02_full`
+- 重构日期：`2026-07-15`
+- 开发与归档分支：`refactor/07_02-smart-dfs`
+- `main` 基线提交：`5b79f2dbc07c45817ab2848b3b7d2909ef573d06`
+- 可复现源码提交：`997e472e9b90861343812842951bfe5d8cb7e976`
+- 源码提交说明：`Rebuild 07_02 smart DFS solver variants`
+- 二进制归档提交：`d8d910af2e15b438ac06507c2ea58984466098d1`
+- 归档提交说明：`Archive rebuilt 07_02 smart solver variants`
+- CMake 目标：`tsp_bb_26_07_02_full`
+- 历史 smart 语义参考提交：`c4e5aa6572ba618578903ca6528c8588d0611c45`
+
+本版是基于当前实现的 rebuilt 版，不是提交 `767d64a` 中历史归档二进制的逐字节复刻。
+
+## 算法配置
+
+- 搜索：不执行 BP/A-B 划分；每个节点只选一条边，按 `force -> forbid` 顺序生成两个互斥子节点。
+- smart 选边：与 incremental 版完全相同——先选 1-tree 中度数最大且 `degree > 2` 的顶点，再取其关联的最轻未决树边；无法选取时，依次回退到全部 1-tree 未决边和全部候选边中的最轻边。
+- 1-tree：禁用父树的增量 replacement 复用；force 和 forbid 子节点都依据当前 forced/forbidden 约束完整调用 `computeOneTree`。
+- 编译宏：定义 `TSP_DISABLE_BP=1` 和 `TSP_DISABLE_INCREMENTAL_ONETREE=1`；不定义 `TSP_BRANCH_STRATEGY_MIN_EDGE`。
+- CLI 兼容：`--branch-strategy smart` 可省略；其他策略会被拒绝。
+
+与 `tsp_bb_26_07_02` 的唯一算法配置差异是子节点 1-tree 的增量维护与完整重建；搜索、选边、上界和剪枝逻辑共享同一份源码。
+
+## 在其他服务器复现编译
+
+先确保分支 `refactor/07_02-smart-dfs` 已推送到 `origin`，然后执行：
+
+```bash
+git fetch origin
+git show-ref --verify refs/remotes/origin/refactor/07_02-smart-dfs
+git checkout --detach 997e472e9b90861343812842951bfe5d8cb7e976
+git rev-parse HEAD
+
+cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+cmake --build build-release --target tsp_bb_26_07_02_full --parallel
+```
+
+`git rev-parse HEAD` 必须输出 `997e472e9b90861343812842951bfe5d8cb7e976`。生成物为 `build-release/tsp_bb_26_07_02_full`。如需将它归档到本目录：
+
+```bash
+cmake -E copy build-release/tsp_bb_26_07_02_full solver/tsp_bb_26_07_02_full/tsp_bb
+```
+
+一次构建 incremental/full 两个目标可执行：
+
+```bash
+cmake --build build-release --target tsp_bb_26_07_02_variants --parallel
+```
+
+## 验证
+
+```bash
+cmake --build build-release --target tsp_solver_26_07_02_full_tests --parallel
+ctest --test-dir build-release -R '^tsp_solver_26_07_02_full_tests$' --output-on-failure
+
+python3 tools/verify_instances.py --batch-list examples/batch.txt \
+  --solver ./build-release/tsp_bb_26_07_02_full
+```
+
+full 测试目标复用统一回归套件；其端到端 `solve()` 路径定义 `TSP_DISABLE_INCREMENTAL_ONETREE=1`，因此 smart DFS 的所有子节点均走完整 1-tree 重建。套件中独立的 replacement helper 单元测试仍会直接测试共享函数，不代表 full 搜索路径使用增量计算。
+
+## 归档二进制
+
+- 文件：`solver/tsp_bb_26_07_02_full/tsp_bb`
+- 构建平台：macOS `15.5` / Darwin `24.5.0` / `arm64`
+- 编译器：Apple clang `17.0.0`
+- CMake：`4.3.2`
+- SHA-256：`a577447661960c3476c7ca2529d085556199ca38fb94d674caf6c2d24479657e`
+
+归档二进制是平台相关的；Linux/x86-64 或其他服务器应使用上述固定提交在本机重新编译，不应直接复用该 Mach-O 文件。
+
+## 重跑历史对比的缓存提醒
+
+`tools/compare_strategies.py` 的缓存键不包含二进制 hash。如果需要与旧 `07_02` 数据重新对比，运行前应备份并删除已忽略的 `docs/comparison-cache.json`，避免复用历史缓存。

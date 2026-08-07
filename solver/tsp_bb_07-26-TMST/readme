@@ -1,0 +1,12 @@
+# 版本概览
+1. 分支来源：origin/TMST (2026-07-24 13:22 CST)
+2. 提交：20e37bc - TMST: save adaptive replacement-cover experiment
+3. 基本特性：
+    1. 基于 MST 分支 (f36d206) 的增强变体
+    2. 自适应 replacement-cover 实验
+    3. 增量 MST/1-tree 下界
+    4. BP singleton 保留 + hot-path 优化
+    5. O(1) edge_index_in_tree 位图查询
+    6. MST replacement 和 candidate tracking 优化
+4. 上界：最近邻 + 2-opt
+5. 与 MST 差异：replacement-cover 策略的自适应实验版本

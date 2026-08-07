@@ -1,0 +1,7 @@
+tsp_solver_no_val_tests 3 0.00624588
+tsp_solver_tests 2 0.0100989
+tsp_cli_exact 1 0.00441932
+tsp_cli_exact_limit_rejected 1 0.00434393
+tsp_cli_tsplib 1 0.00455418
+tsp_solver_min_edge_no_val_tests 1 0.0191926
+---

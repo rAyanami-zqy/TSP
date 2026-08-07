@@ -1,0 +1,11 @@
+# 版本概览
+1. 分支来源：origin/MST (2026-07-24 11:05 CST)
+2. 提交：f36d206 - MST: preserve BP singleton and hot-path optimizations
+3. 基本特性：
+    1. 分支策略：度数违规 (deg) + BP 多路分支
+    2. 增量 MST/1-tree 下界
+    3. O(1) edge_index_in_tree 位图查询
+    4. MST replacement 路径优化
+    5. BP singleton 保留优化
+    6. 全局边预排序 + forbid 分支快速候选集迭代
+4. 上界：最近邻 + 2-opt

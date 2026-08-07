@@ -1,0 +1,13 @@
+# 版本概览
+1. 分支来源：origin/HKMST (2026-07-26 15:55 CST)
+2. 提交：e9bd24f - HKMST: restore sequential BP
+3. 基本特性：
+    1. 基于 MST 分支的 Held-Karp 增强变体
+    2. 固定根 Held-Karp 势能下界
+    3. HK reduced cost 边过滤：非树边若下界不能改善则永久停用，
+       树边若 replacement 下界不能改善则强制加入并重建根树
+    4. replacement-cover + MST 快速路径
+    5. BP singleton 保留优化
+    6. O(1) edge_index_in_tree 位图查询
+4. 上界：多起点最近邻 + 2-opt + LK，自适应多启动 LK
+   搜索节点超预算后追加；上界改善时 DFS 完整回退并用新上界重新优化根势
