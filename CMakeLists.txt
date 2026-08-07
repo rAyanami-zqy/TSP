@@ -26,7 +26,7 @@ endfunction()
 # macro defined, the implementation is the 2026-07-14 degree/incremental
 # variant used by the main `tsp_bb` target.
 function(tsp_add_solver target)
-    set(options EXCLUDE_FROM_ALL MIN_EDGE FULL_ONETREE)
+    set(options EXCLUDE_FROM_ALL MIN_EDGE FULL_ONETREE SKIP_INCREMENTAL_VALIDATION)
     cmake_parse_arguments(VARIANT "${options}" "" "" ${ARGN})
 
     if(VARIANT_EXCLUDE_FROM_ALL)
@@ -49,6 +49,9 @@ function(tsp_add_solver target)
     if(VARIANT_FULL_ONETREE)
         target_compile_definitions(${target} PRIVATE TSP_DISABLE_INCREMENTAL_ONETREE=1)
     endif()
+    if(VARIANT_SKIP_INCREMENTAL_VALIDATION)
+        target_compile_definitions(${target} PRIVATE TSP_DISABLE_INCREMENTAL_VALIDATION=1)
+    endif()
 endfunction()
 
 # Default/main executable: 2026-07-14 degree strategy + incremental 1-tree.
@@ -60,6 +63,14 @@ tsp_add_solver(tsp_bb_26_07_14_deg EXCLUDE_FROM_ALL)
 tsp_add_solver(tsp_bb_26_07_14_min_edge EXCLUDE_FROM_ALL MIN_EDGE)
 tsp_add_solver(tsp_bb_26_07_14_full_deg EXCLUDE_FROM_ALL FULL_ONETREE)
 tsp_add_solver(tsp_bb_26_07_14_full_min_edge EXCLUDE_FROM_ALL MIN_EDGE FULL_ONETREE)
+
+# Validation-disabled variants: skip oneTreeSatisfiesConstraints after each
+# incremental update. For full-rebuild variants the macro is a no-op but
+# targets are provided for consistent benchmarking.
+tsp_add_solver(tsp_bb_26_07_14_deg_no_val EXCLUDE_FROM_ALL SKIP_INCREMENTAL_VALIDATION)
+tsp_add_solver(tsp_bb_26_07_14_min_edge_no_val EXCLUDE_FROM_ALL MIN_EDGE SKIP_INCREMENTAL_VALIDATION)
+tsp_add_solver(tsp_bb_26_07_14_full_deg_no_val EXCLUDE_FROM_ALL FULL_ONETREE SKIP_INCREMENTAL_VALIDATION)
+tsp_add_solver(tsp_bb_26_07_14_full_min_edge_no_val EXCLUDE_FROM_ALL MIN_EDGE FULL_ONETREE SKIP_INCREMENTAL_VALIDATION)
 
 add_custom_target(tsp_bb_variants
     DEPENDS
@@ -83,6 +94,33 @@ if(BUILD_TESTING)
     target_compile_definitions(tsp_solver_tests PRIVATE TSP_VERIFY_INCREMENTAL_STATE=1)
     add_dependencies(tsp_solver_tests tsp_bb)
     add_test(NAME tsp_solver_tests COMMAND tsp_solver_tests)
+
+    # Exercise the no-validation code path with VERIFY_INCREMENTAL_STATE
+    # enabled — verifies incremental logic is correct without the safety check.
+    add_executable(tsp_solver_no_val_tests
+        tests/TspSolverTests.cpp
+        src/TspSolver.cpp
+    )
+    tsp_apply_common_settings(tsp_solver_no_val_tests)
+    target_compile_definitions(tsp_solver_no_val_tests PRIVATE
+        TSP_DISABLE_INCREMENTAL_VALIDATION=1
+        TSP_VERIFY_INCREMENTAL_STATE=1
+    )
+    add_dependencies(tsp_solver_no_val_tests tsp_bb_26_07_14_deg_no_val)
+    add_test(NAME tsp_solver_no_val_tests COMMAND tsp_solver_no_val_tests)
+
+    add_executable(tsp_solver_min_edge_no_val_tests
+        tests/TspSolverTests.cpp
+        src/TspSolver.cpp
+    )
+    tsp_apply_common_settings(tsp_solver_min_edge_no_val_tests)
+    target_compile_definitions(tsp_solver_min_edge_no_val_tests PRIVATE
+        TSP_DISABLE_INCREMENTAL_VALIDATION=1
+        TSP_VERIFY_INCREMENTAL_STATE=1
+        TSP_BRANCH_STRATEGY_MIN_EDGE=1
+    )
+    add_dependencies(tsp_solver_min_edge_no_val_tests tsp_bb_26_07_14_min_edge_no_val)
+    add_test(NAME tsp_solver_min_edge_no_val_tests COMMAND tsp_solver_min_edge_no_val_tests)
 
     add_test(NAME tsp_cli_exact
         COMMAND $<TARGET_FILE:tsp_bb>
