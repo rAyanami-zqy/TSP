@@ -1,0 +1,3688 @@
+{
+  "results": {
+    "data/classic/national/dj38.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 6656.0,
+        "elapsed": 0.034308917820453644,
+        "elapsed_runs": [
+          0.034308917820453644
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 6656.0,
+        "elapsed": 0.02126489207148552,
+        "elapsed_runs": [
+          0.02126489207148552
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 6656.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 6655.999999980998,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 6656.0,
+        "elapsed": 0.014045938849449158,
+        "elapsed_runs": [
+          0.014045938849449158
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 6656.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 6655.999999980998,
+        "timeout": false
+      }
+    },
+    "data/classic/national/qa194.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 9352.0,
+        "elapsed": 0.4754731319844723,
+        "elapsed_runs": [
+          0.4754731319844723
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      }
+    },
+    "data/classic/national/wi29.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 27603.0,
+        "elapsed": 0.040418898686766624,
+        "elapsed_runs": [
+          0.040418898686766624
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 27603.0,
+        "elapsed": 0.016047287732362747,
+        "elapsed_runs": [
+          0.016047287732362747
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 27603.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 27602.999999944037,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 27603.0,
+        "elapsed": 0.013314865529537201,
+        "elapsed_runs": [
+          0.013314865529537201
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 27603.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 27602.999999944037,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/att48.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 10628.0,
+        "elapsed": 0.08211284503340721,
+        "elapsed_runs": [
+          0.08211284503340721
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 10628.0,
+        "elapsed": 0.032352469861507416,
+        "elapsed_runs": [
+          0.032352469861507416
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 10648.0,
+        "nodes_created": 373,
+        "nodes_expanded": 281,
+        "pruned_bound": 155,
+        "pruned_infeasible": 111,
+        "root_lb": 10581.20827848279,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 10628.0,
+        "elapsed": 0.03402462601661682,
+        "elapsed_runs": [
+          0.03402462601661682
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 10648.0,
+        "nodes_created": 58,
+        "nodes_expanded": 28,
+        "pruned_bound": 33,
+        "pruned_infeasible": 4,
+        "root_lb": 10581.20827848279,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/bayg29.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 1610.0,
+        "elapsed": 0.025282271206378937,
+        "elapsed_runs": [
+          0.025282271206378937
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 1610.0,
+        "elapsed": 0.021558215841650963,
+        "elapsed_runs": [
+          0.021558215841650963
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 1610.0,
+        "nodes_created": 3,
+        "nodes_expanded": 3,
+        "pruned_bound": 0,
+        "pruned_infeasible": 6,
+        "root_lb": 1607.9375365067797,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 1610.0,
+        "elapsed": 0.01873503439128399,
+        "elapsed_runs": [
+          0.01873503439128399
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 1610.0,
+        "nodes_created": 3,
+        "nodes_expanded": 3,
+        "pruned_bound": 0,
+        "pruned_infeasible": 6,
+        "root_lb": 1607.9375365067797,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/bays29.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 2020.0,
+        "elapsed": 0.0347183458507061,
+        "elapsed_runs": [
+          0.0347183458507061
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 2020.0,
+        "elapsed": 0.016532734036445618,
+        "elapsed_runs": [
+          0.016532734036445618
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 2020.0,
+        "nodes_created": 15,
+        "nodes_expanded": 11,
+        "pruned_bound": 2,
+        "pruned_infeasible": 11,
+        "root_lb": 2013.269381629025,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 2020.0,
+        "elapsed": 0.020772088319063187,
+        "elapsed_runs": [
+          0.020772088319063187
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 2020.0,
+        "nodes_created": 12,
+        "nodes_expanded": 7,
+        "pruned_bound": 3,
+        "pruned_infeasible": 7,
+        "root_lb": 2013.269381629025,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/berlin52.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 7542.0,
+        "elapsed": 0.048738278448581696,
+        "elapsed_runs": [
+          0.048738278448581696
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 7542.0,
+        "elapsed": 0.012486927211284637,
+        "elapsed_runs": [
+          0.012486927211284637
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 7542.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 7541.999999971381,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 7542.0,
+        "elapsed": 0.016370870172977448,
+        "elapsed_runs": [
+          0.016370870172977448
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 7542.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 7541.999999971381,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/bier127.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 118282.0,
+        "elapsed": 0.19664316438138485,
+        "elapsed_runs": [
+          0.19664316438138485
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      }
+    },
+    "data/classic/tsplib/brazil58.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 25395.0,
+        "elapsed": 0.08914987370371819,
+        "elapsed_runs": [
+          0.08914987370371819
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 25395.0,
+        "elapsed": 0.4526283424347639,
+        "elapsed_runs": [
+          0.4526283424347639
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 25395.0,
+        "nodes_created": 168561,
+        "nodes_expanded": 112098,
+        "pruned_bound": 101529,
+        "pruned_infeasible": 5737,
+        "root_lb": 25161.284136964565,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 25395.0,
+        "elapsed": 0.08225015550851822,
+        "elapsed_runs": [
+          0.08225015550851822
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 25395.0,
+        "nodes_created": 336,
+        "nodes_expanded": 113,
+        "pruned_bound": 235,
+        "pruned_infeasible": 0,
+        "root_lb": 25161.284136964565,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/brg180.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 1950.0,
+        "elapsed": 0.1817814949899912,
+        "elapsed_runs": [
+          0.1817814949899912
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      }
+    },
+    "data/classic/tsplib/burma14.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 3323.0,
+        "elapsed": 0.020787417888641357,
+        "elapsed_runs": [
+          0.020787417888641357
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 3323.0,
+        "elapsed": 0.006457583978772163,
+        "elapsed_runs": [
+          0.006457583978772163
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 3323.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 3322.999999998813,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 3323.0,
+        "elapsed": 0.005440972745418549,
+        "elapsed_runs": [
+          0.005440972745418549
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 3323.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 3322.999999998813,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/ch130.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 6110.0,
+        "elapsed": 0.19354412145912647,
+        "elapsed_runs": [
+          0.19354412145912647
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      }
+    },
+    "data/classic/tsplib/ch150.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 6528.0,
+        "elapsed": 0.3379350136965513,
+        "elapsed_runs": [
+          0.3379350136965513
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      }
+    },
+    "data/classic/tsplib/d198.tsp": {
+      "Concorde": {
+        "bbnodes": 3,
+        "cost": 15780.0,
+        "elapsed": 0.9626532699912786,
+        "elapsed_runs": [
+          0.9626532699912786
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      }
+    },
+    "data/classic/tsplib/dantzig42.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 699.0,
+        "elapsed": 0.04380405321717262,
+        "elapsed_runs": [
+          0.04380405321717262
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 699.0,
+        "elapsed": 0.02968808449804783,
+        "elapsed_runs": [
+          0.02968808449804783
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 699.0,
+        "nodes_created": 12,
+        "nodes_expanded": 6,
+        "pruned_bound": 6,
+        "pruned_infeasible": 1,
+        "root_lb": 696.5782121858938,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 699.0,
+        "elapsed": 0.02755216509103775,
+        "elapsed_runs": [
+          0.02755216509103775
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 699.0,
+        "nodes_created": 7,
+        "nodes_expanded": 3,
+        "pruned_bound": 4,
+        "pruned_infeasible": 0,
+        "root_lb": 696.5782121858938,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/eil101.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 629.0,
+        "elapsed": 0.08875088021159172,
+        "elapsed_runs": [
+          0.08875088021159172
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 629.0,
+        "elapsed": 12.23901659809053,
+        "elapsed_runs": [
+          12.23901659809053
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 646.0,
+        "nodes_created": 3763318,
+        "nodes_expanded": 2747059,
+        "pruned_bound": 1946823,
+        "pruned_infeasible": 434189,
+        "root_lb": 626.1143469779028,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 629.0,
+        "elapsed": 1.0659177005290985,
+        "elapsed_runs": [
+          1.0659177005290985
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 646.0,
+        "nodes_created": 1254,
+        "nodes_expanded": 421,
+        "pruned_bound": 898,
+        "pruned_infeasible": 0,
+        "root_lb": 627.38994339775,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/eil51.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 426.0,
+        "elapsed": 0.05266926623880863,
+        "elapsed_runs": [
+          0.05266926623880863
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 426.0,
+        "elapsed": 0.08682109229266644,
+        "elapsed_runs": [
+          0.08682109229266644
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 427.0,
+        "nodes_created": 18700,
+        "nodes_expanded": 15848,
+        "pruned_bound": 7304,
+        "pruned_infeasible": 6720,
+        "root_lb": 422.4991189656329,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 426.0,
+        "elapsed": 0.11067105084657669,
+        "elapsed_runs": [
+          0.11067105084657669
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 427.0,
+        "nodes_created": 615,
+        "nodes_expanded": 252,
+        "pruned_bound": 387,
+        "pruned_infeasible": 88,
+        "root_lb": 422.4991189656329,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/eil76.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 538.0,
+        "elapsed": 0.05548851750791073,
+        "elapsed_runs": [
+          0.05548851750791073
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 538.0,
+        "elapsed": 0.5863875020295382,
+        "elapsed_runs": [
+          0.5863875020295382
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 548.0,
+        "nodes_created": 132106,
+        "nodes_expanded": 105325,
+        "pruned_bound": 74055,
+        "pruned_infeasible": 751,
+        "root_lb": 536.3356651519739,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 538.0,
+        "elapsed": 0.2864961475133896,
+        "elapsed_runs": [
+          0.2864961475133896
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 548.0,
+        "nodes_created": 707,
+        "nodes_expanded": 248,
+        "pruned_bound": 487,
+        "pruned_infeasible": 0,
+        "root_lb": 536.9999330632771,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/fri26.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 937.0,
+        "elapsed": 0.02842639572918415,
+        "elapsed_runs": [
+          0.02842639572918415
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 937.0,
+        "elapsed": 0.009884335100650787,
+        "elapsed_runs": [
+          0.009884335100650787
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 937.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 936.9999999989012,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 937.0,
+        "elapsed": 0.012324882671236992,
+        "elapsed_runs": [
+          0.012324882671236992
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 937.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 936.9999999989012,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/gr120.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 6942.0,
+        "elapsed": 0.17240959778428078,
+        "elapsed_runs": [
+          0.17240959778428078
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      }
+    },
+    "data/classic/tsplib/gr137.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 69853.0,
+        "elapsed": 0.3357705846428871,
+        "elapsed_runs": [
+          0.3357705846428871
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 69853.0,
+        "elapsed": 312.9906499516219,
+        "elapsed_runs": [
+          312.9906499516219
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 70620.0,
+        "nodes_created": 23991715,
+        "nodes_expanded": 16170127,
+        "pruned_bound": 14222938,
+        "pruned_infeasible": 70,
+        "root_lb": 69112.61099531394,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 69853.0,
+        "elapsed": 319.6251124739647,
+        "elapsed_runs": [
+          319.6251124739647
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 70620.0,
+        "nodes_created": 24087201,
+        "nodes_expanded": 16259899,
+        "pruned_bound": 14272155,
+        "pruned_infeasible": 48,
+        "root_lb": 69112.61099531394,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/gr17.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 2085.0,
+        "elapsed": 0.02579384297132492,
+        "elapsed_runs": [
+          0.02579384297132492
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 2085.0,
+        "elapsed": 0.01047348789870739,
+        "elapsed_runs": [
+          0.01047348789870739
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 2085.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 2084.9999999989163,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 2085.0,
+        "elapsed": 0.014960205182433128,
+        "elapsed_runs": [
+          0.014960205182433128
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 2085.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 2084.9999999989163,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/gr21.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 2707.0,
+        "elapsed": 0.012801801785826683,
+        "elapsed_runs": [
+          0.012801801785826683
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 2707.0,
+        "elapsed": 0.010881803929805756,
+        "elapsed_runs": [
+          0.010881803929805756
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 2707.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 2706.9999999975757,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 2707.0,
+        "elapsed": 0.005925603210926056,
+        "elapsed_runs": [
+          0.005925603210926056
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 2707.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 2706.9999999975757,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/gr24.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 1272.0,
+        "elapsed": 0.02383328601717949,
+        "elapsed_runs": [
+          0.02383328601717949
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 1272.0,
+        "elapsed": 0.014801573008298874,
+        "elapsed_runs": [
+          0.014801573008298874
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 1272.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 1271.9719231118684,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 1272.0,
+        "elapsed": 0.0152005385607481,
+        "elapsed_runs": [
+          0.0152005385607481
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 1272.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 1271.9719231118684,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/gr48.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 5046.0,
+        "elapsed": 0.0897509902715683,
+        "elapsed_runs": [
+          0.0897509902715683
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 5046.0,
+        "elapsed": 0.30326488986611366,
+        "elapsed_runs": [
+          0.30326488986611366
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 5093.0,
+        "nodes_created": 125818,
+        "nodes_expanded": 90001,
+        "pruned_bound": 74191,
+        "pruned_infeasible": 367,
+        "root_lb": 4958.999309385722,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 5046.0,
+        "elapsed": 0.335839344188571,
+        "elapsed_runs": [
+          0.335839344188571
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 5093.0,
+        "nodes_created": 79114,
+        "nodes_expanded": 56703,
+        "pruned_bound": 46855,
+        "pruned_infeasible": 138,
+        "root_lb": 4958.999309385722,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/gr96.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 55209.0,
+        "elapsed": 0.22968503087759018,
+        "elapsed_runs": [
+          0.22968503087759018
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 55209.0,
+        "elapsed": 7.9173781629651785,
+        "elapsed_runs": [
+          7.9173781629651785
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 55595.0,
+        "nodes_created": 2490722,
+        "nodes_expanded": 1672187,
+        "pruned_bound": 1488093,
+        "pruned_infeasible": 6435,
+        "root_lb": 54569.49765243491,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 55209.0,
+        "elapsed": 5.439117185771465,
+        "elapsed_runs": [
+          5.439117185771465
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 55595.0,
+        "nodes_created": 553254,
+        "nodes_expanded": 387439,
+        "pruned_bound": 326178,
+        "pruned_infeasible": 919,
+        "root_lb": 54569.49765243491,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/hk48.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 11461.0,
+        "elapsed": 0.03568294458091259,
+        "elapsed_runs": [
+          0.03568294458091259
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 11461.0,
+        "elapsed": 0.029213575646281242,
+        "elapsed_runs": [
+          0.029213575646281242
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 11470.0,
+        "nodes_created": 44,
+        "nodes_expanded": 36,
+        "pruned_bound": 19,
+        "pruned_infeasible": 14,
+        "root_lb": 11431.636797632716,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 11461.0,
+        "elapsed": 0.029621250927448273,
+        "elapsed_runs": [
+          0.029621250927448273
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 11470.0,
+        "nodes_created": 16,
+        "nodes_expanded": 7,
+        "pruned_bound": 9,
+        "pruned_infeasible": 1,
+        "root_lb": 11431.636797632716,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/kroA100.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 21282.0,
+        "elapsed": 0.09178654104471207,
+        "elapsed_runs": [
+          0.09178654104471207
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 21282.0,
+        "elapsed": 810.1521495692432,
+        "elapsed_runs": [
+          810.1521495692432
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 21689.0,
+        "nodes_created": 192614325,
+        "nodes_expanded": 146674028,
+        "pruned_bound": 115357483,
+        "pruned_infeasible": 7007,
+        "root_lb": 20936.497407599578,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 21282.0,
+        "elapsed": 706.880591288209,
+        "elapsed_runs": [
+          706.880591288209
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 21689.0,
+        "nodes_created": 172105550,
+        "nodes_expanded": 131023964,
+        "pruned_bound": 103018029,
+        "pruned_infeasible": 6466,
+        "root_lb": 20936.497407599578,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/kroA150.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 26524.0,
+        "elapsed": 0.46448313631117344,
+        "elapsed_runs": [
+          0.46448313631117344
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      }
+    },
+    "data/classic/tsplib/kroB100.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 22141.0,
+        "elapsed": 0.19101040065288544,
+        "elapsed_runs": [
+          0.19101040065288544
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      }
+    },
+    "data/classic/tsplib/kroB150.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 26130.0,
+        "elapsed": 0.4546794332563877,
+        "elapsed_runs": [
+          0.4546794332563877
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      }
+    },
+    "data/classic/tsplib/kroC100.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 20749.0,
+        "elapsed": 0.11494716815650463,
+        "elapsed_runs": [
+          0.11494716815650463
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 20749.0,
+        "elapsed": 40.26341957971454,
+        "elapsed_runs": [
+          40.26341957971454
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 20965.0,
+        "nodes_created": 11756617,
+        "nodes_expanded": 8463763,
+        "pruned_bound": 6839324,
+        "pruned_infeasible": 3514,
+        "root_lb": 20472.497453314863,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 20749.0,
+        "elapsed": 33.535929379984736,
+        "elapsed_runs": [
+          33.535929379984736
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 20965.0,
+        "nodes_created": 8892308,
+        "nodes_expanded": 6305937,
+        "pruned_bound": 5168210,
+        "pruned_infeasible": 2575,
+        "root_lb": 20472.497453314863,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/kroD100.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 21294.0,
+        "elapsed": 0.14972636476159096,
+        "elapsed_runs": [
+          0.14972636476159096
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 21294.0,
+        "elapsed": 451.9337639529258,
+        "elapsed_runs": [
+          451.9337639529258
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 21811.0,
+        "nodes_created": 129214031,
+        "nodes_expanded": 90688415,
+        "pruned_bound": 77948748,
+        "pruned_infeasible": 1132,
+        "root_lb": 21141.497314980865,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 21294.0,
+        "elapsed": 218.5470509007573,
+        "elapsed_runs": [
+          218.5470509007573
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 21811.0,
+        "nodes_created": 63405303,
+        "nodes_expanded": 44593789,
+        "pruned_bound": 38374049,
+        "pruned_infeasible": 631,
+        "root_lb": 21141.497314980865,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/kroE100.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 22068.0,
+        "elapsed": 0.24494147300720215,
+        "elapsed_runs": [
+          0.24494147300720215
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      }
+    },
+    "data/classic/tsplib/lin105.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 14379.0,
+        "elapsed": 0.08304903842508793,
+        "elapsed_runs": [
+          0.08304903842508793
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 14379.0,
+        "elapsed": 0.17135261930525303,
+        "elapsed_runs": [
+          0.17135261930525303
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 14523.0,
+        "nodes_created": 348,
+        "nodes_expanded": 225,
+        "pruned_bound": 212,
+        "pruned_infeasible": 3,
+        "root_lb": 14370.499103869151,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 14379.0,
+        "elapsed": 0.18792437948286533,
+        "elapsed_runs": [
+          0.18792437948286533
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 14523.0,
+        "nodes_created": 74,
+        "nodes_expanded": 28,
+        "pruned_bound": 48,
+        "pruned_infeasible": 0,
+        "root_lb": 14370.499103869151,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/pr107.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 44303.0,
+        "elapsed": 0.14221890084445477,
+        "elapsed_runs": [
+          0.14221890084445477
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      }
+    },
+    "data/classic/tsplib/pr124.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 59030.0,
+        "elapsed": 0.44735805690288544,
+        "elapsed_runs": [
+          0.44735805690288544
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 59030.0,
+        "elapsed": 3.606760734692216,
+        "elapsed_runs": [
+          3.606760734692216
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 59159.0,
+        "nodes_created": 660814,
+        "nodes_expanded": 487141,
+        "pruned_bound": 383782,
+        "pruned_infeasible": 84,
+        "root_lb": 58067.49251205885,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 59030.0,
+        "elapsed": 7.457469614222646,
+        "elapsed_runs": [
+          7.457469614222646
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 59159.0,
+        "nodes_created": 395730,
+        "nodes_expanded": 296198,
+        "pruned_bound": 231429,
+        "pruned_infeasible": 471,
+        "root_lb": 58067.49251205885,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/pr136.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 96772.0,
+        "elapsed": 0.5148944295942783,
+        "elapsed_runs": [
+          0.5148944295942783
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      }
+    },
+    "data/classic/tsplib/pr144.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 58537.0,
+        "elapsed": 0.2589766811579466,
+        "elapsed_runs": [
+          0.2589766811579466
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      }
+    },
+    "data/classic/tsplib/pr152.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 73682.0,
+        "elapsed": 0.8697719648480415,
+        "elapsed_runs": [
+          0.8697719648480415
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      }
+    },
+    "data/classic/tsplib/pr76.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 108159.0,
+        "elapsed": 0.20052560418844223,
+        "elapsed_runs": [
+          0.20052560418844223
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      }
+    },
+    "data/classic/tsplib/rat195.tsp": {
+      "Concorde": {
+        "bbnodes": 3,
+        "cost": 2323.0,
+        "elapsed": 2.8801764585077763,
+        "elapsed_runs": [
+          2.8801764585077763
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      }
+    },
+    "data/classic/tsplib/rat99.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 1211.0,
+        "elapsed": 1.1220328845083714,
+        "elapsed_runs": [
+          1.1220328845083714
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 1211.0,
+        "elapsed": 0.45007456466555595,
+        "elapsed_runs": [
+          0.45007456466555595
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 1224.0,
+        "nodes_created": 91741,
+        "nodes_expanded": 67911,
+        "pruned_bound": 52854,
+        "pruned_infeasible": 346,
+        "root_lb": 1205.9997177699952,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 1211.0,
+        "elapsed": 0.6066726054996252,
+        "elapsed_runs": [
+          0.6066726054996252
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 1224.0,
+        "nodes_created": 1257,
+        "nodes_expanded": 478,
+        "pruned_bound": 846,
+        "pruned_infeasible": 0,
+        "root_lb": 1205.9997177699952,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/rd100.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 7910.0,
+        "elapsed": 0.08271601609885693,
+        "elapsed_runs": [
+          0.08271601609885693
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 7910.0,
+        "elapsed": 2.0531827863305807,
+        "elapsed_runs": [
+          2.0531827863305807
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 8069.0,
+        "nodes_created": 525879,
+        "nodes_expanded": 350903,
+        "pruned_bound": 302332,
+        "pruned_infeasible": 0,
+        "root_lb": 7899.3068692798515,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 7910.0,
+        "elapsed": 1.1156227756291628,
+        "elapsed_runs": [
+          1.1156227756291628
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 8069.0,
+        "nodes_created": 59691,
+        "nodes_expanded": 40713,
+        "pruned_bound": 33937,
+        "pruned_infeasible": 0,
+        "root_lb": 7899.3068692798515,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/si175.tsp": {
+      "Concorde": {
+        "bbnodes": 3,
+        "cost": 21407.0,
+        "elapsed": 1.8099790960550308,
+        "elapsed_runs": [
+          1.8099790960550308
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      }
+    },
+    "data/classic/tsplib/st70.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 675.0,
+        "elapsed": 0.06481103599071503,
+        "elapsed_runs": [
+          0.06481103599071503
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 675.0,
+        "elapsed": 18.786080515012145,
+        "elapsed_runs": [
+          18.786080515012145
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 685.0,
+        "nodes_created": 8607708,
+        "nodes_expanded": 5632636,
+        "pruned_bound": 5120096,
+        "pruned_infeasible": 46294,
+        "root_lb": 670.9999543920137,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 675.0,
+        "elapsed": 1.6984793171286583,
+        "elapsed_runs": [
+          1.6984793171286583
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 685.0,
+        "nodes_created": 140028,
+        "nodes_expanded": 101090,
+        "pruned_bound": 81988,
+        "pruned_infeasible": 131,
+        "root_lb": 670.9999543920137,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/swiss42.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 1273.0,
+        "elapsed": 0.028971945866942406,
+        "elapsed_runs": [
+          0.028971945866942406
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 1273.0,
+        "elapsed": 0.024252234026789665,
+        "elapsed_runs": [
+          0.024252234026789665
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 1274.0,
+        "nodes_created": 8,
+        "nodes_expanded": 4,
+        "pruned_bound": 2,
+        "pruned_infeasible": 6,
+        "root_lb": 1271.8805735384071,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 1273.0,
+        "elapsed": 0.02204374596476555,
+        "elapsed_runs": [
+          0.02204374596476555
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 1274.0,
+        "nodes_created": 5,
+        "nodes_expanded": 3,
+        "pruned_bound": 3,
+        "pruned_infeasible": 3,
+        "root_lb": 1271.8805735384071,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/u159.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 42080.0,
+        "elapsed": 0.11267021670937538,
+        "elapsed_runs": [
+          0.11267021670937538
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 1800.0,
+        "elapsed_runs": [
+          1800.0
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": true
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 42080.0,
+        "elapsed": 481.8194765318185,
+        "elapsed_runs": [
+          481.8194765318185
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 43135.0,
+        "nodes_created": 24067676,
+        "nodes_expanded": 17654159,
+        "pruned_bound": 13471097,
+        "pruned_infeasible": 117,
+        "root_lb": 41924.99322108963,
+        "timeout": false
+      }
+    },
+    "data/classic/tsplib/ulysses16.tsp": {
+      "Concorde": {
+        "bbnodes": 1,
+        "cost": 6859.0,
+        "elapsed": 0.042184775695204735,
+        "elapsed_runs": [
+          0.042184775695204735
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 6859.0,
+        "elapsed": 0.014860942959785461,
+        "elapsed_runs": [
+          0.014860942959785461
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 6859.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 6858.999999996903,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 6859.0,
+        "elapsed": 0.019424352794885635,
+        "elapsed_runs": [
+          0.019424352794885635
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 6859.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 6858.999999996903,
+        "timeout": false
+      }
+    },
+    "examples/converted/five-node-euc.txt": {
+      "Concorde": {
+        "bbnodes": null,
+        "cost": 8.0,
+        "elapsed": 0.0064744483679533005,
+        "elapsed_runs": [
+          0.0064744483679533005
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 8.0,
+        "elapsed": 0.005942469462752342,
+        "elapsed_runs": [
+          0.005942469462752342
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 8.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 7.9999999999995115,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 8.0,
+        "elapsed": 0.005025604739785194,
+        "elapsed_runs": [
+          0.005025604739785194
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 8.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 7.9999999999995115,
+        "timeout": false
+      }
+    },
+    "examples/converted/five-node-explicit.txt": {
+      "Concorde": {
+        "bbnodes": null,
+        "cost": 26.0,
+        "elapsed": 0.004555270075798035,
+        "elapsed_runs": [
+          0.004555270075798035
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 26.0,
+        "elapsed": 0.004655763506889343,
+        "elapsed_runs": [
+          0.004655763506889343
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 26.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 25.999999999998604,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 26.0,
+        "elapsed": 0.005480349063873291,
+        "elapsed_runs": [
+          0.005480349063873291
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 26.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 25.999999999998604,
+        "timeout": false
+      }
+    },
+    "examples/five-city.tsp": {
+      "Concorde": {
+        "bbnodes": null,
+        "cost": 26.0,
+        "elapsed": 0.003986487165093422,
+        "elapsed_runs": [
+          0.003986487165093422
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 26.0,
+        "elapsed": 0.005169335752725601,
+        "elapsed_runs": [
+          0.005169335752725601
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 26.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 25.999999999998604,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 26.0,
+        "elapsed": 0.005499584600329399,
+        "elapsed_runs": [
+          0.005499584600329399
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 26.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 25.999999999998604,
+        "timeout": false
+      }
+    },
+    "examples/five-city.txt": {
+      "Concorde": {
+        "bbnodes": null,
+        "cost": 26.0,
+        "elapsed": 0.006866799667477608,
+        "elapsed_runs": [
+          0.006866799667477608
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 26.0,
+        "elapsed": 0.005144055932760239,
+        "elapsed_runs": [
+          0.005144055932760239
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 26.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 25.999999999998604,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 26.0,
+        "elapsed": 0.005982726812362671,
+        "elapsed_runs": [
+          0.005982726812362671
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 26.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 25.999999999998604,
+        "timeout": false
+      }
+    },
+    "examples/random/complete/rnd-01-complete-n4.txt": {
+      "Concorde": {
+        "bbnodes": null,
+        "cost": 45.0,
+        "elapsed": 0.004567405208945274,
+        "elapsed_runs": [
+          0.004567405208945274
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 45.0,
+        "elapsed": 0.00510200671851635,
+        "elapsed_runs": [
+          0.00510200671851635
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 45.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 44.9999999999967,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 45.0,
+        "elapsed": 0.005858888849616051,
+        "elapsed_runs": [
+          0.005858888849616051
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 45.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 44.9999999999967,
+        "timeout": false
+      }
+    },
+    "examples/random/complete/rnd-02-complete-n5.txt": {
+      "Concorde": {
+        "bbnodes": null,
+        "cost": 136.0,
+        "elapsed": 0.0032522864639759064,
+        "elapsed_runs": [
+          0.0032522864639759064
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 136.0,
+        "elapsed": 0.006160100921988487,
+        "elapsed_runs": [
+          0.006160100921988487
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 136.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 135.99999999998988,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 136.0,
+        "elapsed": 0.007428180426359177,
+        "elapsed_runs": [
+          0.007428180426359177
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 136.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 135.99999999998988,
+        "timeout": false
+      }
+    },
+    "examples/random/complete/rnd-03-complete-n4.txt": {
+      "Concorde": {
+        "bbnodes": null,
+        "cost": 102.0,
+        "elapsed": 0.006037270650267601,
+        "elapsed_runs": [
+          0.006037270650267601
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 102.0,
+        "elapsed": 0.005126209929585457,
+        "elapsed_runs": [
+          0.005126209929585457
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 102.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 102.0,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 102.0,
+        "elapsed": 0.006399029865860939,
+        "elapsed_runs": [
+          0.006399029865860939
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 102.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 102.0,
+        "timeout": false
+      }
+    },
+    "examples/random/complete/rnd-04-complete-n5.txt": {
+      "Concorde": {
+        "bbnodes": null,
+        "cost": 88.0,
+        "elapsed": 0.005384393036365509,
+        "elapsed_runs": [
+          0.005384393036365509
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 88.0,
+        "elapsed": 0.005800381302833557,
+        "elapsed_runs": [
+          0.005800381302833557
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 88.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 87.99999999999112,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 88.0,
+        "elapsed": 0.006160395219922066,
+        "elapsed_runs": [
+          0.006160395219922066
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 88.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 87.99999999999112,
+        "timeout": false
+      }
+    },
+    "examples/random/complete/rnd-05-complete-n7.txt": {
+      "Concorde": {
+        "bbnodes": null,
+        "cost": 74.0,
+        "elapsed": 0.0029573701322078705,
+        "elapsed_runs": [
+          0.0029573701322078705
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 74.0,
+        "elapsed": 0.006306275725364685,
+        "elapsed_runs": [
+          0.006306275725364685
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 74.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 73.99999999998349,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 74.0,
+        "elapsed": 0.006370943039655685,
+        "elapsed_runs": [
+          0.006370943039655685
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 74.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 73.99999999998349,
+        "timeout": false
+      }
+    },
+    "examples/random/complete/rnd-06-complete-n5.txt": {
+      "Concorde": {
+        "bbnodes": null,
+        "cost": 51.0,
+        "elapsed": 0.004698535427451134,
+        "elapsed_runs": [
+          0.004698535427451134
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 51.0,
+        "elapsed": 0.005914876237511635,
+        "elapsed_runs": [
+          0.005914876237511635
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 51.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 50.99999999999236,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 51.0,
+        "elapsed": 0.006598586216568947,
+        "elapsed_runs": [
+          0.006598586216568947
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 51.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 50.99999999999236,
+        "timeout": false
+      }
+    },
+    "examples/random/complete/rnd-07-complete-n8.txt": {
+      "Concorde": {
+        "bbnodes": null,
+        "cost": 64.0,
+        "elapsed": 0.0033868644386529922,
+        "elapsed_runs": [
+          0.0033868644386529922
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 64.0,
+        "elapsed": 0.00829547643661499,
+        "elapsed_runs": [
+          0.00829547643661499
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 64.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 63.99999999997817,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 64.0,
+        "elapsed": 0.004186216741800308,
+        "elapsed_runs": [
+          0.004186216741800308
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 64.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 63.99999999997817,
+        "timeout": false
+      }
+    },
+    "examples/random/complete/rnd-08-complete-n7.txt": {
+      "Concorde": {
+        "bbnodes": null,
+        "cost": 73.0,
+        "elapsed": 0.007338894531130791,
+        "elapsed_runs": [
+          0.007338894531130791
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 73.0,
+        "elapsed": 0.006384700536727905,
+        "elapsed_runs": [
+          0.006384700536727905
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 73.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 72.99999999997632,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 73.0,
+        "elapsed": 0.007163284346461296,
+        "elapsed_runs": [
+          0.007163284346461296
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 73.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 72.99999999997632,
+        "timeout": false
+      }
+    },
+    "examples/random/complete/rnd-09-complete-n8.txt": {
+      "Concorde": {
+        "bbnodes": null,
+        "cost": 93.0,
+        "elapsed": 0.004064617678523064,
+        "elapsed_runs": [
+          0.004064617678523064
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 93.0,
+        "elapsed": 0.0058700162917375565,
+        "elapsed_runs": [
+          0.0058700162917375565
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 93.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 92.99999999997011,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 93.0,
+        "elapsed": 0.006681615486741066,
+        "elapsed_runs": [
+          0.006681615486741066
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 93.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 92.99999999997011,
+        "timeout": false
+      }
+    },
+    "examples/random/complete/rnd-10-complete-n7.txt": {
+      "Concorde": {
+        "bbnodes": null,
+        "cost": 49.0,
+        "elapsed": 0.007310420274734497,
+        "elapsed_runs": [
+          0.007310420274734497
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 49.0,
+        "elapsed": 0.00644647516310215,
+        "elapsed_runs": [
+          0.00644647516310215
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 49.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 48.99999999998294,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 49.0,
+        "elapsed": 0.007724881172180176,
+        "elapsed_runs": [
+          0.007724881172180176
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 49.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 48.99999999998294,
+        "timeout": false
+      }
+    },
+    "examples/random/sparse/rnd-01-sparse-n5.txt": {
+      "Concorde": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 0.0025597400963306427,
+        "elapsed_runs": [
+          0.0025597400963306427
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 110.0,
+        "elapsed": 0.00620054267346859,
+        "elapsed_runs": [
+          0.00620054267346859
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 110.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 109.99999999999147,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 110.0,
+        "elapsed": 0.005460480228066444,
+        "elapsed_runs": [
+          0.005460480228066444
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 110.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 109.99999999999147,
+        "timeout": false
+      }
+    },
+    "examples/random/sparse/rnd-02-sparse-n7.txt": {
+      "Concorde": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 0.0022225473076105118,
+        "elapsed_runs": [
+          0.0022225473076105118
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 196.0,
+        "elapsed": 0.006040593609213829,
+        "elapsed_runs": [
+          0.006040593609213829
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 196.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 195.99999999997777,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 196.0,
+        "elapsed": 0.005848858505487442,
+        "elapsed_runs": [
+          0.005848858505487442
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 196.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 195.99999999997777,
+        "timeout": false
+      }
+    },
+    "examples/random/sparse/rnd-03-sparse-n7.txt": {
+      "Concorde": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 0.0034642554819583893,
+        "elapsed_runs": [
+          0.0034642554819583893
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 86.0,
+        "elapsed": 0.008400052785873413,
+        "elapsed_runs": [
+          0.008400052785873413
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 86.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 85.99999999998735,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 86.0,
+        "elapsed": 0.006342094391584396,
+        "elapsed_runs": [
+          0.006342094391584396
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 86.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 85.99999999998735,
+        "timeout": false
+      }
+    },
+    "examples/random/sparse/rnd-04-sparse-n6.txt": {
+      "Concorde": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 0.0031844135373830795,
+        "elapsed_runs": [
+          0.0031844135373830795
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 115.0,
+        "elapsed": 0.005481835454702377,
+        "elapsed_runs": [
+          0.005481835454702377
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 115.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 115.0,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 115.0,
+        "elapsed": 0.0063366275280714035,
+        "elapsed_runs": [
+          0.0063366275280714035
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 115.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 115.0,
+        "timeout": false
+      }
+    },
+    "examples/random/sparse/rnd-05-sparse-n6.txt": {
+      "Concorde": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 0.004545480012893677,
+        "elapsed_runs": [
+          0.004545480012893677
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 100.0,
+        "elapsed": 0.005496203899383545,
+        "elapsed_runs": [
+          0.005496203899383545
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 100.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 99.99999999999247,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 100.0,
+        "elapsed": 0.00553695484995842,
+        "elapsed_runs": [
+          0.00553695484995842
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 100.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 99.99999999999247,
+        "timeout": false
+      }
+    },
+    "examples/random/sparse/rnd-06-sparse-n7.txt": {
+      "Concorde": {
+        "bbnodes": null,
+        "cost": null,
+        "elapsed": 0.004750695079565048,
+        "elapsed_runs": [
+          0.004750695079565048
+        ],
+        "error": null,
+        "feasible": false,
+        "init_ub": null,
+        "nodes_created": null,
+        "nodes_expanded": null,
+        "pruned_bound": null,
+        "pruned_infeasible": null,
+        "root_lb": null,
+        "timeout": false
+      },
+      "HKMST": {
+        "bbnodes": null,
+        "cost": 199.0,
+        "elapsed": 0.0038623642176389694,
+        "elapsed_runs": [
+          0.0038623642176389694
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 199.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 198.9999999999786,
+        "timeout": false
+      },
+      "NEWHKMST": {
+        "bbnodes": null,
+        "cost": 199.0,
+        "elapsed": 0.006855478510260582,
+        "elapsed_runs": [
+          0.006855478510260582
+        ],
+        "error": null,
+        "feasible": true,
+        "init_ub": 199.0,
+        "nodes_created": 1,
+        "nodes_expanded": 0,
+        "pruned_bound": 1,
+        "pruned_infeasible": 0,
+        "root_lb": 198.9999999999786,
+        "timeout": false
+      }
+    }
+  },
+  "signature": {
+    "binaries": {
+      "Concorde": "ff9a290ccfd0a933f25a27cfbcac57062d096489c6aac1791318f5b0adeee3c6",
+      "HKMST": "13ddc36c66bdbce2ad430db95ce30dc31153c682258d1d830d117660a0d796d5",
+      "NEWHKMST": "3a8bf08fbc455c803c427ad556f9453c623444059f031a7e4dd734759d0d80e4"
+    },
+    "concorde_seed": 123,
+    "hkmst_args": [],
+    "max_dimension_exclusive": 200,
+    "newhkmst_args": [
+      "--hk-ascent",
+      "polyak",
+      "--hk-potential-update",
+      "subtree-adaptive",
+      "--hk-update-depth",
+      "2",
+      "--hk-update-gap-ratio",
+      "0.02",
+      "--hk-update-iterations",
+      "16",
+      "--hk-update-budget",
+      "5000"
+    ],
+    "repeats": 1,
+    "schema": 1,
+    "timeout": 1800
+  }
+}
