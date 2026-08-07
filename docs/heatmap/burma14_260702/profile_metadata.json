@@ -1,8 +1,8 @@
 {
-  "callgrind_elapsed_sec": 1.502378249540925,
+  "callgrind_elapsed_sec": 2.945439949631691,
   "exact_max_n": 100,
   "instance": "/home/wj/code/TSP/data/classic/tsplib/burma14.tsp",
-  "native_elapsed_sec": 0.038267651572823524,
+  "native_elapsed_sec": 0.05658104829490185,
   "solver": "/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb",
   "solver_stats": {
     "cost": "3323",

@@ -4,9 +4,9 @@ Profile data file '/home/wj/code/TSP/docs/heatmap/burma14_260702/callgrind.out' 
 I1 cache: 
 D1 cache: 
 LL cache: 
-Timerange: Basic block 0 - 25216860
+Timerange: Basic block 0 - 51706870
 Trigger: Program termination
-Profiled target:  /home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb --branch-strategy smart --exact-max-n 100 /home/wj/code/TSP/data/classic/tsplib/burma14.tsp (PID 135639, part 1)
+Profiled target:  /home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb --branch-strategy smart --exact-max-n 100 /home/wj/code/TSP/data/classic/tsplib/burma14.tsp (PID 230542, part 1)
 Events recorded:  Ir
 Events shown:     Ir
 Event sort order: Ir
@@ -18,62 +18,60 @@ Auto-annotation:  on
 --------------------------------------------------------------------------------
 Ir                   
 --------------------------------------------------------------------------------
-125,968,557 (100.0%)  PROGRAM TOTALS
+250,955,896 (100.0%)  PROGRAM TOTALS
 
 --------------------------------------------------------------------------------
 Ir                      file:function
 --------------------------------------------------------------------------------
-1,581,939,307 (1255.8%)  ???:tsp::BranchBoundSolver::search(tsp::BranchBoundSolver::PartialSol&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> >&, int, tsp::BranchStrategy, tsp::BranchBoundSolver::OneTree const*)'2 [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
-1,527,251,655 (1212.4%)  ???:tsp::BranchBoundSolver::search(tsp::BranchBoundSolver::PartialSol&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> >&, int, tsp::BranchStrategy, tsp::BranchBoundSolver::OneTree const*)::{lambda(bool)#1}::operator()(bool) const'2 [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
-  125,968,557 (100.0%)  ???:0x000000000001f540 [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
-  123,984,025 (98.42%)  ???:(below main) [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
-  123,984,013 (98.42%)  ./csu/../csu/libc-start.c:__libc_start_main@@GLIBC_2.34 [/usr/lib/x86_64-linux-gnu/libc.so.6]
-  123,983,839 (98.42%)  ./csu/../sysdeps/nptl/libc_start_call_main.h:(below main) [/usr/lib/x86_64-linux-gnu/libc.so.6]
-  123,973,450 (98.42%)  ???:main [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
-  123,921,666 (98.38%)  ???:(anonymous namespace)::solveInput(std::istream&, (anonymous namespace)::CliOptions const&) [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
-  123,613,603 (98.13%)  ???:tsp::BranchBoundSolver::solve(tsp::BranchStrategy) [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
-  118,385,605 (93.98%)  ???:tsp::BranchBoundSolver::search(tsp::BranchBoundSolver::PartialSol&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> >&, int, tsp::BranchStrategy, tsp::BranchBoundSolver::OneTree const*) [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
-  118,381,054 (93.98%)  ???:tsp::BranchBoundSolver::search(tsp::BranchBoundSolver::PartialSol&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> >&, int, tsp::BranchStrategy, tsp::BranchBoundSolver::OneTree const*)::{lambda(bool)#1}::operator()(bool) const [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
-   45,195,641 (35.88%)  ???:tsp::BranchBoundSolver::computeOneTree(tsp::BranchBoundSolver::PartialSol const&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> >&) const [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
-   34,392,914 (27.30%)  ???:tsp::BranchBoundSolver::buildBranchCandidates(tsp::BranchBoundSolver::PartialSol const&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> >&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> >&) const [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
-   21,134,751 (16.78%)  ???:0x000000000010b780 [???]
-   20,699,893 (16.43%)  ???:operator delete(void*, unsigned long) [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
-   20,269,780 (16.09%)  ???:0x00000000048f0430 [???]
-   19,834,209 (15.75%)  ???:operator delete(void*) [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
-   19,399,249 (15.40%)  ???:0x00000000048f0c60 [???]
-   18,963,508 (15.05%)  ./malloc/./malloc/malloc.c:free [/usr/lib/x86_64-linux-gnu/libc.so.6]
-   15,343,804 (12.18%)  ???:0x000000000010b770 [???]
-   14,984,764 (11.90%)  ???:void std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> >::_M_realloc_insert<tsp::BranchBoundSolver::Edge const&>(__gnu_cxx::__normal_iterator<tsp::BranchBoundSolver::Edge*, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> > >, tsp::BranchBoundSolver::Edge const&) [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
-   14,919,653 (11.84%)  ???:operator new(unsigned long) [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
-   12,221,597 ( 9.70%)  ./malloc/./malloc/malloc.c:_int_free [/usr/lib/x86_64-linux-gnu/libc.so.6]
-   11,442,692 ( 9.08%)  ???:0x00000000048f0210 [???]
-   11,007,183 ( 8.74%)  ./malloc/./malloc/malloc.c:malloc [/usr/lib/x86_64-linux-gnu/libc.so.6]
-    7,336,212 ( 5.82%)  ???:std::_Function_handler<void (int, double, int), tsp::BranchBoundSolver::lkSearch(int, int, std::vector<int, std::allocator<int> >&, std::vector<int, std::allocator<int> >&, std::vector<bool, std::allocator<bool> >&) const::{lambda(int, double, int)#1}>::_M_invoke(std::_Any_data const&, int&&, double&&, int&&)'2 [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
-    5,179,010 ( 4.11%)  ???:tsp::BranchBoundSolver::findInitialTour(std::vector<int, std::allocator<int> >&, double&) [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
-    4,998,311 ( 3.97%)  ???:tsp::BranchBoundSolver::linKernighan(std::vector<int, std::allocator<int> >&, double&) const [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
-    4,971,260 ( 3.95%)  ???:tsp::BranchBoundSolver::linKernighanImprove(std::vector<int, std::allocator<int> >&, double&) const [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
-    4,931,337 ( 3.91%)  ???:tsp::BranchBoundSolver::lkSearch(int, int, std::vector<int, std::allocator<int> >&, std::vector<int, std::allocator<int> >&, std::vector<bool, std::allocator<bool> >&) const [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
-    3,438,681 ( 2.73%)  ???:tsp::BranchBoundSolver::chooseBranchEdge(tsp::BranchBoundSolver::PartialSol const&, tsp::BranchBoundSolver::OneTree const&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> > const&, tsp::BranchBoundSolver::Edge&) const [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
-    3,080,441 ( 2.45%)  ???:std::_Function_handler<void (int, double, int), tsp::BranchBoundSolver::lkSearch(int, int, std::vector<int, std::allocator<int> >&, std::vector<int, std::allocator<int> >&, std::vector<bool, std::allocator<bool> >&) const::{lambda(int, double, int)#1}>::_M_invoke(std::_Any_data const&, int&&, double&&, int&&) [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
-    2,463,640 ( 1.96%)  ???:std::vector<int, std::allocator<int> >::_M_fill_assign(unsigned long, int const&) [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
-    2,245,581 ( 1.78%)  ???:0x000000000010b960 [???]
-    2,084,715 ( 1.65%)  ./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:__memcpy_avx_unaligned_erms [/usr/lib/x86_64-linux-gnu/libc.so.6]
-    1,890,591 ( 1.50%)  ./elf/./elf/rtld.c:_dl_start [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
-    1,889,918 ( 1.50%)  ./elf/../sysdeps/unix/sysv/linux/dl-sysdep.c:_dl_sysdep_start [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
-    1,833,597 ( 1.46%)  ./elf/./elf/rtld.c:dl_main [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
-    1,753,828 ( 1.39%)  ./elf/./elf/dl-reloc.c:_dl_relocate_object [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
-    1,448,082 ( 1.15%)  ./elf/./elf/dl-lookup.c:_dl_lookup_symbol_x [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
-    1,227,992 ( 0.97%)  ./malloc/./malloc/malloc.c:_int_malloc [/usr/lib/x86_64-linux-gnu/libc.so.6]
+3,229,411,540 (1286.8%)  ???:tsp::BranchBoundSolver::searchSmart(tsp::BranchBoundSolver::PartialSol&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> >&, int, tsp::BranchBoundSolver::OneTree const*)'2 [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+  250,955,896 (100.0%)  ???:0x000000000001f540 [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+  248,969,242 (99.21%)  ???:(below main) [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+  248,969,230 (99.21%)  ./csu/../csu/libc-start.c:__libc_start_main@@GLIBC_2.34 [/usr/lib/x86_64-linux-gnu/libc.so.6]
+  248,969,056 (99.21%)  ./csu/../sysdeps/nptl/libc_start_call_main.h:(below main) [/usr/lib/x86_64-linux-gnu/libc.so.6]
+  248,958,667 (99.20%)  ???:main [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+  248,906,594 (99.18%)  ???:(anonymous namespace)::solveInput(std::istream&, (anonymous namespace)::CliOptions const&) [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+  248,614,004 (99.07%)  ???:tsp::BranchBoundSolver::solve() [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+  243,391,634 (96.99%)  ???:tsp::BranchBoundSolver::searchSmart(tsp::BranchBoundSolver::PartialSol&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> >&, int, tsp::BranchBoundSolver::OneTree const*) [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+  107,821,857 (42.96%)  ???:tsp::BranchBoundSolver::updateOneTreeAfterCandidateRemoval(tsp::BranchBoundSolver::PartialSol const&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> > const&, tsp::BranchBoundSolver::OneTree&, std::vector<unsigned long, std::allocator<unsigned long> > const&) const [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+   85,609,938 (34.11%)  ???:void std::vector<int, std::allocator<int> >::_M_realloc_insert<int const&>(__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >, int const&) [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+   66,592,631 (26.54%)  ???:tsp::BranchBoundSolver::updateOneTreeAfterForbid(tsp::BranchBoundSolver::PartialSol const&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> > const&, tsp::BranchBoundSolver::OneTree&, tsp::BranchBoundSolver::Edge const&) const [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+   65,706,941 (26.18%)  ???:0x000000000010b7c0 [???]
+   64,406,953 (25.66%)  ???:operator delete(void*, unsigned long) [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+   63,111,892 (25.15%)  ???:0x00000000048f0430 [???]
+   61,811,187 (24.63%)  ???:operator delete(void*) [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+   60,511,093 (24.11%)  ???:0x00000000048f0c60 [???]
+   59,210,218 (23.59%)  ./malloc/./malloc/malloc.c:free [/usr/lib/x86_64-linux-gnu/libc.so.6]
+   47,972,059 (19.12%)  ???:0x000000000010b7b0 [???]
+   46,683,904 (18.60%)  ???:operator new(unsigned long) [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+   39,058,730 (15.56%)  ./malloc/./malloc/malloc.c:_int_free [/usr/lib/x86_64-linux-gnu/libc.so.6]
+   36,285,871 (14.46%)  ???:0x00000000048f0210 [???]
+   34,985,228 (13.94%)  ./malloc/./malloc/malloc.c:malloc [/usr/lib/x86_64-linux-gnu/libc.so.6]
+   34,563,580 (13.77%)  ???:tsp::BranchBoundSolver::buildBranchCandidates(tsp::BranchBoundSolver::PartialSol const&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> >&, std::vector<unsigned long, std::allocator<unsigned long> >*) const [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+   12,591,635 ( 5.02%)  ???:std::vector<std::vector<int, std::allocator<int> >, std::allocator<std::vector<int, std::allocator<int> > > >::~vector() [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+    8,182,360 ( 3.26%)  ???:void std::vector<unsigned long, std::allocator<unsigned long> >::_M_realloc_insert<unsigned long const&>(__gnu_cxx::__normal_iterator<unsigned long*, std::vector<unsigned long, std::allocator<unsigned long> > >, unsigned long const&) [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+    7,336,212 ( 2.92%)  ???:std::_Function_handler<void (int, double, int), tsp::BranchBoundSolver::lkSearch(int, int, std::vector<int, std::allocator<int> >&, std::vector<int, std::allocator<int> >&, std::vector<bool, std::allocator<bool> >&) const::{lambda(int, double, int)#1}>::_M_invoke(std::_Any_data const&, int&&, double&&, int&&)'2 [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+    6,929,486 ( 2.76%)  ./malloc/./malloc/malloc.c:_int_malloc [/usr/lib/x86_64-linux-gnu/libc.so.6]
+    6,012,990 ( 2.40%)  ???:void tsp::BranchBoundSolver::updateOneTreeAfterCandidateRemoval(tsp::BranchBoundSolver::PartialSol const&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> > const&, tsp::BranchBoundSolver::OneTree&, std::vector<unsigned long, std::allocator<unsigned long> > const&) const::{lambda(std::vector<int, std::allocator<int> >&, std::vector<int, std::allocator<int> >&, std::vector<int, std::allocator<int> >&)#1}::operator()(std::vector<int, std::allocator<int> >&, std::vector<int, std::allocator<int> >&, std::vector<int, std::allocator<int> >&) const::{lambda(auto:1&, int, int)#1}::operator()<{lambda(auto:1&, int, int)#1}>({lambda(auto:1&, int, int)#1}&, int, int) const [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+    5,508,927 ( 2.20%)  ???:std::vector<int, std::allocator<int> >::~vector() [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+    5,176,602 ( 2.06%)  ???:tsp::BranchBoundSolver::findInitialTour(std::vector<int, std::allocator<int> >&, double&) [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+    5,167,642 ( 2.06%)  ???:0x000000000010b9a0 [???]
+    5,001,759 ( 1.99%)  ???:std::vector<int, std::allocator<int> >::_M_fill_assign(unsigned long, int const&) [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+    4,995,903 ( 1.99%)  ???:tsp::BranchBoundSolver::linKernighan(std::vector<int, std::allocator<int> >&, double&) const [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+    4,968,852 ( 1.98%)  ???:tsp::BranchBoundSolver::linKernighanImprove(std::vector<int, std::allocator<int> >&, double&) const [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+    4,928,929 ( 1.96%)  ???:tsp::BranchBoundSolver::lkSearch(int, int, std::vector<int, std::allocator<int> >&, std::vector<int, std::allocator<int> >&, std::vector<bool, std::allocator<bool> >&) const [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+    4,617,491 ( 1.84%)  ./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:__memcpy_avx_unaligned_erms [/usr/lib/x86_64-linux-gnu/libc.so.6]
+    4,454,047 ( 1.77%)  ???:std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> >::~vector() [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+    4,407,821 ( 1.76%)  ???:void tsp::BranchBoundSolver::updateOneTreeAfterForbid(tsp::BranchBoundSolver::PartialSol const&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> > const&, tsp::BranchBoundSolver::OneTree&, tsp::BranchBoundSolver::Edge const&) const::{lambda(auto:1&, int, int)#1}::operator()<{lambda(auto:1&, int, int)#1}>({lambda(auto:1&, int, int)#1}&, int, int) const [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+    3,319,817 ( 1.32%)  ???:std::vector<int, std::allocator<int> >::vector(unsigned long, int const&, std::allocator<int> const&) [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+    3,080,441 ( 1.23%)  ???:std::_Function_handler<void (int, double, int), tsp::BranchBoundSolver::lkSearch(int, int, std::vector<int, std::allocator<int> >&, std::vector<int, std::allocator<int> >&, std::vector<bool, std::allocator<bool> >&) const::{lambda(int, double, int)#1}>::_M_invoke(std::_Any_data const&, int&&, double&&, int&&) [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+    2,944,438 ( 1.17%)  ???:tsp::BranchBoundSolver::chooseSmartBranchEdge(tsp::BranchBoundSolver::PartialSol const&, tsp::BranchBoundSolver::OneTree const&, std::vector<tsp::BranchBoundSolver::Edge, std::allocator<tsp::BranchBoundSolver::Edge> > const&, tsp::BranchBoundSolver::Edge&) const [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
+    2,209,420 ( 0.88%)  ???:std::vector<int, std::allocator<int> >::operator=(std::vector<int, std::allocator<int> > const&) [clone .isra.0] [/home/wj/code/TSP/solver/tsp_bb_26_07_02/tsp_bb]
 
 --------------------------------------------------------------------------------
 The following files chosen for auto-annotation could not be found:
 --------------------------------------------------------------------------------
   ./csu/../csu/libc-start.c
   ./csu/../sysdeps/nptl/libc_start_call_main.h
-  ./elf/../sysdeps/unix/sysv/linux/dl-sysdep.c
-  ./elf/./elf/dl-lookup.c
-  ./elf/./elf/dl-reloc.c
-  ./elf/./elf/rtld.c
   ./malloc/./malloc/malloc.c
   ./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
 

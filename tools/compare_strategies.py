@@ -66,7 +66,7 @@ CONCORDE_SEED = 123  # fixed seed for reproducibility
 # 同时求解不同实例的最大线程数。每个线程独立运行 Concorde（若未缓存）
 # 及所有 solver 变体，实例间无依赖可完全并行。设为 1 即为原始串行行为。
 # 建议值：CPU 核心数附近（如 4~8），IO 密集场景可适当更多。
-MAX_WORKERS = 5
+MAX_WORKERS = 6
 
 # 保护 cache 字典读写与文件落盘的线程锁。
 _cache_lock = threading.Lock()
