@@ -9,6 +9,9 @@ __pycache__/
 *.pyc
 TS/
 docs/comparison-cache.json
+docs/hkmst-newhkmst-comparison-cache.json
+solver/HKMST/tsp_bb
+solver/NEWHKMST/tsp_bb
 *.sol
 *.sav
 *.pul

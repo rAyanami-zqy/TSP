@@ -244,6 +244,43 @@ python3 tools/download_benchmarks.py \
 当前精确分支定界仍主要适合小中规模实例；National、VLSI、DIMACS 和 TSPLIB
 中的大实例应使用独立的启发式求解器，或后续接入 LKH/Concorde 作为强基线。
 
+## HKMST 与 NEWHKMST 对比实验
+
+分别从 `HKMST` 和 `NEWHKMST` 分支构建 Release 可执行文件，并放到：
+
+```text
+solver/HKMST/tsp_bb
+solver/NEWHKMST/tsp_bb
+```
+
+随后运行：
+
+```bash
+python3 -m pip install openpyxl
+python3 tools/compare_hkmst_newhkmst.py
+```
+
+脚本默认选取 `examples`、TSPLIB 和 National 中所有 `n < 200` 的实例，依次
+对比 Concorde、HKMST 和 NEWHKMST。NEWHKMST 自动启用当前推荐的持久子树
+势更新参数；结果写入
+`docs/HKMST-NEWHKMST-Concorde-comparison.xlsx`。
+
+Excel 的“逐实例对比”工作表每个实例一行，包含三种算法的求解结果、时间、
+节点数，以及 HKMST 相对 Concorde、NEWHKMST 相对 Concorde/HKMST 的时间
+提升率和 NEWHKMST 相对 HKMST 的分支减少率。正向提升显示绿色，退化显示
+红色。“汇总”工作表报告完成数、超时、错误、总计/平均/中位时间和节点总数。
+
+常用实验选项：
+
+```bash
+# 每种算法重复 3 次并取 wall time 中位数，同时忽略旧缓存
+python3 tools/compare_hkmst_newhkmst.py --repeats 3 --fresh
+
+# 只验证指定的小实例
+python3 tools/compare_hkmst_newhkmst.py \
+  --instances examples/five-city.txt data/classic/tsplib/burma14.tsp
+```
+
 ## TSPLIB 直接读取
 
 求解器可以直接读取常见的对称 TSPLIB `TSP` 文件，不需要先转换成方阵。坐标型实例由读取器按 `EDGE_WEIGHT_TYPE` 计算距离，显式权重实例则按 `EDGE_WEIGHT_FORMAT` 展开。
