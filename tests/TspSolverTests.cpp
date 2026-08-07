@@ -738,6 +738,18 @@ void testMixedMagnitudeForceRollback()
         throw std::runtime_error(
             "mixed-magnitude rollback tests did not exercise recursive BP search");
     }
+
+    tsp::BranchBoundSolver update_solver(matrix);
+    update_solver.setRootAscentStrategy(tsp::RootAscentStrategy::None);
+    update_solver.setPotentialUpdateOptions(
+        tsp::PotentialUpdateStrategy::Adaptive, 1, 16, 1.0, 100);
+    const tsp::SolveResult update_result = update_solver.solve();
+    expectCost(update_result.cost, result.cost,
+               "mixed-magnitude potential safety changed the optimum");
+    if (update_result.stats.potential_updates_attempted != 0) {
+        throw std::runtime_error(
+            "mixed-magnitude instance did not disable node potential updates");
+    }
 }
 
 void testRandomCompleteSolveAgainstBruteForce()
@@ -762,6 +774,19 @@ void testRandomCompleteSolveAgainstBruteForce()
             matrix, "complete random solve " + std::to_string(case_index));
         exercised_recursive_search = exercised_recursive_search
             || result.stats.nodes_created > 1;
+        if (case_index < 8) {
+            tsp::BranchBoundSolver update_solver(matrix);
+            update_solver.setRootAscentStrategy(tsp::RootAscentStrategy::None);
+            update_solver.setPotentialUpdateOptions(
+                case_index % 2 == 0
+                    ? tsp::PotentialUpdateStrategy::Adaptive
+                    : tsp::PotentialUpdateStrategy::SubtreeAdaptive,
+                1, 16, 1.0, 100);
+            const tsp::SolveResult update_result = update_solver.solve();
+            expectCost(
+                update_result.cost, bruteForceOptimalCost(matrix),
+                "complete random node-potential update differs from brute force");
+        }
     }
     if (!exercised_recursive_search) {
         throw std::runtime_error("complete solve tests did not exercise recursive BP search");
@@ -805,6 +830,19 @@ void testRandomSparseSolveAgainstBruteForce()
             matrix, "sparse random solve " + std::to_string(case_index));
         exercised_recursive_search = exercised_recursive_search
             || result.stats.nodes_created > 1;
+        if (case_index < 8) {
+            tsp::BranchBoundSolver update_solver(matrix);
+            update_solver.setRootAscentStrategy(tsp::RootAscentStrategy::None);
+            update_solver.setPotentialUpdateOptions(
+                case_index % 2 == 0
+                    ? tsp::PotentialUpdateStrategy::Adaptive
+                    : tsp::PotentialUpdateStrategy::SubtreeAdaptive,
+                1, 16, 1.0, 100);
+            const tsp::SolveResult update_result = update_solver.solve();
+            expectCost(
+                update_result.cost, bruteForceOptimalCost(matrix),
+                "sparse random node-potential update differs from brute force");
+        }
     }
     if (!exercised_recursive_search) {
         throw std::runtime_error("sparse solve tests did not exercise recursive BP search");
@@ -918,6 +956,124 @@ void testDiversifiedInitialTourPool()
     }
 }
 
+void testRootAscentStrategies()
+{
+    const auto matrix = replacementMatrix();
+    const double optimum = bruteForceOptimalCost(matrix);
+    auto root_bound = [&](tsp::RootAscentStrategy strategy) {
+        tsp::BranchBoundSolver solver(matrix);
+        solver.setRootAscentStrategy(strategy);
+        solver.setRootBoundOnly(true);
+        const tsp::SolveResult result = solver.solve();
+        if (!result.feasible) {
+            throw std::runtime_error(
+                "root-bound-only strategy lost the feasible incumbent");
+        }
+        if (!std::isfinite(result.stats.root_lower_bound)
+            || result.stats.root_lower_bound > optimum + 1e-8) {
+            throw std::runtime_error(
+                "root ascent produced an invalid TSP lower bound");
+        }
+        return result.stats.root_lower_bound;
+    };
+
+    const double none = root_bound(tsp::RootAscentStrategy::None);
+    const double polyak = root_bound(tsp::RootAscentStrategy::Polyak);
+    const double helsgaun = root_bound(tsp::RootAscentStrategy::Helsgaun);
+    const double hybrid = root_bound(tsp::RootAscentStrategy::Hybrid);
+    if (polyak + 1e-8 < none || helsgaun + 1e-8 < none
+        || hybrid + 1e-8 < polyak) {
+        throw std::runtime_error(
+            "an ascent strategy discarded its zero/warm-start lower bound");
+    }
+
+    for (const tsp::RootAscentStrategy strategy : {
+             tsp::RootAscentStrategy::Helsgaun,
+             tsp::RootAscentStrategy::Hybrid}) {
+        tsp::BranchBoundSolver solver(matrix);
+        solver.setRootAscentStrategy(strategy);
+        const tsp::SolveResult result = solver.solve();
+        expectCost(result.cost, optimum,
+                   "experimental root ascent changed the exact optimum");
+    }
+}
+
+void testSearchNodePotentialUpdates()
+{
+    std::ifstream input(
+        std::string(TSP_TEST_SOURCE_DIR)
+        + "/data/classic/tsplib/dantzig42.tsp");
+    if (!input) {
+        throw std::runtime_error(
+            "cannot open dantzig42 node-potential-update regression");
+    }
+    const tsp::TspProblem problem = tsp::readTspProblem(input);
+    const auto matrix = problem.toDenseMatrix(42);
+
+    for (const tsp::PotentialUpdateStrategy strategy : {
+             tsp::PotentialUpdateStrategy::Depth,
+             tsp::PotentialUpdateStrategy::Adaptive,
+             tsp::PotentialUpdateStrategy::SubtreeDepth,
+             tsp::PotentialUpdateStrategy::SubtreeAdaptive}) {
+        tsp::BranchBoundSolver solver(matrix);
+        solver.setPotentialUpdateOptions(strategy, 1, 8, 1.0, 100);
+        const tsp::SolveResult result = solver.solve();
+        expectCost(result.cost, 699.0,
+                   "node potential update changed the exact optimum");
+        if (result.stats.potential_updates_attempted == 0
+            || result.stats.potential_updates_improved == 0
+            || result.stats.potential_updates_pruned == 0
+            || result.stats.potential_update_iterations == 0) {
+            throw std::runtime_error(
+                "node potential update regression did not exercise its trigger");
+        }
+    }
+
+    // 同时对一个独立穷举可验证的受约束搜索实例启用零根势，确保节点
+    // 更新生成的证书不会越过真实最优值。
+    const std::vector<std::vector<double>> small = {
+        {0, 585, 792, 891, 348, 768},
+        {585, 0, 249, 83, 294, 778},
+        {792, 249, 0, 14, 340, 834},
+        {891, 83, 14, 0, 530, 399},
+        {348, 294, 340, 530, 0, 325},
+        {768, 778, 834, 399, 325, 0},
+    };
+    const double small_optimum = bruteForceOptimalCost(small);
+    for (const tsp::PotentialUpdateStrategy strategy : {
+             tsp::PotentialUpdateStrategy::Depth,
+             tsp::PotentialUpdateStrategy::Adaptive,
+             tsp::PotentialUpdateStrategy::SubtreeDepth,
+             tsp::PotentialUpdateStrategy::SubtreeAdaptive}) {
+        tsp::BranchBoundSolver solver(small);
+        solver.setRootAscentStrategy(tsp::RootAscentStrategy::None);
+        solver.setPotentialUpdateOptions(strategy, 1, 16, 1.0, 100);
+        const tsp::SolveResult result = solver.solve();
+        expectCost(result.cost, small_optimum,
+                   "node potential certificate exceeded brute-force optimum");
+    }
+
+    std::ifstream st70_input(
+        std::string(TSP_TEST_SOURCE_DIR)
+        + "/data/classic/tsplib/st70.tsp");
+    if (!st70_input) {
+        throw std::runtime_error(
+            "cannot open st70 persistent-potential regression");
+    }
+    const tsp::TspProblem st70_problem = tsp::readTspProblem(st70_input);
+    tsp::BranchBoundSolver subtree_solver(st70_problem.toDenseMatrix(70));
+    subtree_solver.setPotentialUpdateOptions(
+        tsp::PotentialUpdateStrategy::SubtreeAdaptive,
+        4, 8, 0.01, 100);
+    const tsp::SolveResult subtree_result = subtree_solver.solve();
+    expectCost(subtree_result.cost, 675.0,
+               "persistent potential epoch changed the st70 optimum");
+    if (subtree_result.stats.potential_updates_rebuilt == 0) {
+        throw std::runtime_error(
+            "persistent potential regression rebuilt no subtree epoch");
+    }
+}
+
 void testRootReducedCostFixing()
 {
     std::ifstream input(
@@ -983,6 +1139,8 @@ int main()
         testProblemParsingDoesNotWriteStdout();
         testDistanceMatrixSymmetryIsExact();
         testExactIntegerPruningDomain();
+        testRootAscentStrategies();
+        testSearchNodePotentialUpdates();
         testDiversifiedInitialTourPool();
         testRootReducedCostFixing();
     } catch (const std::exception& error) {

@@ -7,7 +7,13 @@
 ## 当前状态总结
 
 - **算法**：基于最小 1-tree 下界的精确分支定界，DFS 递归搜索
-- **已实现优化**：
+- **2026-08-06 更新**：固定根 Held-Karp 势已经实现，默认使用 Polyak
+  上升；论文式 Helsgaun 调度和组合精修可通过 `--hk-ascent` 对照。实验见
+  `docs/HKMST-LKH-1tree-experiment-2026-08-06.md`。
+- **2026-08-06 后续**：已实现选择性持久子树势 epoch；更新点会重建
+  HKMST 势相关状态，新势由整棵子树继承，回溯时恢复。当前九实例均衡参数
+  为层距 2、gap 2%、16 轮，详见
+  `docs/HKMST-persistent-potential-epoch-experiment-2026-08-06.md`。
 - **核心瓶颈**：1-tree 下界太弱。如 bays29(n=29) 的 root_lower_bound=1622 vs optimal=2020，gap 约 20%；ulysses22(n=22) 到 dantzig42(n=42) 直接超时
 
 ---

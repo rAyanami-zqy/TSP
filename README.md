@@ -12,6 +12,8 @@
 - 每个搜索节点维护 `forced` 必选边、`forbidden` 排除边及经过约束过滤的候选边。
 - 默认 `deg` 策略从当前 1-tree 的度数违规顶点选择未决边；`min_edge` 策略从整个 1-tree 选择最轻未决边。
 - 下界使用受约束 `1-tree`：在顶点 `1..n-1` 上构造 MST，再给顶点 `0` 加两条可用的最短关联边。
+- 根节点默认用 Polyak 次梯度优化 Held-Karp 顶点势，随后在整轮 DFS 中固定
+  势和边权；也可切换到论文式 Helsgaun 调度或 Polyak 后精修的组合策略。
 - 根 1-tree 建立后使用 Held–Karp reduced cost 检查所有边：若强制一条
   非树边的下界已不能改善 incumbent，就永久停用该边；若禁止一条树边的
   replacement 下界已不能改善 incumbent，就将其强制为 `x_e=1` 并重建根树。
@@ -119,6 +121,72 @@ debug 信息写到标准错误，不会破坏批处理模式的 CSV 标准输出
 
 `--debug-interval` 必须是大于 `0` 的整数。未指定 `--debug` 时不会输出 debug 信息。
 
+### Held-Karp 根上升策略
+
+默认策略保持当前 HKMST 的 Polyak 步长。以下选项可用于论文策略对照：
+
+```bash
+./build/tsp_bb --hk-ascent polyak data/classic/tsplib/eil101.tsp
+./build/tsp_bb --hk-ascent helsgaun data/classic/tsplib/eil101.tsp
+./build/tsp_bb --hk-ascent hybrid data/classic/tsplib/eil101.tsp
+./build/tsp_bb --hk-ascent none data/classic/tsplib/eil101.tsp
+```
+
+- `none`：原始固定根 1-tree，不使用顶点势；
+- `polyak`：当前默认，使用 incumbent gap 归一化步长；
+- `helsgaun`：使用论文的 period/步长减半和 `0.7/0.3` 平滑次梯度；
+- `hybrid`：先执行 Polyak，再从其最佳势出发用 Helsgaun 调度精修，并保留
+  固定根下界更强的势。
+
+只比较根下界而不进入精确搜索：
+
+```bash
+./build/tsp_bb --root-bound-only --hk-ascent polyak \
+  --batch data/classic/batch-hk-ascent.txt
+```
+
+此模式输出的 `method` 为 `root-bound`；`cost/tour` 是启发式可行上界，不是
+最优证明。完整实验与结论见
+[`docs/HKMST-LKH-1tree-experiment-2026-08-06.md`](docs/HKMST-LKH-1tree-experiment-2026-08-06.md)。
+
+### 搜索节点势更新实验
+
+根节点仍先执行 `--hk-ascent`。后续节点可从当前势 warm start，在当前
+forced/forbidden/active-candidate 约束下运行有限轮 Polyak 上升。提供两类
+执行语义：临时证书模式不改变 HKMST；`subtree-*` 模式重建所有依赖势的
+排序和增量状态，使新势在整个锚点子树中持续生效，回溯到兄弟节点时恢复。
+
+```bash
+# 每隔 2 层更新一次
+./build/tsp_bb --hk-potential-update depth \
+  --hk-update-depth 2 --hk-update-iterations 16 input.tsp
+
+# 达到深度 1 后，只在节点 gap 不超过 1% 时更新
+./build/tsp_bb --hk-potential-update adaptive \
+  --hk-update-depth 1 --hk-update-gap-ratio 0.01 \
+  --hk-update-iterations 16 --hk-update-budget 5000 input.tsp
+
+# 推荐的持久子树更新：距上次更新至少 2 层，且节点 gap 不超过 2%
+./build/tsp_bb --hk-potential-update subtree-adaptive \
+  --hk-update-depth 2 --hk-update-gap-ratio 0.02 \
+  --hk-update-iterations 16 --hk-update-budget 5000 input.tsp
+```
+
+- `none`：默认值，不在搜索节点更新势；
+- `depth`：深度为 `--hk-update-depth` 整数倍时触发；
+- `adaptive`：深度不小于该值、1-tree 仍有度数违规，且
+  `(UB-LB)/max(1,|UB|)` 不超过 `--hk-update-gap-ratio` 时触发；
+- `subtree-depth`：距当前势 epoch 至少指定层数时更新并重建子树状态；
+- `subtree-adaptive`：在 `subtree-depth` 条件上再加相对 gap 门槛；
+- `--hk-update-budget` 是每轮精确 DFS 的最大更新尝试次数。diversified-LK
+  探测轮自动封顶 1000，重启或探测结束后使用完整预算。
+
+批处理 CSV 和单实例输出还会报告成功安装的 subtree epoch 数及重建时间。
+证书模式实验见
+[`docs/HKMST-node-potential-update-experiment-2026-08-06.md`](docs/HKMST-node-potential-update-experiment-2026-08-06.md)，
+持久子树实验见
+[`docs/HKMST-persistent-potential-epoch-experiment-2026-08-06.md`](docs/HKMST-persistent-potential-epoch-experiment-2026-08-06.md)。
+
 从标准输入读取：
 
 ```bash
@@ -138,7 +206,12 @@ debug 信息写到标准错误，不会破坏批处理模式的 CSV 标准输出
 输出是 CSV，字段为：
 
 ```text
-instance,status,method,dimension,cost,root_lower_bound,initial_upper_bound,nodes_created,nodes_expanded,pruned_by_bound,pruned_infeasible,tour,message
+instance,status,method,dimension,cost,root_lower_bound,initial_upper_bound,
+nodes_created,nodes_expanded,pruned_by_bound,pruned_infeasible,
+potential_updates_attempted,potential_updates_improved,potential_updates_pruned,
+potential_updates_rebuilt,potential_update_iterations,potential_update_seconds,
+potential_update_rebuild_seconds,potential_update_total_gain,
+potential_update_max_gain,tour,message
 ```
 
 `status=ok,method=exact` 表示精确求解得到最优 tour；精确搜索证实无解时为 `status=infeasible`。每个实例的 debug 信息仍只写到标准错误。

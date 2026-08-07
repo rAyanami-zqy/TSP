@@ -18,6 +18,14 @@ struct CliOptions {
     std::string input_path;
     std::string batch_path;
     std::size_t exact_max_n = 10000;
+    tsp::RootAscentStrategy root_ascent = tsp::RootAscentStrategy::Polyak;
+    tsp::PotentialUpdateStrategy potential_update
+        = tsp::PotentialUpdateStrategy::None;
+    std::size_t potential_update_depth = 4;
+    std::size_t potential_update_iterations = 8;
+    double potential_update_gap_ratio = 0.05;
+    std::size_t potential_update_budget = 1000;
+    bool root_bound_only = false;
     bool debug = false;
     std::size_t debug_interval = 10000;
 };
@@ -111,7 +119,7 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
     tsp::TspProblem problem = tsp::readTspProblem(input);
     const int dimension = problem.dimension();
     RunResult output;
-    output.method = "exact";
+    output.method = options.root_bound_only ? "root-bound" : "exact";
     output.problem_name = problem.name;
     output.dimension = dimension;
 
@@ -123,6 +131,14 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
 
     auto distance = problem.toDenseMatrix(options.exact_max_n);
     tsp::BranchBoundSolver solver(std::move(distance));
+    solver.setRootAscentStrategy(options.root_ascent);
+    solver.setPotentialUpdateOptions(
+        options.potential_update,
+        options.potential_update_depth,
+        options.potential_update_iterations,
+        options.potential_update_gap_ratio,
+        options.potential_update_budget);
+    solver.setRootBoundOnly(options.root_bound_only);
     if (options.debug) {
         solver.setDebugOutput(std::cerr, options.debug_interval);
     }
@@ -147,9 +163,33 @@ void printHumanResult(const RunResult& run)
     std::cout << "Nodes expanded: " << result.stats.nodes_expanded << '\n';
     std::cout << "Pruned by bound: " << result.stats.nodes_pruned_by_bound << '\n';
     std::cout << "Pruned infeasible: " << result.stats.nodes_pruned_infeasible << '\n';
+    std::cout << "Potential updates attempted: "
+              << result.stats.potential_updates_attempted << '\n';
+    std::cout << "Potential updates improved: "
+              << result.stats.potential_updates_improved << '\n';
+    std::cout << "Potential updates pruned: "
+              << result.stats.potential_updates_pruned << '\n';
+    std::cout << "Potential updates rebuilt: "
+              << result.stats.potential_updates_rebuilt << '\n';
+    std::cout << "Potential update iterations: "
+              << result.stats.potential_update_iterations << '\n';
+    std::cout << "Potential update seconds: "
+              << result.stats.potential_update_seconds << '\n';
+    std::cout << "Potential update rebuild seconds: "
+              << result.stats.potential_update_rebuild_seconds << '\n';
+    std::cout << "Potential update total gain: "
+              << result.stats.potential_update_total_gain << '\n';
+    std::cout << "Potential update max gain: "
+              << result.stats.potential_update_max_gain << '\n';
 
     if (!result.feasible) {
         std::cout << "No feasible Hamiltonian tour found.\n";
+        return;
+    }
+
+    if (run.method == "root-bound") {
+        std::cout << "Heuristic upper bound: " << result.cost << '\n';
+        std::cout << "Heuristic tour: " << formatTourLimited(result.tour) << '\n';
         return;
     }
 
@@ -185,7 +225,12 @@ void printBatchHeader()
 {
     std::cout
         << "instance,status,method,dimension,cost,root_lower_bound,initial_upper_bound,"
-        << "nodes_created,nodes_expanded,pruned_by_bound,pruned_infeasible,tour,message\n";
+        << "nodes_created,nodes_expanded,pruned_by_bound,pruned_infeasible,"
+        << "potential_updates_attempted,potential_updates_improved,"
+        << "potential_updates_pruned,potential_updates_rebuilt,"
+        << "potential_update_iterations,potential_update_seconds,"
+        << "potential_update_rebuild_seconds,potential_update_total_gain,"
+        << "potential_update_max_gain,tour,message\n";
 }
 
 // 输出一条批处理记录。result 为空表示文件读取或解析阶段已经失败。
@@ -199,7 +244,7 @@ void printBatchRow(const std::string& path,
 
     if (run == nullptr) {
         // 读取失败、解析失败等情况没有求解统计，只保留错误信息。
-        std::cout << ",,,,,,,,,,"
+        std::cout << ",,,,,,,,,,,,,,,,,,,"
                   << csvQuote(message) << '\n';
         return;
     }
@@ -215,6 +260,15 @@ void printBatchRow(const std::string& path,
               << result.stats.nodes_expanded << ','
               << result.stats.nodes_pruned_by_bound << ','
               << result.stats.nodes_pruned_infeasible << ','
+              << result.stats.potential_updates_attempted << ','
+              << result.stats.potential_updates_improved << ','
+              << result.stats.potential_updates_pruned << ','
+              << result.stats.potential_updates_rebuilt << ','
+              << result.stats.potential_update_iterations << ','
+              << formatDouble(result.stats.potential_update_seconds) << ','
+              << formatDouble(result.stats.potential_update_rebuild_seconds) << ','
+              << formatDouble(result.stats.potential_update_total_gain) << ','
+              << formatDouble(result.stats.potential_update_max_gain) << ','
               << csvQuote(formatTourLimited(result.tour)) << ','
               << csvQuote(message) << '\n';
 }
@@ -281,8 +335,58 @@ void printUsage(const char* program)
               << "  " << program << " [options] --batch <list-file>\n"
               << "\nOptions:\n"
               << "  --exact-max-n <n>\n"
+              << "  --hk-ascent <none|polyak|helsgaun|hybrid>\n"
+              << "  --hk-potential-update <none|depth|adaptive|subtree-depth|subtree-adaptive>\n"
+              << "  --hk-update-depth <n>\n"
+              << "  --hk-update-iterations <n>\n"
+              << "  --hk-update-gap-ratio <x>\n"
+              << "  --hk-update-budget <n>\n"
+              << "  --root-bound-only\n"
               << "  --debug\n"
               << "  --debug-interval <n>\n";
+}
+
+tsp::RootAscentStrategy parseRootAscentStrategy(const std::string& value)
+{
+    if (value == "none") return tsp::RootAscentStrategy::None;
+    if (value == "polyak") return tsp::RootAscentStrategy::Polyak;
+    if (value == "helsgaun") return tsp::RootAscentStrategy::Helsgaun;
+    if (value == "hybrid") return tsp::RootAscentStrategy::Hybrid;
+    throw std::runtime_error(
+        "invalid value for --hk-ascent: " + value
+        + " (expected none, polyak, helsgaun, or hybrid)");
+}
+
+tsp::PotentialUpdateStrategy parsePotentialUpdateStrategy(
+    const std::string& value)
+{
+    if (value == "none") return tsp::PotentialUpdateStrategy::None;
+    if (value == "depth") return tsp::PotentialUpdateStrategy::Depth;
+    if (value == "adaptive") return tsp::PotentialUpdateStrategy::Adaptive;
+    if (value == "subtree-depth") {
+        return tsp::PotentialUpdateStrategy::SubtreeDepth;
+    }
+    if (value == "subtree-adaptive") {
+        return tsp::PotentialUpdateStrategy::SubtreeAdaptive;
+    }
+    throw std::runtime_error(
+        "invalid value for --hk-potential-update: " + value
+        + " (expected none, depth, adaptive, subtree-depth, or subtree-adaptive)");
+}
+
+double parseDoubleOption(const std::string& value, const std::string& name)
+{
+    std::size_t parsed = 0;
+    double result = 0.0;
+    try {
+        result = std::stod(value, &parsed);
+    } catch (const std::exception&) {
+        throw std::runtime_error("invalid numeric value for " + name + ": " + value);
+    }
+    if (parsed != value.size() || !std::isfinite(result)) {
+        throw std::runtime_error("invalid numeric value for " + name + ": " + value);
+    }
+    return result;
 }
 
 std::size_t parseSizeOption(const std::string& value, const std::string& name)
@@ -328,6 +432,33 @@ CliOptions parseArgs(int argc, char** argv)
             if (options.exact_max_n == 0) {
                 throw std::runtime_error("--exact-max-n must be greater than zero");
             }
+        } else if (arg == "--hk-ascent") {
+            options.root_ascent = parseRootAscentStrategy(require_value(arg));
+        } else if (arg == "--hk-potential-update") {
+            options.potential_update =
+                parsePotentialUpdateStrategy(require_value(arg));
+        } else if (arg == "--hk-update-depth") {
+            options.potential_update_depth = parseSizeOption(require_value(arg), arg);
+            if (options.potential_update_depth == 0) {
+                throw std::runtime_error("--hk-update-depth must be greater than zero");
+            }
+        } else if (arg == "--hk-update-iterations") {
+            options.potential_update_iterations = parseSizeOption(require_value(arg), arg);
+            if (options.potential_update_iterations == 0) {
+                throw std::runtime_error("--hk-update-iterations must be greater than zero");
+            }
+        } else if (arg == "--hk-update-gap-ratio") {
+            options.potential_update_gap_ratio = parseDoubleOption(require_value(arg), arg);
+            if (options.potential_update_gap_ratio < 0.0) {
+                throw std::runtime_error("--hk-update-gap-ratio must be non-negative");
+            }
+        } else if (arg == "--hk-update-budget") {
+            options.potential_update_budget = parseSizeOption(require_value(arg), arg);
+            if (options.potential_update_budget == 0) {
+                throw std::runtime_error("--hk-update-budget must be greater than zero");
+            }
+        } else if (arg == "--root-bound-only") {
+            options.root_bound_only = true;
         } else if (arg == "--debug") {
             options.debug = true;
         } else if (arg == "--debug-interval") {

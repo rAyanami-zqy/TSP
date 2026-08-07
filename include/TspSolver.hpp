@@ -18,6 +18,17 @@ struct SolveStats {
     std::size_t nodes_pruned_infeasible = 0;
     double root_lower_bound = 0.0;
     double initial_upper_bound = 0.0;
+    // 搜索节点上的势更新统计。证书模式只使用临时下界；subtree 模式
+    // 还会重建候选排序和 HKMST 状态，并让新势在该锚点子树内持续生效。
+    std::size_t potential_updates_attempted = 0;
+    std::size_t potential_updates_improved = 0;
+    std::size_t potential_updates_pruned = 0;
+    std::size_t potential_updates_rebuilt = 0;
+    std::size_t potential_update_iterations = 0;
+    double potential_update_seconds = 0.0;
+    double potential_update_rebuild_seconds = 0.0;
+    double potential_update_total_gain = 0.0;
+    double potential_update_max_gain = 0.0;
 };
 
 // 求解结果。tour 中只保存一圈中的顶点序列，输出时再补回起点。
@@ -32,6 +43,26 @@ struct SolveResult {
 struct DebugOptions {
     std::ostream* output = nullptr;
     std::size_t interval = 1000;
+};
+
+// 根节点 Held-Karp 势的上升策略。Polyak 是当前 HKMST 基线；Helsgaun
+// 复现论文中的 period/步长与平滑次梯度思想；Hybrid 先运行 Polyak，再
+// 从其最佳势出发执行 Helsgaun 精修，并保留实际固定根下界更强的一组势。
+enum class RootAscentStrategy {
+    None,
+    Polyak,
+    Helsgaun,
+    Hybrid,
+};
+
+// 搜索节点上的势更新触发策略。Depth/Adaptive 只生成临时证书；
+// SubtreeDepth/SubtreeAdaptive 把更新势安装成可嵌套、回溯恢复的子树 epoch。
+enum class PotentialUpdateStrategy {
+    None,
+    Depth,
+    Adaptive,
+    SubtreeDepth,
+    SubtreeAdaptive,
 };
 
 struct Point {
@@ -80,6 +111,15 @@ public:
     // 开启 / 关闭精确求解过程中的 stderr 等调试输出。
     void setDebugOutput(std::ostream& output, std::size_t progress_interval = 1000);
     void disableDebugOutput();
+    void setRootAscentStrategy(RootAscentStrategy strategy);
+    void setPotentialUpdateOptions(PotentialUpdateStrategy strategy,
+                                   std::size_t depth,
+                                   std::size_t iterations,
+                                   double gap_ratio,
+                                   std::size_t budget);
+    // 只建立启发式上界、根势和根 1-tree，不进入精确 BP 搜索。该模式用于
+    // 可复现地下界实验；返回的 cost/tour 只是可行上界，不能视作最优证明。
+    void setRootBoundOnly(bool enabled);
     // 求解 TSP，返回求解结果和搜索统计。
     SolveResult solve();
 
@@ -246,9 +286,30 @@ private:
     // 在 forced / forbidden 约束下构造最小 1-tree，作为该节点的下界。
     OneTree computeOneTree(const PartialSol& node,
                            const std::vector<Edge>& branch_candidates) const;
-    // 仅在根节点用次梯度法优化一次 Held-Karp 顶点势；搜索期间固定不变，
-    // 因而候选排序和动态 MST replacement 仍可复用。
+    // 在根节点用次梯度法优化 Held-Karp 顶点势。
     void optimizeRootPotentials(double upper_bound);
+    struct NodePotentialUpdateResult {
+        bool feasible = false;
+        double bound = -std::numeric_limits<double>::infinity();
+        std::size_t iterations = 0;
+        std::vector<double> potentials;
+    };
+    // 从当前 epoch 势 warm start，对当前受约束节点临时做有限轮 Polyak
+    // 更新。调用方可只使用下界证书，也可据此安装新的子树 epoch。
+    NodePotentialUpdateResult updateNodePotentialBound(
+        const PartialSol& node, double current_bound,
+        double upper_bound, std::size_t max_iterations) const;
+    bool shouldUpdatePotentials(const OneTree& tree, int depth,
+                                double bound, double upper_bound) const;
+    bool usesPersistentPotentialUpdates() const;
+    // 在选中的锚点安装新势和新候选排序，递归搜索整棵子树；返回 true
+    // 表示该子树已被新 epoch 完整处理，调用者不应再走父势路径。
+    bool searchSubtreeWithUpdatedPotentials(
+        PartialSol& node, const OneTree& current_tree,
+        int depth, bool count_node);
+    OneTree rebuildPotentialEpoch(
+        PartialSol& node, const std::vector<double>& potentials,
+        const std::vector<unsigned char>& active_by_edge_id);
     double adjustedEdgeWeight(int u, int v) const;
     // 禁用当前 1-tree 中的一条未强制边后，使用 MST replacement edge 增量更新。
     // 根边可用性由生产 active bitset（局部兼容路径为 candidate_mask）判定。
@@ -366,20 +427,35 @@ private:
     BranchSet bpPartition(PartialSol& node, OneTree& current_tree);
     // BP 递归搜索：在每个节点执行 BP 划分后枚举“前缀 forbid + 当前 force”子节点。
     void search(PartialSol& node, OneTree& current_tree, int depth,
-                bool count_node = true);
+                bool count_node = true,
+                bool allow_potential_anchor = true);
 
     // 顶点数。
     int n_ = 0;
     // 距离矩阵，dist[i][j] 是顶点 i 和 j 之间的距离；dist[i][i] 必须为 0。
     std::vector<std::vector<double>> dist_;
-    // 固定 Held-Karp 顶点势。搜索边权为 dist(u,v)+pi[u]+pi[v]，所有
-    // 1-tree 成本统一减去 2*sum(pi) 后才作为原问题下界。
+    // 当前 Held-Karp 势。通常是根势；subtree 模式进入锚点时替换为更新势，
+    // 离开该子树时连同所有依赖势的 HKMST 状态一起恢复。
     std::vector<double> vertex_potential_;
     double potential_correction_ = 0.0;
     double potential_roundoff_guard_ = 0.0;
+    RootAscentStrategy root_ascent_strategy_ = RootAscentStrategy::Polyak;
+    PotentialUpdateStrategy potential_update_strategy_
+        = PotentialUpdateStrategy::None;
+    std::size_t potential_update_depth_ = 4;
+    std::size_t potential_update_iterations_ = 8;
+    double potential_update_gap_ratio_ = 0.05;
+    std::size_t potential_update_budget_ = 1000;
+    // 预算按一次精确 DFS 轮次计算；incumbent 改善并重启时清零。
+    std::size_t potential_updates_in_round_ = 0;
+    int current_potential_epoch_depth_ = 0;
+    bool root_bound_only_ = false;
     // 原问题所有有限边均为精确整数且任意 n 边和不超过 2^53 时，tour
     // 成本为精确整数；Held-Karp 浮点下界可向上取整后参与安全剪枝。
     bool exact_integer_costs_ = false;
+    // 极端动态范围下禁用根上升和节点势更新，避免修改权重与势修正发生
+    // 灾难性消减。
+    bool potential_ascent_numerically_safe_ = true;
     // 与顶点 0 相连的所有有限边，按权重升序排列。
     // 在 computeOneTree 中取前 2 条未被禁止的边作为 1-tree 的 root edges。
     std::vector<Edge> root_candidates_sorted_;

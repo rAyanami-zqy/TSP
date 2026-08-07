@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cctype>
 #include <cstdint>
@@ -426,6 +427,22 @@ BranchBoundSolver::BranchBoundSolver(std::vector<std::vector<double>> distance)
             }
         }
     }
+
+    double smallest_positive = std::numeric_limits<double>::infinity();
+    double largest_weight = 0.0;
+    for (int i = 0; i < n_; ++i) {
+        for (int j = i + 1; j < n_; ++j) {
+            const double weight = dist_[i][j];
+            if (!isFinite(weight)) continue;
+            if (weight > 0.0) {
+                smallest_positive = std::min(smallest_positive, weight);
+            }
+            largest_weight = std::max(largest_weight, weight);
+        }
+    }
+    potential_ascent_numerically_safe_ =
+        !isFinite(smallest_positive)
+        || largest_weight / smallest_positive <= 1e12;
 }
 
 void BranchBoundSolver::setDebugOutput(std::ostream& output, std::size_t progress_interval)
@@ -437,6 +454,36 @@ void BranchBoundSolver::setDebugOutput(std::ostream& output, std::size_t progres
 void BranchBoundSolver::disableDebugOutput()
 {
     debug_ = {};
+}
+
+void BranchBoundSolver::setRootAscentStrategy(RootAscentStrategy strategy)
+{
+    root_ascent_strategy_ = strategy;
+}
+
+void BranchBoundSolver::setPotentialUpdateOptions(
+    PotentialUpdateStrategy strategy, std::size_t depth,
+    std::size_t iterations, double gap_ratio, std::size_t budget)
+{
+    if (strategy != PotentialUpdateStrategy::None
+        && (depth == 0 || iterations == 0 || budget == 0)) {
+        throw std::invalid_argument(
+            "potential update depth, iterations, and budget must be positive");
+    }
+    if (!isFinite(gap_ratio) || gap_ratio < 0.0) {
+        throw std::invalid_argument(
+            "potential update gap ratio must be finite and non-negative");
+    }
+    potential_update_strategy_ = strategy;
+    potential_update_depth_ = depth;
+    potential_update_iterations_ = iterations;
+    potential_update_gap_ratio_ = gap_ratio;
+    potential_update_budget_ = budget;
+}
+
+void BranchBoundSolver::setRootBoundOnly(bool enabled)
+{
+    root_bound_only_ = enabled;
 }
 
 double BranchBoundSolver::adjustedEdgeWeight(int u, int v) const
@@ -453,43 +500,68 @@ double BranchBoundSolver::adjustedEdgeWeight(int u, int v) const
 
 void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
 {
+    const auto started_at = std::chrono::steady_clock::now();
     vertex_potential_.assign(static_cast<std::size_t>(n_), 0.0);
     potential_correction_ = 0.0;
     potential_roundoff_guard_ = 0.0;
-    if (!isFinite(upper_bound)) return;
 
-    // 极端动态范围会让修改权重与势修正发生灾难性消减；这类输入保留
-    // 原始 1-tree，既避免不可靠下界，也维持混合数量级回归路径。
-    double smallest_positive = std::numeric_limits<double>::infinity();
-    double largest_weight = 0.0;
-    for (int u = 0; u < n_; ++u) {
-        for (int v = u + 1; v < n_; ++v) {
-            const double weight = dist_[u][v];
-            if (!isFinite(weight)) continue;
-            if (weight > 0.0) smallest_positive = std::min(smallest_positive, weight);
-            largest_weight = std::max(largest_weight, weight);
+    auto strategy_name = [](RootAscentStrategy strategy) {
+        switch (strategy) {
+        case RootAscentStrategy::None: return "none";
+        case RootAscentStrategy::Polyak: return "polyak";
+        case RootAscentStrategy::Helsgaun: return "helsgaun";
+        case RootAscentStrategy::Hybrid: return "hybrid";
         }
-    }
-    if (isFinite(smallest_positive)
-        && largest_weight / smallest_positive > 1e12) {
+        return "unknown";
+    };
+    auto write_summary = [&](const std::string& selected,
+                             int polyak_iterations,
+                             int helsgaun_iterations,
+                             double polyak_bound,
+                             double helsgaun_bound) {
+        if (debug_.output == nullptr) return;
+        const double seconds = std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - started_at).count();
+        std::ostringstream line;
+        line << "root ascent: strategy=" << strategy_name(root_ascent_strategy_)
+             << " selected=" << selected
+             << " polyak_iterations=" << polyak_iterations
+             << " helsgaun_iterations=" << helsgaun_iterations
+             << " polyak_bound=" << formatDebugDouble(polyak_bound)
+             << " helsgaun_bound=" << formatDebugDouble(helsgaun_bound)
+             << " seconds=" << formatDebugDouble(seconds);
+        writeDebugLine(debug_, line.str());
+    };
+
+    if (root_ascent_strategy_ == RootAscentStrategy::None
+        || !isFinite(upper_bound)) {
+        write_summary("none", 0, 0,
+                      -std::numeric_limits<double>::infinity(),
+                      -std::numeric_limits<double>::infinity());
         return;
     }
 
-    std::vector<double> potentials(static_cast<std::size_t>(n_), 0.0);
-    std::vector<double> best_potentials = potentials;
+    // 极端动态范围会让修改权重与势修正发生灾难性消减；这类输入保留
+    // 原始 1-tree，既避免不可靠下界，也维持混合数量级回归路径。
+    if (!potential_ascent_numerically_safe_) {
+        write_summary("none-dynamic-range", 0, 0,
+                      -std::numeric_limits<double>::infinity(),
+                      -std::numeric_limits<double>::infinity());
+        return;
+    }
+
+    struct OneTreeEvaluation {
+        bool feasible = false;
+        double bound = -std::numeric_limits<double>::infinity();
+        std::vector<int> degree;
+    };
+
     std::vector<Edge> internal_edges;
     internal_edges.reserve(
         static_cast<std::size_t>(n_ - 1) * static_cast<std::size_t>(n_ - 2) / 2);
-    std::vector<int> degree(static_cast<std::size_t>(n_), 0);
-
-    double best_bound = -std::numeric_limits<double>::infinity();
-    double step_scale = 2.0;
-    int no_improvement = 0;
-    constexpr int kMaxIterations = 400;
-    constexpr int kStagnationIterations = 12;
-    constexpr int kMinIterationsBeforeGapStop = 100;
-
-    for (int iteration = 0; iteration < kMaxIterations; ++iteration) {
+    auto evaluate = [&](const std::vector<double>& potentials) {
+        OneTreeEvaluation evaluation;
+        evaluation.degree.assign(static_cast<std::size_t>(n_), 0);
         internal_edges.clear();
         for (int u = 1; u < n_; ++u) {
             for (int v = u + 1; v < n_; ++v) {
@@ -504,18 +576,17 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
         std::sort(internal_edges.begin(), internal_edges.end(),
                   [](const Edge& a, const Edge& b) { return a.w < b.w; });
 
-        std::fill(degree.begin(), degree.end(), 0);
         DisjointSet components(n_);
         int mst_edge_count = 0;
         double modified_cost = 0.0;
         for (const Edge& edge : internal_edges) {
             if (!components.unite(edge.u, edge.v)) continue;
             modified_cost += edge.w;
-            ++degree[static_cast<std::size_t>(edge.u)];
-            ++degree[static_cast<std::size_t>(edge.v)];
+            ++evaluation.degree[static_cast<std::size_t>(edge.u)];
+            ++evaluation.degree[static_cast<std::size_t>(edge.v)];
             if (++mst_edge_count == n_ - 2) break;
         }
-        if (mst_edge_count != n_ - 2) return;
+        if (mst_edge_count != n_ - 2) return evaluation;
 
         std::array<Edge, 2> root_edges{};
         std::size_t root_edge_count = 0;
@@ -539,54 +610,212 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
                 }
             }
         }
-        if (root_edge_count != root_edges.size()) return;
+        if (root_edge_count != root_edges.size()) return evaluation;
         for (const Edge& edge : root_edges) {
             modified_cost += edge.w;
-            ++degree[static_cast<std::size_t>(edge.u)];
-            ++degree[static_cast<std::size_t>(edge.v)];
+            ++evaluation.degree[static_cast<std::size_t>(edge.u)];
+            ++evaluation.degree[static_cast<std::size_t>(edge.v)];
         }
 
         const double correction = 2.0
             * std::accumulate(potentials.begin(), potentials.end(), 0.0);
-        const double bound = modified_cost - correction;
+        evaluation.feasible = true;
+        evaluation.bound = modified_cost - correction;
+        return evaluation;
+    };
+
+    struct AscentCandidate {
+        std::vector<double> potentials;
+        double bound = -std::numeric_limits<double>::infinity();
+        int iterations = 0;
+    };
+
+    auto save_if_better = [&](AscentCandidate& best,
+                              const std::vector<double>& potentials,
+                              double bound) {
         const double tolerance = scaledRoundoffTolerance(
             bound, upper_bound, static_cast<std::size_t>(n_));
-        if (bound > best_bound + tolerance) {
-            best_bound = bound;
-            best_potentials = potentials;
-            no_improvement = 0;
+        if (!isFinite(best.bound) || bound > best.bound + tolerance) {
+            best.bound = bound;
+            best.potentials = potentials;
+            return true;
+        }
+        return false;
+    };
+
+    constexpr int kMaxIterations = 400;
+    auto run_polyak = [&](const std::vector<double>& initial) {
+        std::vector<double> potentials = initial;
+        AscentCandidate best;
+        best.potentials = initial;
+        double step_scale = 2.0;
+        int no_improvement = 0;
+        constexpr int kStagnationIterations = 12;
+        constexpr int kMinIterationsBeforeGapStop = 100;
+
+        for (int iteration = 0; iteration < kMaxIterations; ++iteration) {
+            const OneTreeEvaluation evaluation = evaluate(potentials);
+            ++best.iterations;
+            if (!evaluation.feasible) break;
+            const double bound = evaluation.bound;
+            if (save_if_better(best, potentials, bound)) {
+                no_improvement = 0;
+            } else {
+                ++no_improvement;
+            }
+
+            double subgradient_norm = 0.0;
+            for (const int value : evaluation.degree) {
+                const double deviation = static_cast<double>(value - 2);
+                subgradient_norm += deviation * deviation;
+            }
+            const double tolerance = scaledRoundoffTolerance(
+                bound, upper_bound, static_cast<std::size_t>(n_));
+            if (subgradient_norm == 0.0
+                || bound >= upper_bound - tolerance) {
+                break;
+            }
+            if (iteration + 1 >= kMinIterationsBeforeGapStop
+                && upper_bound - best.bound
+                    <= 0.01 * std::fabs(upper_bound)) {
+                break;
+            }
+
+            const double gap = upper_bound - bound;
+            const double step = step_scale * gap / subgradient_norm;
+            if (!isFinite(step) || step <= 0.0) break;
+            for (int vertex = 0; vertex < n_; ++vertex) {
+                potentials[static_cast<std::size_t>(vertex)] += step
+                    * static_cast<double>(
+                        evaluation.degree[static_cast<std::size_t>(vertex)] - 2);
+            }
+
+            if (no_improvement >= kStagnationIterations) {
+                step_scale *= 0.5;
+                no_improvement = 0;
+                if (step_scale < 1e-5) break;
+            }
+        }
+        return best;
+    };
+
+    auto run_helsgaun = [&](const std::vector<double>& initial) {
+        std::vector<double> potentials = initial;
+        std::vector<double> previous_subgradient(
+            static_cast<std::size_t>(n_), 0.0);
+        bool have_previous = false;
+        double previous_bound = -std::numeric_limits<double>::infinity();
+        double step = 1.0;
+        int period = std::max(1, n_ / 2);
+        int position_in_period = 0;
+        bool first_period = true;
+        bool doubling_step = true;
+        AscentCandidate best;
+        best.potentials = initial;
+
+        while (best.iterations < kMaxIterations
+               && period > 0 && step > 0.0 && isFinite(step)) {
+            const OneTreeEvaluation evaluation = evaluate(potentials);
+            ++best.iterations;
+            if (!evaluation.feasible) break;
+
+            const double bound = evaluation.bound;
+            const bool improved_best = save_if_better(best, potentials, bound);
+            double subgradient_norm = 0.0;
+            std::vector<double> subgradient(static_cast<std::size_t>(n_), 0.0);
+            for (int vertex = 0; vertex < n_; ++vertex) {
+                const double value = static_cast<double>(
+                    evaluation.degree[static_cast<std::size_t>(vertex)] - 2);
+                subgradient[static_cast<std::size_t>(vertex)] = value;
+                subgradient_norm += value * value;
+            }
+            const double tolerance = scaledRoundoffTolerance(
+                bound, upper_bound, static_cast<std::size_t>(n_));
+            if (subgradient_norm == 0.0
+                || bound >= upper_bound - tolerance) {
+                break;
+            }
+
+            // Helsgaun 第一个 period 中从 t=1 开始，只要 W 继续增长就
+            // 把步长翻倍；第一次不增长后，本 period 剩余迭代保持不变。
+            if (first_period && have_previous && doubling_step) {
+                const double previous_tolerance = scaledRoundoffTolerance(
+                    bound, previous_bound, static_cast<std::size_t>(n_));
+                if (bound > previous_bound + previous_tolerance
+                    && isFinite(step * 2.0)) {
+                    step *= 2.0;
+                } else {
+                    doubling_step = false;
+                }
+            }
+
+            for (int vertex = 0; vertex < n_; ++vertex) {
+                const std::size_t index = static_cast<std::size_t>(vertex);
+                const double direction = have_previous
+                    ? 0.7 * subgradient[index]
+                        + 0.3 * previous_subgradient[index]
+                    : subgradient[index];
+                potentials[index] += step * direction;
+            }
+
+            previous_subgradient = std::move(subgradient);
+            previous_bound = bound;
+            have_previous = true;
+            ++position_in_period;
+            if (position_in_period >= period) {
+                int next_period = period / 2;
+                step *= 0.5;
+                // 论文在 period 最后一次迭代仍提高 W 时把 period 加倍；
+                // 与常规减半合并后，相当于保留当前长度而不是立即收缩。
+                if (improved_best && next_period > 0) {
+                    next_period *= 2;
+                }
+                period = next_period;
+                position_in_period = 0;
+                first_period = false;
+            }
+        }
+        return best;
+    };
+
+    const std::vector<double> zero_potentials(static_cast<std::size_t>(n_), 0.0);
+    AscentCandidate polyak;
+    AscentCandidate helsgaun;
+    AscentCandidate selected;
+    std::string selected_name;
+    if (root_ascent_strategy_ == RootAscentStrategy::Polyak) {
+        polyak = run_polyak(zero_potentials);
+        selected = polyak;
+        selected_name = "polyak";
+    } else if (root_ascent_strategy_ == RootAscentStrategy::Helsgaun) {
+        helsgaun = run_helsgaun(zero_potentials);
+        selected = helsgaun;
+        selected_name = "helsgaun";
+    } else {
+        polyak = run_polyak(zero_potentials);
+        // 组合策略不是简单平均两组势。它从当前 Polyak 最优解继续执行
+        // 论文的平滑 period 上升，并始终保留固定根下界更强的一组势。
+        helsgaun = run_helsgaun(polyak.potentials);
+        const double tolerance = scaledRoundoffTolerance(
+            helsgaun.bound, polyak.bound, static_cast<std::size_t>(n_));
+        if (helsgaun.bound > polyak.bound + tolerance) {
+            selected = helsgaun;
+            selected_name = "polyak+helsgaun";
         } else {
-            ++no_improvement;
-        }
-
-        double subgradient_norm = 0.0;
-        for (const int value : degree) {
-            const double deviation = static_cast<double>(value - 2);
-            subgradient_norm += deviation * deviation;
-        }
-        if (subgradient_norm == 0.0 || bound >= upper_bound - tolerance) break;
-        if (iteration + 1 >= kMinIterationsBeforeGapStop
-            && upper_bound - best_bound
-                <= 0.01 * std::fabs(upper_bound)) {
-            break;
-        }
-
-        const double gap = upper_bound - bound;
-        const double step = step_scale * gap / subgradient_norm;
-        if (!isFinite(step) || step <= 0.0) break;
-        for (int vertex = 0; vertex < n_; ++vertex) {
-            potentials[static_cast<std::size_t>(vertex)] += step
-                * static_cast<double>(degree[static_cast<std::size_t>(vertex)] - 2);
-        }
-
-        if (no_improvement >= kStagnationIterations) {
-            step_scale *= 0.5;
-            no_improvement = 0;
-            if (step_scale < 1e-5) break;
+            selected = polyak;
+            selected_name = "polyak";
         }
     }
 
-    vertex_potential_ = std::move(best_potentials);
+    if (!isFinite(selected.bound)
+        || selected.potentials.size() != static_cast<std::size_t>(n_)) {
+        write_summary("none-infeasible",
+                      polyak.iterations, helsgaun.iterations,
+                      polyak.bound, helsgaun.bound);
+        return;
+    }
+
+    vertex_potential_ = std::move(selected.potentials);
     potential_correction_ = 2.0
         * std::accumulate(vertex_potential_.begin(), vertex_potential_.end(), 0.0);
     const bool has_nonzero_potential = std::any_of(
@@ -608,6 +837,534 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
             modified_sum_scale, potential_correction_,
             static_cast<std::size_t>(n_));
     }
+    write_summary(selected_name,
+                  polyak.iterations, helsgaun.iterations,
+                  polyak.bound, helsgaun.bound);
+}
+
+bool BranchBoundSolver::usesPersistentPotentialUpdates() const
+{
+    return potential_update_strategy_ == PotentialUpdateStrategy::SubtreeDepth
+        || potential_update_strategy_ == PotentialUpdateStrategy::SubtreeAdaptive;
+}
+
+bool BranchBoundSolver::shouldUpdatePotentials(
+    const OneTree& tree, int depth, double bound, double upper_bound) const
+{
+    // 初始精确搜索同时承担 diversified-LK 的困难度探测；若稍后改善
+    // incumbent，该轮会整体回滚。先给它一个保守预算，探测完成或重启后
+    // 再开放完整用户预算，避免在注定丢弃的轮次做大量局部上升。
+    const std::size_t active_budget =
+        !diversified_tour_attempted_ && !initial_tour_alternatives_.empty()
+        ? std::min<std::size_t>(potential_update_budget_, 1000)
+        : potential_update_budget_;
+    if (potential_update_strategy_ == PotentialUpdateStrategy::None
+        || depth <= 0 || potential_update_depth_ == 0
+        || potential_update_iterations_ == 0
+        || potential_updates_in_round_ >= active_budget
+        || !potential_ascent_numerically_safe_
+        || !tree.feasible || !isFinite(bound) || !isFinite(upper_bound)) {
+        return false;
+    }
+
+    double violation_norm = 0.0;
+    for (const int degree : tree.degree) {
+        const double deviation = static_cast<double>(degree - 2);
+        violation_norm += deviation * deviation;
+    }
+    if (violation_norm == 0.0) return false;
+
+    if (potential_update_strategy_ == PotentialUpdateStrategy::Depth) {
+        return static_cast<std::size_t>(depth) % potential_update_depth_ == 0;
+    }
+
+    if (usesPersistentPotentialUpdates()) {
+        const int depth_since_epoch = depth - current_potential_epoch_depth_;
+        if (depth_since_epoch < 0
+            || static_cast<std::size_t>(depth_since_epoch)
+                < potential_update_depth_) {
+            return false;
+        }
+        if (potential_update_strategy_ == PotentialUpdateStrategy::SubtreeDepth) {
+            return true;
+        }
+    }
+
+    const double scale = std::max(1.0, std::fabs(upper_bound));
+    const double relative_gap = std::max(0.0, upper_bound - bound) / scale;
+    return static_cast<std::size_t>(depth) >= potential_update_depth_
+        && relative_gap <= potential_update_gap_ratio_;
+}
+
+BranchBoundSolver::NodePotentialUpdateResult
+BranchBoundSolver::updateNodePotentialBound(
+    const PartialSol& node, double current_bound,
+    double upper_bound, std::size_t max_iterations) const
+{
+    struct Evaluation {
+        bool feasible = false;
+        double bound = -std::numeric_limits<double>::infinity();
+        std::vector<int> degree;
+    };
+
+    std::vector<Edge> internal_edges;
+    internal_edges.reserve(
+        static_cast<std::size_t>(n_ - 1)
+        * static_cast<std::size_t>(n_ - 2) / 2);
+
+    auto evaluate = [&](const std::vector<double>& potentials) {
+        Evaluation evaluation;
+        evaluation.degree.assign(static_cast<std::size_t>(n_), 0);
+        DisjointSet components(n_);
+        double modified_cost = 0.0;
+        int mst_edge_count = 0;
+        int forced_root_count = 0;
+
+        // 强制边必须先进入受约束 1-tree。边中保存的是根势权重，因此这里
+        // 用临时势重新计算权重，不能直接使用 Edge::w。
+        for (const Edge& edge : node.forced_edges) {
+            const double weight = dist_[edge.u][edge.v]
+                + potentials[static_cast<std::size_t>(edge.u)]
+                + potentials[static_cast<std::size_t>(edge.v)];
+            if (!isFinite(weight)) return evaluation;
+            if (edge.u == 0 || edge.v == 0) {
+                ++forced_root_count;
+                continue;
+            }
+            if (!components.unite(edge.u, edge.v)) return evaluation;
+            modified_cost += weight;
+            ++evaluation.degree[static_cast<std::size_t>(edge.u)];
+            ++evaluation.degree[static_cast<std::size_t>(edge.v)];
+            ++mst_edge_count;
+        }
+        if (forced_root_count > 2 || mst_edge_count > n_ - 2) {
+            return evaluation;
+        }
+
+        internal_edges.clear();
+        for (int u = 1; u < n_; ++u) {
+            for (int v = u + 1; v < n_; ++v) {
+                if (!isFinite(dist_[u][v])) continue;
+                const std::size_t id = edgeId(u, v);
+                if (node.forced[id] || node.forbidden[id]
+                    || !isCandidateActive(node, id)) {
+                    continue;
+                }
+                internal_edges.push_back(Edge{
+                    u, v,
+                    dist_[u][v]
+                        + potentials[static_cast<std::size_t>(u)]
+                        + potentials[static_cast<std::size_t>(v)]});
+            }
+        }
+        std::sort(internal_edges.begin(), internal_edges.end(),
+                  [](const Edge& a, const Edge& b) {
+                      if (a.w != b.w) return a.w < b.w;
+                      if (a.u != b.u) return a.u < b.u;
+                      return a.v < b.v;
+                  });
+        for (const Edge& edge : internal_edges) {
+            if (mst_edge_count == n_ - 2) break;
+            if (!components.unite(edge.u, edge.v)) continue;
+            modified_cost += edge.w;
+            ++evaluation.degree[static_cast<std::size_t>(edge.u)];
+            ++evaluation.degree[static_cast<std::size_t>(edge.v)];
+            ++mst_edge_count;
+        }
+        if (mst_edge_count != n_ - 2) return evaluation;
+
+        std::vector<Edge> root_edges;
+        root_edges.reserve(static_cast<std::size_t>(n_ - 1));
+        for (const Edge& edge : node.forced_edges) {
+            if (edge.u != 0 && edge.v != 0) continue;
+            root_edges.push_back(Edge{
+                edge.u, edge.v,
+                dist_[edge.u][edge.v]
+                    + potentials[static_cast<std::size_t>(edge.u)]
+                    + potentials[static_cast<std::size_t>(edge.v)]});
+        }
+        for (int vertex = 1; vertex < n_; ++vertex) {
+            const std::size_t id = edgeId(0, vertex);
+            if (!isFinite(dist_[0][vertex]) || node.forced[id]
+                || node.forbidden[id] || !isCandidateActive(node, id)) {
+                continue;
+            }
+            root_edges.push_back(Edge{
+                0, vertex,
+                dist_[0][vertex] + potentials[0]
+                    + potentials[static_cast<std::size_t>(vertex)]});
+        }
+        if (root_edges.size() < 2) return evaluation;
+        std::sort(root_edges.begin(), root_edges.end(),
+                  [&](const Edge& a, const Edge& b) {
+                      const bool a_forced = node.forced[edgeId(a.u, a.v)] != 0;
+                      const bool b_forced = node.forced[edgeId(b.u, b.v)] != 0;
+                      if (a_forced != b_forced) return a_forced;
+                      if (a.w != b.w) return a.w < b.w;
+                      return a.v < b.v;
+                  });
+        // forced 根边已经排在最前；其余位置由修改权重最小的可用根边补齐。
+        for (std::size_t index = 0; index < 2; ++index) {
+            const Edge& edge = root_edges[index];
+            modified_cost += edge.w;
+            ++evaluation.degree[static_cast<std::size_t>(edge.u)];
+            ++evaluation.degree[static_cast<std::size_t>(edge.v)];
+        }
+
+        const double correction = 2.0
+            * std::accumulate(potentials.begin(), potentials.end(), 0.0);
+        // 与安装 subtree epoch 时使用同一舍入保护口径。保护量取决于
+        // 整个修改权重图，而不是恰好被本次 1-tree 选中的边；这样临时
+        // 证书和随后重建出的 epoch 下界可逐项核对。
+        double largest_adjusted_weight = 0.0;
+        const bool has_nonzero_potential = std::any_of(
+            potentials.begin(), potentials.end(),
+            [](double value) { return value != 0.0; });
+        if (has_nonzero_potential) {
+            for (int u = 0; u < n_; ++u) {
+                for (int v = u + 1; v < n_; ++v) {
+                    if (!isFinite(dist_[u][v])) continue;
+                    const double weight = dist_[u][v]
+                        + potentials[static_cast<std::size_t>(u)]
+                        + potentials[static_cast<std::size_t>(v)];
+                    largest_adjusted_weight = std::max(
+                        largest_adjusted_weight, std::fabs(weight));
+                }
+            }
+        }
+        const double guard = scaledRoundoffTolerance(
+            static_cast<double>(n_) * largest_adjusted_weight,
+            correction, static_cast<std::size_t>(n_));
+        evaluation.feasible = true;
+        evaluation.bound = modified_cost - correction - guard;
+        return evaluation;
+    };
+
+    NodePotentialUpdateResult result;
+    result.feasible = true;
+    result.bound = current_bound;
+    std::vector<double> potentials = vertex_potential_;
+    if (potentials.size() != static_cast<std::size_t>(n_)) {
+        potentials.assign(static_cast<std::size_t>(n_), 0.0);
+    }
+    result.potentials = potentials;
+
+    double step_scale = 2.0;
+    std::size_t no_improvement = 0;
+    for (std::size_t iteration = 0; iteration < max_iterations; ++iteration) {
+        const Evaluation evaluation = evaluate(potentials);
+        ++result.iterations;
+        if (!evaluation.feasible) {
+            result.feasible = false;
+            break;
+        }
+
+        const double tolerance = scaledRoundoffTolerance(
+            evaluation.bound, upper_bound, static_cast<std::size_t>(n_));
+        if (evaluation.bound > result.bound + tolerance) {
+            result.bound = evaluation.bound;
+            result.potentials = potentials;
+            no_improvement = 0;
+        } else {
+            ++no_improvement;
+        }
+
+        double subgradient_norm = 0.0;
+        for (const int degree : evaluation.degree) {
+            const double deviation = static_cast<double>(degree - 2);
+            subgradient_norm += deviation * deviation;
+        }
+        if (subgradient_norm == 0.0
+            || evaluation.bound >= upper_bound - tolerance) {
+            break;
+        }
+
+        const double gap = upper_bound - evaluation.bound;
+        const double step = step_scale * gap / subgradient_norm;
+        if (!isFinite(step) || step <= 0.0) break;
+        bool finite_update = true;
+        for (int vertex = 0; vertex < n_; ++vertex) {
+            const std::size_t index = static_cast<std::size_t>(vertex);
+            potentials[index] += step
+                * static_cast<double>(evaluation.degree[index] - 2);
+            finite_update = finite_update && isFinite(potentials[index]);
+        }
+        if (!finite_update) break;
+
+        if (no_improvement >= 4) {
+            step_scale *= 0.5;
+            no_improvement = 0;
+        }
+    }
+    return result;
+}
+
+BranchBoundSolver::OneTree BranchBoundSolver::rebuildPotentialEpoch(
+    PartialSol& node, const std::vector<double>& potentials,
+    const std::vector<unsigned char>& active_by_edge_id)
+{
+    vertex_potential_ = potentials;
+    potential_correction_ = 2.0
+        * std::accumulate(
+            vertex_potential_.begin(), vertex_potential_.end(), 0.0);
+    potential_roundoff_guard_ = 0.0;
+    const bool has_nonzero_potential = std::any_of(
+        vertex_potential_.begin(), vertex_potential_.end(),
+        [](double value) { return value != 0.0; });
+    if (has_nonzero_potential) {
+        double largest_adjusted_weight = 0.0;
+        for (int u = 0; u < n_; ++u) {
+            for (int v = u + 1; v < n_; ++v) {
+                if (!isFinite(dist_[u][v])) continue;
+                largest_adjusted_weight = std::max(
+                    largest_adjusted_weight,
+                    std::fabs(adjustedEdgeWeight(u, v)));
+            }
+        }
+        potential_roundoff_guard_ = scaledRoundoffTolerance(
+            static_cast<double>(n_) * largest_adjusted_weight,
+            potential_correction_, static_cast<std::size_t>(n_));
+    }
+
+    // forced_edges 属于节点副本，可以安全地换成新 epoch 的权重。
+    node.forced_mst_cost = 0.0;
+    node.forced_mst_count = 0;
+    for (Edge& edge : node.forced_edges) {
+        edge.w = adjustedEdgeWeight(edge.u, edge.v);
+        if (edge.u != 0 && edge.v != 0) {
+            node.forced_mst_cost += edge.w;
+            ++node.forced_mst_count;
+        }
+    }
+
+    const std::size_t edge_state_size = static_cast<std::size_t>(n_)
+        * static_cast<std::size_t>(n_);
+    candidates_sorted_.clear();
+    candidates_sorted_.reserve(edge_state_size / 2);
+    for (int u = 0; u < n_; ++u) {
+        for (int v = u + 1; v < n_; ++v) {
+            if (!isFinite(dist_[u][v])) continue;
+            candidates_sorted_.push_back(
+                Edge{u, v, adjustedEdgeWeight(u, v)});
+        }
+    }
+    std::sort(candidates_sorted_.begin(), candidates_sorted_.end(),
+              [](const Edge& a, const Edge& b) {
+                  if (a.w != b.w) return a.w < b.w;
+                  if (a.u != b.u) return a.u < b.u;
+                  return a.v < b.v;
+              });
+
+    edge_rank_by_id_.assign(edge_state_size, -1);
+    candidate_word_count_ = (candidates_sorted_.size() + 63) / 64;
+    candidate_incident_bits_.assign(
+        static_cast<std::size_t>(n_) * candidate_word_count_, 0);
+    internal_candidate_bits_.assign(candidate_word_count_, 0);
+    node.candidate_mask.clear();
+    node.candidate_bit_count = candidates_sorted_.size();
+    node.candidate_bits.assign(candidate_word_count_, 0);
+    available_degree_ = node.forced_degree;
+
+    for (std::size_t index = 0; index < candidates_sorted_.size(); ++index) {
+        const Edge& edge = candidates_sorted_[index];
+        const std::size_t id = edgeId(edge.u, edge.v);
+        edge_rank_by_id_[id] = static_cast<int>(index);
+        const std::size_t word_index = index / 64;
+        const std::uint64_t bit = std::uint64_t{1} << (index % 64);
+        candidate_incident_bits_[
+            static_cast<std::size_t>(edge.u) * candidate_word_count_ + word_index]
+            |= bit;
+        candidate_incident_bits_[
+            static_cast<std::size_t>(edge.v) * candidate_word_count_ + word_index]
+            |= bit;
+        if (edge.u != 0 && edge.v != 0) {
+            internal_candidate_bits_[word_index] |= bit;
+        }
+        if (id < active_by_edge_id.size() && active_by_edge_id[id]) {
+            node.candidate_bits[word_index] |= bit;
+            if (!node.forced[id]) {
+                ++available_degree_[static_cast<std::size_t>(edge.u)];
+                ++available_degree_[static_cast<std::size_t>(edge.v)];
+            }
+        }
+    }
+    insufficient_degree_count_ = 0;
+    for (const int degree : available_degree_) {
+        if (degree < 2) ++insufficient_degree_count_;
+    }
+
+    root_candidates_sorted_.clear();
+    root_candidates_sorted_.reserve(static_cast<std::size_t>(n_ - 1));
+    for (int vertex = 1; vertex < n_; ++vertex) {
+        if (!isFinite(dist_[0][vertex])) continue;
+        root_candidates_sorted_.push_back(
+            Edge{0, vertex, adjustedEdgeWeight(0, vertex)});
+    }
+    std::sort(root_candidates_sorted_.begin(), root_candidates_sorted_.end(),
+              [](const Edge& a, const Edge& b) {
+                  if (a.w != b.w) return a.w < b.w;
+                  return a.v < b.v;
+              });
+
+    candidate_undo_.clear();
+    candidate_undo_.reserve(candidates_sorted_.size());
+    tree_undo_.clear();
+    tree_undo_.reserve(candidates_sorted_.size());
+    tree_snapshot_undo_.clear();
+    tree_snapshot_undo_.reserve(static_cast<std::size_t>(n_));
+    removed_candidate_scratch_.clear();
+    mst_cut_candidate_bits_.clear();
+    return computeOneTree(node, candidates_sorted_);
+}
+
+bool BranchBoundSolver::searchSubtreeWithUpdatedPotentials(
+    PartialSol& node, const OneTree& current_tree,
+    int depth, bool count_node)
+{
+    const auto update_started_at = std::chrono::steady_clock::now();
+    ++result_.stats.potential_updates_attempted;
+    ++potential_updates_in_round_;
+    const NodePotentialUpdateResult update = updateNodePotentialBound(
+        node, current_tree.cost, best_cost_, potential_update_iterations_);
+    result_.stats.potential_update_iterations += update.iterations;
+    result_.stats.potential_update_seconds += std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - update_started_at).count();
+
+    const double tolerance = scaledRoundoffTolerance(
+        update.bound, current_tree.cost, static_cast<std::size_t>(n_));
+    if (!update.feasible
+        || update.potentials.size() != static_cast<std::size_t>(n_)
+        || update.bound <= current_tree.cost + tolerance) {
+        return false;
+    }
+
+    const double gain = update.bound - current_tree.cost;
+    ++result_.stats.potential_updates_improved;
+    result_.stats.potential_update_total_gain += gain;
+    result_.stats.potential_update_max_gain = std::max(
+        result_.stats.potential_update_max_gain, gain);
+    if (shouldPrune(update.bound, best_cost_)) {
+        ++result_.stats.potential_updates_pruned;
+        ++result_.stats.nodes_pruned_by_bound;
+        return true;
+    }
+
+    const std::size_t edge_state_size = static_cast<std::size_t>(n_)
+        * static_cast<std::size_t>(n_);
+    std::vector<unsigned char> active_by_edge_id(edge_state_size, 0);
+    for (const Edge& edge : candidates_sorted_) {
+        const std::size_t id = edgeId(edge.u, edge.v);
+        if (isCandidateActive(node, id)) active_by_edge_id[id] = 1;
+    }
+
+    struct EpochSnapshot {
+        std::vector<double> vertex_potential;
+        double potential_correction = 0.0;
+        double potential_roundoff_guard = 0.0;
+        std::vector<Edge> root_candidates;
+        std::vector<Edge> candidates;
+        std::vector<int> edge_rank;
+        std::vector<CandidateUndo> candidate_undo;
+        std::vector<std::size_t> removed_candidate_scratch;
+        std::vector<std::uint64_t> candidate_incident_bits;
+        std::vector<std::uint64_t> internal_candidate_bits;
+        std::size_t candidate_word_count = 0;
+        std::vector<int> available_degree;
+        int insufficient_degree_count = 0;
+        std::vector<TreeUndo> tree_undo;
+        std::vector<OneTree> tree_snapshot_undo;
+        std::vector<std::uint64_t> mst_cut_candidate_bits;
+        int epoch_depth = 0;
+    } snapshot;
+
+    snapshot.vertex_potential = std::move(vertex_potential_);
+    snapshot.potential_correction = potential_correction_;
+    snapshot.potential_roundoff_guard = potential_roundoff_guard_;
+    snapshot.root_candidates = std::move(root_candidates_sorted_);
+    snapshot.candidates = std::move(candidates_sorted_);
+    snapshot.edge_rank = std::move(edge_rank_by_id_);
+    snapshot.candidate_undo = std::move(candidate_undo_);
+    snapshot.removed_candidate_scratch =
+        std::move(removed_candidate_scratch_);
+    snapshot.candidate_incident_bits = std::move(candidate_incident_bits_);
+    snapshot.internal_candidate_bits = std::move(internal_candidate_bits_);
+    snapshot.candidate_word_count = candidate_word_count_;
+    snapshot.available_degree = std::move(available_degree_);
+    snapshot.insufficient_degree_count = insufficient_degree_count_;
+    snapshot.tree_undo = std::move(tree_undo_);
+    snapshot.tree_snapshot_undo = std::move(tree_snapshot_undo_);
+    snapshot.mst_cut_candidate_bits = std::move(mst_cut_candidate_bits_);
+    snapshot.epoch_depth = current_potential_epoch_depth_;
+
+    auto restore_epoch = [&]() {
+        vertex_potential_ = std::move(snapshot.vertex_potential);
+        potential_correction_ = snapshot.potential_correction;
+        potential_roundoff_guard_ = snapshot.potential_roundoff_guard;
+        root_candidates_sorted_ = std::move(snapshot.root_candidates);
+        candidates_sorted_ = std::move(snapshot.candidates);
+        edge_rank_by_id_ = std::move(snapshot.edge_rank);
+        candidate_undo_ = std::move(snapshot.candidate_undo);
+        removed_candidate_scratch_ =
+            std::move(snapshot.removed_candidate_scratch);
+        candidate_incident_bits_ =
+            std::move(snapshot.candidate_incident_bits);
+        internal_candidate_bits_ =
+            std::move(snapshot.internal_candidate_bits);
+        candidate_word_count_ = snapshot.candidate_word_count;
+        available_degree_ = std::move(snapshot.available_degree);
+        insufficient_degree_count_ = snapshot.insufficient_degree_count;
+        tree_undo_ = std::move(snapshot.tree_undo);
+        tree_snapshot_undo_ = std::move(snapshot.tree_snapshot_undo);
+        mst_cut_candidate_bits_ =
+            std::move(snapshot.mst_cut_candidate_bits);
+        current_potential_epoch_depth_ = snapshot.epoch_depth;
+    };
+
+    const auto rebuild_started_at = std::chrono::steady_clock::now();
+    PartialSol epoch_node = node;
+    current_potential_epoch_depth_ = depth;
+    OneTree epoch_tree = rebuildPotentialEpoch(
+        epoch_node, update.potentials, active_by_edge_id);
+    result_.stats.potential_update_rebuild_seconds
+        += std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - rebuild_started_at).count();
+
+    if (!epoch_tree.feasible) {
+        restore_epoch();
+        return false;
+    }
+#ifdef TSP_VERIFY_INCREMENTAL_STATE
+    if (!costsNumericallyEqual(
+            epoch_tree.cost, update.bound,
+            static_cast<std::size_t>(n_))) {
+        std::ostringstream message;
+        message << "rebuilt potential epoch differs from its ascent certificate"
+                << " depth=" << depth
+                << " rebuilt=" << formatDebugDouble(epoch_tree.cost)
+                << " certificate=" << formatDebugDouble(update.bound)
+                << " active=" << epoch_node.candidate_bit_count
+                << " forced=" << epoch_node.forced_edges.size();
+        restore_epoch();
+        throw std::runtime_error(message.str());
+    }
+#endif
+    ++result_.stats.potential_updates_rebuilt;
+
+    try {
+        // 本锚点已更新，首次进入时禁止再次触发；其后代仍可按间隔创建
+        // 下一层势 epoch。
+        search(epoch_node, epoch_tree, depth, count_node, false);
+        if (!candidate_undo_.empty() || !tree_undo_.empty()
+            || !tree_snapshot_undo_.empty()) {
+            throw std::logic_error(
+                "potential epoch DFS did not restore its anchor state");
+        }
+    } catch (...) {
+        restore_epoch();
+        throw;
+    }
+    restore_epoch();
+    return true;
 }
 
 SolveResult BranchBoundSolver::solve()
@@ -639,8 +1396,11 @@ SolveResult BranchBoundSolver::solve()
         writeDebugLine(debug_, "initial incumbent: unavailable");
     }
     // 自适应多启动 LK 若在探测搜索后改善 incumbent，会完整回退当前
-    // DFS，再用更紧上界重新优化根势并重启；单轮搜索内势始终固定。
+    // DFS，再用更紧上界重新优化根势并重启。subtree 模式在单轮内部还可
+    // 创建局部势 epoch，但每个 epoch 都在退出其子树时完整恢复。
     while (true) {
+        potential_updates_in_round_ = 0;
+        current_potential_epoch_depth_ = 0;
         optimizeRootPotentials(best_cost_);
         PartialSol root;
         root.depth = 0;
@@ -737,6 +1497,18 @@ SolveResult BranchBoundSolver::solve()
         result_.stats.root_lower_bound = root_tree.cost;
         root.bound = root_tree.cost;
         ++result_.stats.nodes_created;
+        if (root_bound_only_) {
+            result_.feasible = isFinite(best_cost_) && !best_tour_.empty();
+            result_.cost = result_.feasible
+                ? best_cost_ : std::numeric_limits<double>::infinity();
+            result_.tour = best_tour_;
+            writeDebugLine(
+                debug_,
+                "root-bound-only finished: lower_bound="
+                    + formatDebugDouble(root.bound)
+                    + " upper_bound=" + formatDebugDouble(best_cost_));
+            return result_;
+        }
         const bool root_pruned = shouldPrune(root.bound, best_cost_);
         RootReducedCostStats fixing;
         if (root_pruned) {
@@ -806,7 +1578,22 @@ SolveResult BranchBoundSolver::solve()
              << " expanded=" << result_.stats.nodes_expanded
              << " created=" << result_.stats.nodes_created
              << " pruned_bound=" << result_.stats.nodes_pruned_by_bound
-             << " pruned_infeasible=" << result_.stats.nodes_pruned_infeasible;
+             << " pruned_infeasible=" << result_.stats.nodes_pruned_infeasible
+             << " potential_updates="
+             << result_.stats.potential_updates_attempted
+             << " potential_improved="
+             << result_.stats.potential_updates_improved
+             << " potential_pruned="
+             << result_.stats.potential_updates_pruned
+             << " potential_rebuilt="
+             << result_.stats.potential_updates_rebuilt
+             << " potential_iterations="
+             << result_.stats.potential_update_iterations
+             << " potential_seconds="
+             << formatDebugDouble(result_.stats.potential_update_seconds)
+             << " potential_rebuild_seconds="
+             << formatDebugDouble(
+                    result_.stats.potential_update_rebuild_seconds);
         writeDebugLine(debug_, line.str());
     }
     return result_;
@@ -978,7 +1765,8 @@ BranchBoundSolver::BranchSet BranchBoundSolver::bpPartition(
 }
 
 void BranchBoundSolver::search(
-    PartialSol& node, OneTree& current_tree, int depth, bool count_node)
+    PartialSol& node, OneTree& current_tree, int depth, bool count_node,
+    bool allow_potential_anchor)
 {
     if (!current_tree.feasible) {
         ++result_.stats.nodes_pruned_infeasible;
@@ -997,6 +1785,44 @@ void BranchBoundSolver::search(
     if (shouldPrune(node.bound, best_cost_)) {
         ++result_.stats.nodes_pruned_by_bound;
         return;
+    }
+
+    const bool update_triggered = count_node && allow_potential_anchor
+        && shouldUpdatePotentials(
+            current_tree, depth, node.bound, best_cost_);
+    if (update_triggered && usesPersistentPotentialUpdates()
+        && searchSubtreeWithUpdatedPotentials(
+            node, current_tree, depth, count_node)) {
+        return;
+    }
+
+    // 证书模式只短暂上升并使用额外下界，不替换 current_tree；subtree
+    // 模式则已在上面建立新 epoch 并完整处理子树。
+    if (update_triggered && !usesPersistentPotentialUpdates()) {
+        const auto update_started_at = std::chrono::steady_clock::now();
+        ++result_.stats.potential_updates_attempted;
+        ++potential_updates_in_round_;
+        const NodePotentialUpdateResult update = updateNodePotentialBound(
+            node, node.bound, best_cost_, potential_update_iterations_);
+        result_.stats.potential_update_iterations += update.iterations;
+        result_.stats.potential_update_seconds += std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - update_started_at).count();
+
+        const double tolerance = scaledRoundoffTolerance(
+            update.bound, node.bound, static_cast<std::size_t>(n_));
+        if (update.feasible && update.bound > node.bound + tolerance) {
+            const double gain = update.bound - node.bound;
+            node.bound = update.bound;
+            ++result_.stats.potential_updates_improved;
+            result_.stats.potential_update_total_gain += gain;
+            result_.stats.potential_update_max_gain = std::max(
+                result_.stats.potential_update_max_gain, gain);
+            if (shouldPrune(node.bound, best_cost_)) {
+                ++result_.stats.potential_updates_pruned;
+                ++result_.stats.nodes_pruned_by_bound;
+                return;
+            }
+        }
     }
     if (count_node) {
         ++result_.stats.nodes_expanded;
