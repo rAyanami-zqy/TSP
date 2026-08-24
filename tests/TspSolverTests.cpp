@@ -195,6 +195,22 @@ struct BranchBoundSolverTestAccess {
                    "force rollback did not restore the exact cached MST state");
         }
 
+        void verifyNodePotentialPrimBound()
+        {
+            expect(tree.feasible,
+                   "cannot compare Prim potential bound on an infeasible tree");
+            const double upper_bound = tree.cost
+                + std::max(1.0, std::fabs(tree.cost));
+            const BranchBoundSolver::NodePotentialUpdateResult update =
+                solver.updateNodePotentialBound(
+                    node, -std::numeric_limits<double>::infinity(),
+                    upper_bound, 1);
+            expect(update.feasible,
+                   "Prim potential evaluator rejected a feasible forced state");
+            expect(std::fabs(update.bound - tree.cost) <= 1e-8,
+                   "Prim potential bound differs from constrained Kruskal");
+        }
+
         void validate(const OneTree& value) const
         {
             expect(value.feasible, "cannot validate infeasible 1-tree");
@@ -495,6 +511,7 @@ void testMixedRootAndInternalForcedEdges()
         || !fixture.contains(fixture.tree, 0, 1)) {
         throw std::runtime_error("forced edges are missing from rebuilt 1-tree");
     }
+    fixture.verifyNodePotentialPrimBound();
     fixture.forbidAndCompare(2, 3);
 }
 
@@ -520,6 +537,7 @@ void testMultipleForcedInternalEdges()
     fixture.force(2, 3);
     fixture.force(0, 1);
     fixture.rebuildAfterForces();
+    fixture.verifyNodePotentialPrimBound();
     fixture.forbidAndCompare(3, 4);
     if (fixture.tree.feasible) {
         throw std::runtime_error("degree-filtered forced state should have no replacement");

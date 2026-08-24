@@ -907,18 +907,121 @@ BranchBoundSolver::updateNodePotentialBound(
         std::vector<int> degree;
     };
 
-    std::vector<Edge> internal_edges;
-    internal_edges.reserve(
+    // 节点约束在一次势上升期间保持不变。预先收缩所有非根 forced 边，
+    // 后续每轮只需在当前有效边构成的分量图上运行 Prim；这避免了为每组势
+    // 重新收集 O(n^2) 条 Edge 并执行 O(n^2 log n) 的 Kruskal 排序。
+    DisjointSet forced_components(n_);
+    bool forced_structure_feasible = true;
+    int forced_root_count = 0;
+    int forced_internal_count = 0;
+    for (const Edge& edge : node.forced_edges) {
+        if (edge.u == 0 || edge.v == 0) {
+            ++forced_root_count;
+            continue;
+        }
+        if (!forced_components.unite(edge.u, edge.v)) {
+            forced_structure_feasible = false;
+            break;
+        }
+        ++forced_internal_count;
+    }
+    if (forced_root_count > 2 || forced_internal_count > n_ - 2) {
+        forced_structure_feasible = false;
+    }
+
+    std::vector<int> component_by_vertex(static_cast<std::size_t>(n_), -1);
+    std::vector<int> component_by_root(static_cast<std::size_t>(n_), -1);
+    int component_count = 0;
+    if (forced_structure_feasible) {
+        for (int vertex = 1; vertex < n_; ++vertex) {
+            const int root = forced_components.find(vertex);
+            int& component = component_by_root[static_cast<std::size_t>(root)];
+            if (component < 0) component = component_count++;
+            component_by_vertex[static_cast<std::size_t>(vertex)] = component;
+        }
+    }
+    std::vector<int> component_vertex_head(
+        static_cast<std::size_t>(component_count), -1);
+    std::vector<int> next_vertex_in_component(
+        static_cast<std::size_t>(n_), -1);
+    for (int vertex = 1; vertex < n_; ++vertex) {
+        const int component =
+            component_by_vertex[static_cast<std::size_t>(vertex)];
+        if (component < 0) continue;
+        next_vertex_in_component[static_cast<std::size_t>(vertex)] =
+            component_vertex_head[static_cast<std::size_t>(component)];
+        component_vertex_head[static_cast<std::size_t>(component)] = vertex;
+    }
+
+    struct PrimArc {
+        int to = -1;
+        int next = -1;
+        double original_weight = 0.0;
+    };
+    std::vector<int> prim_head(static_cast<std::size_t>(n_), -1);
+    std::vector<PrimArc> prim_arcs;
+    prim_arcs.reserve(
         static_cast<std::size_t>(n_ - 1)
-        * static_cast<std::size_t>(n_ - 2) / 2);
+        * static_cast<std::size_t>(n_ - 2));
+    if (forced_structure_feasible) {
+        // active/forced/forbidden 状态在本次有限轮上升中不变，只过滤一次。
+        // 双向邻接使每轮 Prim 仅访问当前节点仍有效的边，而不是完整距离矩阵。
+        for (int u = 1; u < n_; ++u) {
+            for (int v = u + 1; v < n_; ++v) {
+                if (!isFinite(dist_[u][v])) continue;
+                if (component_by_vertex[static_cast<std::size_t>(u)]
+                    == component_by_vertex[static_cast<std::size_t>(v)]) {
+                    continue;
+                }
+                const std::size_t id = edgeId(u, v);
+                if (node.forced[id] || node.forbidden[id]
+                    || !isCandidateActive(node, id)) {
+                    continue;
+                }
+                prim_arcs.push_back(
+                    PrimArc{v, prim_head[static_cast<std::size_t>(u)],
+                            dist_[u][v]});
+                prim_head[static_cast<std::size_t>(u)] =
+                    static_cast<int>(prim_arcs.size() - 1);
+                prim_arcs.push_back(
+                    PrimArc{u, prim_head[static_cast<std::size_t>(v)],
+                            dist_[u][v]});
+                prim_head[static_cast<std::size_t>(v)] =
+                    static_cast<int>(prim_arcs.size() - 1);
+            }
+        }
+    }
+
+    const double infinity = std::numeric_limits<double>::infinity();
+    std::vector<double> best_component_weight(
+        static_cast<std::size_t>(component_count), infinity);
+    std::vector<int> best_component_u(
+        static_cast<std::size_t>(component_count), -1);
+    std::vector<int> best_component_v(
+        static_cast<std::size_t>(component_count), -1);
+    std::vector<unsigned char> component_in_tree(
+        static_cast<std::size_t>(component_count), 0);
+    std::vector<Edge> root_edges;
+    root_edges.reserve(static_cast<std::size_t>(n_ - 1));
+
+    auto edge_key_less = [](double left_weight, int left_u, int left_v,
+                            double right_weight, int right_u, int right_v) {
+        if (left_weight != right_weight) return left_weight < right_weight;
+        if (left_u > left_v) std::swap(left_u, left_v);
+        if (right_u > right_v) std::swap(right_u, right_v);
+        if (left_u != right_u) return left_u < right_u;
+        return left_v < right_v;
+    };
 
     auto evaluate = [&](const std::vector<double>& potentials) {
         Evaluation evaluation;
         evaluation.degree.assign(static_cast<std::size_t>(n_), 0);
-        DisjointSet components(n_);
+        if (!forced_structure_feasible || component_count == 0) {
+            return evaluation;
+        }
+
         double modified_cost = 0.0;
-        int mst_edge_count = 0;
-        int forced_root_count = 0;
+        int mst_edge_count = forced_internal_count;
 
         // 强制边必须先进入受约束 1-tree。边中保存的是根势权重，因此这里
         // 用临时势重新计算权重，不能直接使用 Edge::w。
@@ -928,53 +1031,100 @@ BranchBoundSolver::updateNodePotentialBound(
                 + potentials[static_cast<std::size_t>(edge.v)];
             if (!isFinite(weight)) return evaluation;
             if (edge.u == 0 || edge.v == 0) {
-                ++forced_root_count;
                 continue;
             }
-            if (!components.unite(edge.u, edge.v)) return evaluation;
             modified_cost += weight;
             ++evaluation.degree[static_cast<std::size_t>(edge.u)];
             ++evaluation.degree[static_cast<std::size_t>(edge.v)];
-            ++mst_edge_count;
-        }
-        if (forced_root_count > 2 || mst_edge_count > n_ - 2) {
-            return evaluation;
         }
 
-        internal_edges.clear();
-        for (int u = 1; u < n_; ++u) {
-            for (int v = u + 1; v < n_; ++v) {
-                if (!isFinite(dist_[u][v])) continue;
-                const std::size_t id = edgeId(u, v);
-                if (node.forced[id] || node.forbidden[id]
-                    || !isCandidateActive(node, id)) {
+        std::fill(best_component_weight.begin(), best_component_weight.end(),
+                  infinity);
+        std::fill(best_component_u.begin(), best_component_u.end(), -1);
+        std::fill(best_component_v.begin(), best_component_v.end(), -1);
+        std::fill(component_in_tree.begin(), component_in_tree.end(), 0);
+
+        // 在 forced 分量图上执行 Prim。候选邻接已在本次上升开始时过滤，
+        // 每轮只需扫描 O(m_active) 条 arc，并用 O(component_count^2) 选择
+        // 下一个分量；不再构造和排序 Edge 数组。
+        auto relax_component = [&](int selected_component) {
+            for (int u = component_vertex_head[
+                     static_cast<std::size_t>(selected_component)];
+                 u >= 0;
+                 u = next_vertex_in_component[static_cast<std::size_t>(u)]) {
+                for (int arc_index = prim_head[static_cast<std::size_t>(u)];
+                     arc_index >= 0;
+                     arc_index = prim_arcs[
+                         static_cast<std::size_t>(arc_index)].next) {
+                    const PrimArc& arc =
+                        prim_arcs[static_cast<std::size_t>(arc_index)];
+                    const int v = arc.to;
+                    const int target_component =
+                        component_by_vertex[static_cast<std::size_t>(v)];
+                    if (target_component == selected_component
+                        || component_in_tree[
+                            static_cast<std::size_t>(target_component)]) {
+                        continue;
+                    }
+                    const double weight = arc.original_weight
+                        + potentials[static_cast<std::size_t>(u)]
+                        + potentials[static_cast<std::size_t>(v)];
+                    if (!isFinite(weight)) continue;
+                    const std::size_t target =
+                        static_cast<std::size_t>(target_component);
+                    if (best_component_u[target] < 0
+                        || edge_key_less(
+                            weight, u, v,
+                            best_component_weight[target],
+                            best_component_u[target],
+                            best_component_v[target])) {
+                        best_component_weight[target] = weight;
+                        best_component_u[target] = u;
+                        best_component_v[target] = v;
+                    }
+                }
+            }
+        };
+
+        component_in_tree[0] = 1;
+        relax_component(0);
+        for (int selected_count = 1;
+             selected_count < component_count; ++selected_count) {
+            int next_component = -1;
+            for (int component = 0; component < component_count; ++component) {
+                const std::size_t index = static_cast<std::size_t>(component);
+                if (component_in_tree[index] || best_component_u[index] < 0) {
                     continue;
                 }
-                internal_edges.push_back(Edge{
-                    u, v,
-                    dist_[u][v]
-                        + potentials[static_cast<std::size_t>(u)]
-                        + potentials[static_cast<std::size_t>(v)]});
+                if (next_component < 0) {
+                    next_component = component;
+                    continue;
+                }
+                const std::size_t next =
+                    static_cast<std::size_t>(next_component);
+                if (edge_key_less(
+                        best_component_weight[index],
+                        best_component_u[index], best_component_v[index],
+                        best_component_weight[next],
+                        best_component_u[next], best_component_v[next])) {
+                    next_component = component;
+                }
             }
-        }
-        std::sort(internal_edges.begin(), internal_edges.end(),
-                  [](const Edge& a, const Edge& b) {
-                      if (a.w != b.w) return a.w < b.w;
-                      if (a.u != b.u) return a.u < b.u;
-                      return a.v < b.v;
-                  });
-        for (const Edge& edge : internal_edges) {
-            if (mst_edge_count == n_ - 2) break;
-            if (!components.unite(edge.u, edge.v)) continue;
-            modified_cost += edge.w;
-            ++evaluation.degree[static_cast<std::size_t>(edge.u)];
-            ++evaluation.degree[static_cast<std::size_t>(edge.v)];
+            if (next_component < 0) return evaluation;
+
+            const std::size_t next = static_cast<std::size_t>(next_component);
+            modified_cost += best_component_weight[next];
+            ++evaluation.degree[
+                static_cast<std::size_t>(best_component_u[next])];
+            ++evaluation.degree[
+                static_cast<std::size_t>(best_component_v[next])];
             ++mst_edge_count;
+            component_in_tree[next] = 1;
+            relax_component(next_component);
         }
         if (mst_edge_count != n_ - 2) return evaluation;
 
-        std::vector<Edge> root_edges;
-        root_edges.reserve(static_cast<std::size_t>(n_ - 1));
+        root_edges.clear();
         for (const Edge& edge : node.forced_edges) {
             if (edge.u != 0 && edge.v != 0) continue;
             root_edges.push_back(Edge{
