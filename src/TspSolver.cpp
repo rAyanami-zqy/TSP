@@ -26,7 +26,8 @@
 namespace tsp {
 namespace {
 
-// 仅用于启发式改进的停滞阈值；精确搜索不能使用固定绝对容差剪枝。
+// 精确求解内部的 tour 构造/LK 只接受超过该阈值的启发式改善；
+// 正确性相关的下界剪枝使用后面的尺度化舍入保护，不使用此常量。
 constexpr double kHeuristicEps = 1e-9;
 constexpr double kPi = 3.141592653589793238462643383279502884;
 
@@ -129,45 +130,7 @@ std::string formatDebugDouble(double value)
     return out.str();
 }
 
-// 去除字符串首尾的空白字符，返回新的字符串副本。输入中的 section marker 可能带有多余空格。
-std::string trimCopy(const std::string& text)
-{
-    const std::string whitespace = " \t\r\n";
-    const std::size_t begin = text.find_first_not_of(whitespace);
-    if (begin == std::string::npos) {
-        return {};
-    }
-    const std::size_t end = text.find_last_not_of(whitespace);
-    return text.substr(begin, end - begin + 1);
-}
-
-// 将字符串转换为全大写形式，返回新的字符串副本。输入中的 section marker 可能大小写不一致。
-std::string upperCopy(std::string text)
-{
-    for (char& ch : text) {
-        ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
-    }
-    return text;
-}
-
-// 判断一行文本是否是输入文件中的 section marker，标记了不同类型数据的开始。输入中可能有多余空格和大小写不一致。
-bool isSectionMarker(const std::string& line)
-{
-    const std::string upper = upperCopy(trimCopy(line));
-    return upper == "NODE_COORD_SECTION"
-        || upper == "EDGE_WEIGHT_SECTION"
-        || upper == "DISPLAY_DATA_SECTION"
-        || upper == "TOUR_SECTION"
-        || upper == "DEPOT_SECTION"
-        || upper == "DEMAND_SECTION"
-        || upper == "EOF";
-}
-
-// 将 double 类型的距离值四舍五入到最近的整数，符合 TSPLIB 中某些 EDGE_WEIGHT_TYPE 的定义。
-int roundedDistance(double value)
-{
-    return static_cast<int>(std::floor(value + 0.5));
-}
+#include "TspProblemText.ipp"
 
 // 并查集用于 Kruskal 构造 MST，同时检测强制边是否已形成非法环。
 class DisjointSet {
@@ -219,28 +182,7 @@ private:
     std::vector<int> rank_;
 };
 
-// 解析一个距离矩阵元素，支持数字、INF、-、X 等表示缺边的写法。
-double parseWeight(const std::string& token)
-{
-    // 先转小写，兼容 INF / Infinity 等大小写写法。
-    std::string lowered;
-    lowered.reserve(token.size());
-    for (char ch : token) {
-        lowered.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
-    }
-
-    if (lowered == "inf" || lowered == "infinity" || lowered == "-" || lowered == "x") {
-        return std::numeric_limits<double>::infinity();
-    }
-
-    // stod 允许部分解析，因此需要检查 parsed 是否刚好到字符串末尾。
-    std::size_t parsed = 0;
-    double value = std::stod(token, &parsed);
-    if (parsed != token.size()) {
-        throw std::runtime_error("invalid numeric token: " + token);
-    }
-    return value;
-}
+#include "TspProblemWeight.ipp"
 
 // 近似比较两个边权是否相等，考虑到输入中的微小误差和计算中的浮点误差。
 bool sameWeight(double a, double b)
@@ -250,132 +192,11 @@ bool sameWeight(double a, double b)
     return a == b;
 }
 
-// 将 GEO 坐标格式的经纬度转换为弧度，符合 TSPLIB 中 GEO 坐标的定义。
-double geoCoordinateToRadians(double value)
-{
-    const int degrees = static_cast<int>(value);
-    const double minutes = value - static_cast<double>(degrees);
-    return kPi * (static_cast<double>(degrees) + 5.0 * minutes / 3.0) / 180.0;
-}
-
-// 根据 EDGE_WEIGHT_TYPE 定义的距离计算方法，计算两个点之间的距离。支持多种距离类型，符合 TSPLIB 中的定义。
-double coordinateDistance(const Point& a, const Point& b, const std::string& edge_weight_type)
-{
-    const double dx = a.x - b.x;
-    const double dy = a.y - b.y;
-    const double dz = a.z - b.z;
-    const std::string type = upperCopy(edge_weight_type);
-
-    if (type == "EUC_2D") {
-        return roundedDistance(std::sqrt(dx * dx + dy * dy));
-    }
-    if (type == "CEIL_2D") {
-        return std::ceil(std::sqrt(dx * dx + dy * dy));
-    }
-    if (type == "FLOOR_2D") {
-        return std::floor(std::sqrt(dx * dx + dy * dy));
-    }
-    if (type == "MAN_2D") {
-        return roundedDistance(std::fabs(dx) + std::fabs(dy));
-    }
-    if (type == "MAX_2D") {
-        return roundedDistance(std::max(std::fabs(dx), std::fabs(dy)));
-    }
-    if (type == "EUC_3D") {
-        return roundedDistance(std::sqrt(dx * dx + dy * dy + dz * dz));
-    }
-    if (type == "CEIL_3D") {
-        return std::ceil(std::sqrt(dx * dx + dy * dy + dz * dz));
-    }
-    if (type == "MAN_3D") {
-        return roundedDistance(std::fabs(dx) + std::fabs(dy) + std::fabs(dz));
-    }
-    if (type == "MAX_3D") {
-        return roundedDistance(std::max({std::fabs(dx), std::fabs(dy), std::fabs(dz)}));
-    }
-    if (type == "ATT") {
-        const double rij = std::sqrt((dx * dx + dy * dy) / 10.0);
-        const int tij = roundedDistance(rij);
-        return tij < rij ? tij + 1 : tij;
-    }
-    if (type == "GEO") {
-        const double lat_a = geoCoordinateToRadians(a.x);
-        const double lon_a = geoCoordinateToRadians(a.y);
-        const double lat_b = geoCoordinateToRadians(b.x);
-        const double lon_b = geoCoordinateToRadians(b.y);
-        const double q1 = std::cos(lon_a - lon_b);
-        const double q2 = std::cos(lat_a - lat_b);
-        const double q3 = std::cos(lat_a + lat_b);
-        const double argument = 0.5 * ((1.0 + q1) * q2 - (1.0 - q1) * q3);
-        const double clamped = std::max(-1.0, std::min(1.0, argument));
-        return static_cast<int>(6378.388 * std::acos(clamped) + 1.0);
-    }
-
-    throw std::runtime_error("unsupported coordinate EDGE_WEIGHT_TYPE: " + edge_weight_type);
-}
+#include "TspProblemCoordinate.ipp"
 
 } // namespace
 
-// TspProblem 成员函数实现。
-int TspProblem::dimension() const
-{
-    if (!matrix.empty()) {
-        return static_cast<int>(matrix.size());
-    }
-    return static_cast<int>(coordinates.size());
-}
-
-bool TspProblem::hasCoordinates() const
-{
-    return !coordinates.empty();
-}
-
-bool TspProblem::hasDenseMatrix() const
-{
-    return !matrix.empty();
-}
-
-double TspProblem::distance(int u, int v) const
-{
-    if (u == v) {
-        return 0.0;
-    }
-    if (!matrix.empty()) {
-        return matrix[static_cast<std::size_t>(u)][static_cast<std::size_t>(v)];
-    }
-    if (!coordinates.empty()) {
-        return coordinateDistance(
-            coordinates[static_cast<std::size_t>(u)],
-            coordinates[static_cast<std::size_t>(v)],
-            edge_weight_type.empty() ? "EUC_2D" : edge_weight_type);
-    }
-    throw std::runtime_error("problem has neither a matrix nor coordinates");
-}
-
-std::vector<std::vector<double>> TspProblem::toDenseMatrix(std::size_t max_dimension) const
-{
-    const int n = dimension();
-    if (n <= 0) {
-        throw std::runtime_error("TSP problem has no vertices");
-    }
-    if (max_dimension != 0 && static_cast<std::size_t>(n) > max_dimension) {
-        throw std::runtime_error("instance dimension exceeds dense exact limit");
-    }
-    if (!matrix.empty()) {
-        return matrix;
-    }
-
-    std::vector<std::vector<double>> dense(static_cast<std::size_t>(n),
-                                           std::vector<double>(static_cast<std::size_t>(n), 0.0));
-    for (int i = 0; i < n; ++i) {
-        for (int j = i + 1; j < n; ++j) {
-            const double value = distance(i, j);
-            dense[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = value;
-            dense[static_cast<std::size_t>(j)][static_cast<std::size_t>(i)] = value;
-        }
-    }
-    return dense;
-}
+#include "TspProblemModel.ipp"
 
 BranchBoundSolver::BranchBoundSolver(std::vector<std::vector<double>> distance)
     : n_(static_cast<int>(distance.size())), dist_(std::move(distance))
@@ -461,6 +282,13 @@ void BranchBoundSolver::setRootAscentStrategy(RootAscentStrategy strategy)
     root_ascent_strategy_ = strategy;
 }
 
+void BranchBoundSolver::setBranchEdgeOrder(BranchEdgeOrder order)
+{
+    // 此处只记录策略。root alpha 依赖最终根势和根 1-tree，必须延迟到
+    // solve() 的每个根搜索 epoch 中计算，不能在配置阶段提前构建。
+    branch_edge_order_ = order;
+}
+
 void BranchBoundSolver::setPotentialUpdateOptions(
     PotentialUpdateStrategy strategy, std::size_t depth,
     std::size_t iterations, double gap_ratio, std::size_t budget)
@@ -498,8 +326,110 @@ double BranchBoundSolver::adjustedEdgeWeight(int u, int v) const
         + vertex_potential_[static_cast<std::size_t>(v)];
 }
 
+void BranchBoundSolver::buildRootAlphaNearness(const OneTree& root_tree)
+{
+    // edgeId 使用 u*n+v 的稠密下标，因此所有按边索引的状态统一分配 n²
+    // 个槽位；虽然只使用无向边的上三角位置，但可避免额外哈希和分支。
+    const std::size_t state_size = static_cast<std::size_t>(n_)
+        * static_cast<std::size_t>(n_);
+    const double infinity = std::numeric_limits<double>::infinity();
+    // 表使用稳定的 edgeId 索引。根 1-tree 中的边 alpha=0；缺边或无法
+    // 计算替换路径的边保持 infinity，使比较器仍能通过后备规则稳定排序。
+    root_alpha_by_edge_id_.assign(state_size, infinity);
+
+    struct TreeArc {
+        // 内部根 MST 邻接表的一条有向弧；每条无向树边存为两条弧。
+        int to = -1;
+        // 根势下的调整权重，不是原始距离。
+        double weight = 0.0;
+    };
+    // tree_adjacency 排除顶点 0，只描述顶点 1..n-1 上的 MST。
+    std::vector<std::vector<TreeArc>> tree_adjacency(
+        static_cast<std::size_t>(n_));
+    // 以 edgeId 为下标，标记边是否属于当前根 1-tree。
+    std::vector<unsigned char> in_root_tree(state_size, 0);
+    // 根 1-tree 已选两条根边中的较大调整权重；用于计算第三条根边的
+    // 强制加入代价。若根树不完整则保持 -infinity。
+    double largest_selected_root_weight =
+        -std::numeric_limits<double>::infinity();
+
+    for (const Edge& edge : root_tree.edges) {
+        const std::size_t id = edgeId(edge.u, edge.v);
+        in_root_tree[id] = 1;
+        root_alpha_by_edge_id_[id] = 0.0;
+        if (edge.u == 0 || edge.v == 0) {
+            largest_selected_root_weight = std::max(
+                largest_selected_root_weight, edge.w);
+            continue;
+        }
+        tree_adjacency[static_cast<std::size_t>(edge.u)].push_back(
+            TreeArc{edge.v, edge.w});
+        tree_adjacency[static_cast<std::size_t>(edge.v)].push_back(
+            TreeArc{edge.u, edge.w});
+    }
+
+    // parent 同时保存 DFS 父节点并充当 visited 标记；path_max[v] 是从本轮
+    // source 到 v 的唯一树路径上最大调整边权；stack 是无递归 DFS 栈。
+    std::vector<int> parent(static_cast<std::size_t>(n_), -1);
+    std::vector<double> path_max(
+        static_cast<std::size_t>(n_),
+        -std::numeric_limits<double>::infinity());
+    std::vector<int> stack;
+    stack.reserve(static_cast<std::size_t>(n_));
+
+    // 顶点 1..n-1 上的根 MST 是一棵树。从每个源点遍历一次，在 O(n^2)
+    // 内得到所有树路径最大边；该一次性预处理不会进入 DFS 热路径。
+    for (int source = 1; source < n_; ++source) {
+        std::fill(parent.begin(), parent.end(), -1);
+        std::fill(path_max.begin(), path_max.end(),
+                  -std::numeric_limits<double>::infinity());
+        stack.clear();
+        parent[static_cast<std::size_t>(source)] = source;
+        stack.push_back(source);
+        while (!stack.empty()) {
+            const int u = stack.back();
+            stack.pop_back();
+            for (const TreeArc& arc :
+                 tree_adjacency[static_cast<std::size_t>(u)]) {
+                if (parent[static_cast<std::size_t>(arc.to)] >= 0) continue;
+                parent[static_cast<std::size_t>(arc.to)] = u;
+                path_max[static_cast<std::size_t>(arc.to)] = std::max(
+                    path_max[static_cast<std::size_t>(u)], arc.weight);
+                stack.push_back(arc.to);
+            }
+        }
+
+        for (int target = source + 1; target < n_; ++target) {
+            const std::size_t id = edgeId(source, target);
+            if (in_root_tree[id] || !isFinite(dist_[source][target])) continue;
+            // beta 是加入该非树边后形成环中可删除的最重树边权。
+            const double beta = path_max[static_cast<std::size_t>(target)];
+            if (!isFinite(beta)) continue;
+            // 强制内部非树边 (source,target) 后，删去根 MST 路径上的最大边
+            // 即可恢复生成树；两者调整权重之差就是该边的 alpha-nearness。
+            const double alpha = std::max(
+                0.0, adjustedEdgeWeight(source, target) - beta);
+            root_alpha_by_edge_id_[id] = alpha;
+        }
+    }
+
+    if (isFinite(largest_selected_root_weight)) {
+        for (int vertex = 1; vertex < n_; ++vertex) {
+            const std::size_t id = edgeId(0, vertex);
+            if (!isFinite(dist_[0][vertex]) || in_root_tree[id]) continue;
+            // 1-tree 必须保留两条根边。强制一条未选根边时，最优交换是替换
+            // 当前两条根边中较重的一条，因此代价增量可直接由两者之差得到。
+            const double alpha = std::max(
+                0.0, adjustedEdgeWeight(0, vertex)
+                    - largest_selected_root_weight);
+            root_alpha_by_edge_id_[id] = alpha;
+        }
+    }
+}
+
 void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
 {
+    // 用于统计整个根势优化阶段（包括所有候选策略）的墙钟时间。
     const auto started_at = std::chrono::steady_clock::now();
     vertex_potential_.assign(static_cast<std::size_t>(n_), 0.0);
     potential_correction_ = 0.0;
@@ -551,11 +481,15 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
     }
 
     struct OneTreeEvaluation {
+        // false 表示调整权重图无法形成完整 1-tree。
         bool feasible = false;
+        // 已减去 2*sum(pi) 的原问题下界。
         double bound = -std::numeric_limits<double>::infinity();
+        // 本次 1-tree 的顶点度数；degree[v]-2 是势的次梯度分量。
         std::vector<int> degree;
     };
 
+    // evaluate 多次复用的内部边缓冲区，只包含顶点 1..n-1 的边。
     std::vector<Edge> internal_edges;
     internal_edges.reserve(
         static_cast<std::size_t>(n_ - 1) * static_cast<std::size_t>(n_ - 2) / 2);
@@ -576,6 +510,8 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
         std::sort(internal_edges.begin(), internal_edges.end(),
                   [](const Edge& a, const Edge& b) { return a.w < b.w; });
 
+        // components 用于本轮 Kruskal；mst_edge_count 的目标值是 n-2。
+        // modified_cost 累加调整权重，最后还需减去势修正量。
         DisjointSet components(n_);
         int mst_edge_count = 0;
         double modified_cost = 0.0;
@@ -588,6 +524,7 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
         }
         if (mst_edge_count != n_ - 2) return evaluation;
 
+        // root_edges 始终保存目前扫描到的两条最轻根边，按权重升序排列。
         std::array<Edge, 2> root_edges{};
         std::size_t root_edge_count = 0;
         for (int vertex = 1; vertex < n_; ++vertex) {
@@ -625,8 +562,10 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
     };
 
     struct AscentCandidate {
+        // 某一上升策略迄今取得最强根下界时对应的势，而不是最后一轮势。
         std::vector<double> potentials;
         double bound = -std::numeric_limits<double>::infinity();
+        // 实际完成的 1-tree 评估次数，用于实验统计。
         int iterations = 0;
     };
 
@@ -645,10 +584,13 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
 
     constexpr int kMaxIterations = 400;
     auto run_polyak = [&](const std::vector<double>& initial) {
+        // potentials 是正在迭代的工作势；best 单独保存历史最好证书。
         std::vector<double> potentials = initial;
         AscentCandidate best;
         best.potentials = initial;
+        // step_scale 是 Polyak 步长乘子；连续停滞后折半。
         double step_scale = 2.0;
+        // 自上次改善 best.bound 起连续无改善的轮数。
         int no_improvement = 0;
         constexpr int kStagnationIterations = 12;
         constexpr int kMinIterationsBeforeGapStop = 100;
@@ -701,12 +643,15 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
 
     auto run_helsgaun = [&](const std::vector<double>& initial) {
         std::vector<double> potentials = initial;
+        // 上一轮次梯度用于 0.7/0.3 平滑，降低方向振荡。
         std::vector<double> previous_subgradient(
             static_cast<std::size_t>(n_), 0.0);
         bool have_previous = false;
         double previous_bound = -std::numeric_limits<double>::infinity();
+        // step 是当前 period 的基础步长；period 是该步长持续的轮数。
         double step = 1.0;
         int period = std::max(1, n_ / 2);
+        // position_in_period 从 0 计数；结束一个 period 后步长和周期更新。
         int position_in_period = 0;
         bool first_period = true;
         bool doubling_step = true;
@@ -854,6 +799,7 @@ bool BranchBoundSolver::shouldUpdatePotentials(
     // 初始精确搜索同时承担 diversified-LK 的困难度探测；若稍后改善
     // incumbent，该轮会整体回滚。先给它一个保守预算，探测完成或重启后
     // 再开放完整用户预算，避免在注定丢弃的轮次做大量局部上升。
+    // active_budget 是当前根搜索轮次实际可用的尝试上限，不是剩余次数。
     const std::size_t active_budget =
         !diversified_tour_attempted_ && !initial_tour_alternatives_.empty()
         ? std::min<std::size_t>(potential_update_budget_, 1000)
@@ -867,6 +813,8 @@ bool BranchBoundSolver::shouldUpdatePotentials(
         return false;
     }
 
+    // violation_norm = Σ(degree[v]-2)²；为 0 表示 1-tree 已满足 tour 度约束，
+    // 此时没有可用于更新势的非零次梯度。
     double violation_norm = 0.0;
     for (const int degree : tree.degree) {
         const double deviation = static_cast<double>(degree - 2);
@@ -879,6 +827,7 @@ bool BranchBoundSolver::shouldUpdatePotentials(
     }
 
     if (usesPersistentPotentialUpdates()) {
+        // depth_since_epoch 防止在刚安装新势的相邻层立即再次重建整个子树状态。
         const int depth_since_epoch = depth - current_potential_epoch_depth_;
         if (depth_since_epoch < 0
             || static_cast<std::size_t>(depth_since_epoch)
@@ -890,6 +839,7 @@ bool BranchBoundSolver::shouldUpdatePotentials(
         }
     }
 
+    // scale 避免 UB 接近 0 时除数退化；relative_gap 是无量纲触发指标。
     const double scale = std::max(1.0, std::fabs(upper_bound));
     const double relative_gap = std::max(0.0, upper_bound - bound) / scale;
     return static_cast<std::size_t>(depth) >= potential_update_depth_
@@ -902,16 +852,21 @@ BranchBoundSolver::updateNodePotentialBound(
     double upper_bound, std::size_t max_iterations) const
 {
     struct Evaluation {
+        // 单组临时势在当前 forced/forbidden 约束下得到的 1-tree 证书。
         bool feasible = false;
         double bound = -std::numeric_limits<double>::infinity();
+        // degree[v]-2 在外层被用作本轮次梯度。
         std::vector<int> degree;
     };
 
     // 节点约束在一次势上升期间保持不变。预先收缩所有非根 forced 边，
     // 后续每轮只需在当前有效边构成的分量图上运行 Prim；这避免了为每组势
     // 重新收集 O(n^2) 条 Edge 并执行 O(n^2 log n) 的 Kruskal 排序。
+    // forced_components 只收缩非根 forced 边；根边不属于内部 MST。
     DisjointSet forced_components(n_);
+    // forced_structure_feasible 在势迭代开始前一次性验证强制结构。
     bool forced_structure_feasible = true;
+    // 根 forced 边最多 2 条，内部 forced 边最多 n-2 条。
     int forced_root_count = 0;
     int forced_internal_count = 0;
     for (const Edge& edge : node.forced_edges) {
@@ -929,6 +884,8 @@ BranchBoundSolver::updateNodePotentialBound(
         forced_structure_feasible = false;
     }
 
+    // component_by_vertex[v] 是 v 所属的紧凑 Prim 分量编号；
+    // component_by_root 将 DSU 根映射为 0..component_count-1。
     std::vector<int> component_by_vertex(static_cast<std::size_t>(n_), -1);
     std::vector<int> component_by_root(static_cast<std::size_t>(n_), -1);
     int component_count = 0;
@@ -940,6 +897,8 @@ BranchBoundSolver::updateNodePotentialBound(
             component_by_vertex[static_cast<std::size_t>(vertex)] = component;
         }
     }
+    // 每个 forced 分量的顶点以单链表存储：head[c] 指向首顶点，
+    // next_vertex_in_component[v] 指向同分量下一顶点，避免 vector-of-vector。
     std::vector<int> component_vertex_head(
         static_cast<std::size_t>(component_count), -1);
     std::vector<int> next_vertex_in_component(
@@ -954,10 +913,14 @@ BranchBoundSolver::updateNodePotentialBound(
     }
 
     struct PrimArc {
+        // 目标顶点；弧的源顶点由它所在的 prim_head 邻接链确定。
         int to = -1;
+        // 同一源顶点邻接链中的下一条弧下标，-1 表示链尾。
         int next = -1;
+        // 原始距离；每轮使用时再加临时势 pi[u]+pi[v]。
         double original_weight = 0.0;
     };
+    // prim_head[u] 是 u 的第一条有效内部弧下标；每条无向边存为两条弧。
     std::vector<int> prim_head(static_cast<std::size_t>(n_), -1);
     std::vector<PrimArc> prim_arcs;
     prim_arcs.reserve(
@@ -993,14 +956,18 @@ BranchBoundSolver::updateNodePotentialBound(
     }
 
     const double infinity = std::numeric_limits<double>::infinity();
+    // 对每个尚未入树的 forced 分量，以下三个数组共同保存当前最便宜的
+    // 跨割边：(best_component_u[c], best_component_v[c], weight[c])。
     std::vector<double> best_component_weight(
         static_cast<std::size_t>(component_count), infinity);
     std::vector<int> best_component_u(
         static_cast<std::size_t>(component_count), -1);
     std::vector<int> best_component_v(
         static_cast<std::size_t>(component_count), -1);
+    // component_in_tree[c] 标记紧凑分量 c 是否已经被 Prim 选中。
     std::vector<unsigned char> component_in_tree(
         static_cast<std::size_t>(component_count), 0);
+    // 根边数量只有 O(n)，每轮重新收集后强制边优先、其余按调整权重排序。
     std::vector<Edge> root_edges;
     root_edges.reserve(static_cast<std::size_t>(n_ - 1));
 
@@ -1020,6 +987,8 @@ BranchBoundSolver::updateNodePotentialBound(
             return evaluation;
         }
 
+        // modified_cost 是临时势下已选边的调整权重和；mst_edge_count 包含
+        // 预先收缩的 forced 内部边，最终必须恰好达到 n-2。
         double modified_cost = 0.0;
         int mst_edge_count = forced_internal_count;
 
@@ -1161,6 +1130,8 @@ BranchBoundSolver::updateNodePotentialBound(
             ++evaluation.degree[static_cast<std::size_t>(edge.v)];
         }
 
+        // 每个合法 tour 中每个顶点出现两次，因此从调整权重和中减去
+        // correction=2*Σpi[v] 后，得到原问题坐标系中的下界。
         const double correction = 2.0
             * std::accumulate(potentials.begin(), potentials.end(), 0.0);
         // 与安装 subtree epoch 时使用同一舍入保护口径。保护量取决于
@@ -1182,6 +1153,7 @@ BranchBoundSolver::updateNodePotentialBound(
                 }
             }
         }
+        // guard 只向下放松证书，用于抵消调整权重求和与势修正相减的舍入误差。
         const double guard = scaledRoundoffTolerance(
             static_cast<double>(n_) * largest_adjusted_weight,
             correction, static_cast<std::size_t>(n_));
@@ -1190,6 +1162,8 @@ BranchBoundSolver::updateNodePotentialBound(
         return evaluation;
     };
 
+    // result 始终保存整个尝试期间取得的最强证书和对应势；potentials 则是
+    // 下一轮要评估的工作副本，两者可能来自不同迭代。
     NodePotentialUpdateResult result;
     result.feasible = true;
     result.bound = current_bound;
@@ -1199,6 +1173,7 @@ BranchBoundSolver::updateNodePotentialBound(
     }
     result.potentials = potentials;
 
+    // step_scale 控制 Polyak 步长，no_improvement 达到阈值后折半抑制振荡。
     double step_scale = 2.0;
     std::size_t no_improvement = 0;
     for (std::size_t iteration = 0; iteration < max_iterations; ++iteration) {
@@ -1209,6 +1184,7 @@ BranchBoundSolver::updateNodePotentialBound(
             break;
         }
 
+        // tolerance 是比较两个浮点下界时的尺度相关容差，不是算法 gap。
         const double tolerance = scaledRoundoffTolerance(
             evaluation.bound, upper_bound, static_cast<std::size_t>(n_));
         if (evaluation.bound > result.bound + tolerance) {
@@ -1224,11 +1200,20 @@ BranchBoundSolver::updateNodePotentialBound(
             const double deviation = static_cast<double>(degree - 2);
             subgradient_norm += deviation * deviation;
         }
-        if (subgradient_norm == 0.0
+        // 与 DFS 共用正式剪枝谓词。整数 TSP 中 ceil(bound-tolerance) >= UB
+        // 已足以证明该节点不能改进 incumbent；继续迭代只会加固同一证明，
+        // 不会改变搜索决策，所以可安全省掉本轮剩余的势更新。
+        const bool prunable = shouldPrune(result.bound, upper_bound);
+        if (subgradient_norm == 0.0 || prunable
             || evaluation.bound >= upper_bound - tolerance) {
+            // 仅在确实省下至少一次迭代时计数，避免把自然到达轮次上限记成收益。
+            result.stopped_prunable =
+                prunable && iteration + 1 < max_iterations;
             break;
         }
 
+        // gap 使用当前轮证书而非历史最优 result.bound；step 是标准 Polyak
+        // 步长 scale*(UB-LB)/||g||²。
         const double gap = upper_bound - evaluation.bound;
         const double step = step_scale * gap / subgradient_norm;
         if (!isFinite(step) || step <= 0.0) break;
@@ -1253,6 +1238,8 @@ BranchBoundSolver::OneTree BranchBoundSolver::rebuildPotentialEpoch(
     PartialSol& node, const std::vector<double>& potentials,
     const std::vector<unsigned char>& active_by_edge_id)
 {
+    // potentials 成为整个新子树 epoch 的当前势；所有依赖边权顺序的缓存
+    // 都必须在本函数中同步重建，不能与父 epoch 的候选下标混用。
     vertex_potential_ = potentials;
     potential_correction_ = 2.0
         * std::accumulate(
@@ -1287,6 +1274,8 @@ BranchBoundSolver::OneTree BranchBoundSolver::rebuildPotentialEpoch(
         }
     }
 
+    // active_by_edge_id 使用旧 epoch 的稳定 edgeId；重排后借它把相同的
+    // 活跃边集合投影到新 candidates_sorted_ 的 bitset 下标。
     const std::size_t edge_state_size = static_cast<std::size_t>(n_)
         * static_cast<std::size_t>(n_);
     candidates_sorted_.clear();
@@ -1371,15 +1360,20 @@ bool BranchBoundSolver::searchSubtreeWithUpdatedPotentials(
     PartialSol& node, const OneTree& current_tree,
     int depth, bool count_node)
 {
+    // update_started_at 只统计次梯度上升；后面的 epoch 重建单独计时。
     const auto update_started_at = std::chrono::steady_clock::now();
     ++result_.stats.potential_updates_attempted;
     ++potential_updates_in_round_;
     const NodePotentialUpdateResult update = updateNodePotentialBound(
         node, current_tree.cost, best_cost_, potential_update_iterations_);
     result_.stats.potential_update_iterations += update.iterations;
+    if (update.stopped_prunable) {
+        ++result_.stats.potential_updates_stopped_prunable;
+    }
     result_.stats.potential_update_seconds += std::chrono::duration<double>(
         std::chrono::steady_clock::now() - update_started_at).count();
 
+    // 只有新证书严格强于当前树下界（超过数值容差）才值得安装昂贵的新 epoch。
     const double tolerance = scaledRoundoffTolerance(
         update.bound, current_tree.cost, static_cast<std::size_t>(n_));
     if (!update.feasible
@@ -1399,6 +1393,7 @@ bool BranchBoundSolver::searchSubtreeWithUpdatedPotentials(
         return true;
     }
 
+    // 在候选边重排前按 edgeId 保存 active 集合；edgeId 不依赖权重顺序。
     const std::size_t edge_state_size = static_cast<std::size_t>(n_)
         * static_cast<std::size_t>(n_);
     std::vector<unsigned char> active_by_edge_id(edge_state_size, 0);
@@ -1407,6 +1402,8 @@ bool BranchBoundSolver::searchSubtreeWithUpdatedPotentials(
         if (isCandidateActive(node, id)) active_by_edge_id[id] = 1;
     }
 
+    // EpochSnapshot 是父势环境的完整可移动快照。这里不仅保存 pi，还必须
+    // 保存所有由 pi 派生的排序、位图、度数缓存和 undo 栈。
     struct EpochSnapshot {
         std::vector<double> vertex_potential;
         double potential_correction = 0.0;
@@ -1470,6 +1467,8 @@ bool BranchBoundSolver::searchSubtreeWithUpdatedPotentials(
         current_potential_epoch_depth_ = snapshot.epoch_depth;
     };
 
+    // epoch_node 是当前约束节点的独立副本；新 epoch 内的 candidate_bits
+    // 使用新排序，不能直接写回父节点。
     const auto rebuild_started_at = std::chrono::steady_clock::now();
     PartialSol epoch_node = node;
     current_potential_epoch_depth_ = depth;
@@ -1519,6 +1518,8 @@ bool BranchBoundSolver::searchSubtreeWithUpdatedPotentials(
 
 SolveResult BranchBoundSolver::solve()
 {
+    // forced/forbidden/root-alpha 等按 edgeId 访问的稠密状态容量。edgeId 只
+    // 使用上三角槽位，但分配 n² 可保持 O(1) 映射并简化回滚。
     const std::size_t edge_state_size = static_cast<std::size_t>(n_) * static_cast<std::size_t>(n_);
 
     // 重置搜索状态。
@@ -1549,9 +1550,13 @@ SolveResult BranchBoundSolver::solve()
     // DFS，再用更紧上界重新优化根势并重启。subtree 模式在单轮内部还可
     // 创建局部势 epoch，但每个 epoch 都在退出其子树时完整恢复。
     while (true) {
+        // 两个计数器都以本次根搜索为生命周期；若改善 incumbent 后重启，
+        // 势更新预算和最近 epoch 深度从根重新计算。
         potential_updates_in_round_ = 0;
         current_potential_epoch_depth_ = 0;
         optimizeRootPotentials(best_cost_);
+        // root 是深度 0 的空约束部分解；之后 reduced-cost fixing 可能在它
+        // 上永久加入 forced/forbidden 基线。
         PartialSol root;
         root.depth = 0;
         root.forced.assign(edge_state_size, 0);
@@ -1604,8 +1609,11 @@ SolveResult BranchBoundSolver::solve()
         resetCandidateBits(root, candidates_sorted_.size());
         for (std::size_t index = 0; index < candidates_sorted_.size(); ++index) {
             const Edge& e = candidates_sorted_[index];
+            // eid 是与排序无关的边状态下标；index 是当前 epoch 内与权重顺序
+            // 绑定的候选下标。两者通过 edge_rank_by_id_ 双向关联。
             const std::size_t eid = edgeId(e.u, e.v);
             edge_rank_by_id_[eid] = static_cast<int>(index);
+            // 每个 uint64_t 保存连续 64 个候选的 active/incident 状态。
             const std::size_t word_index = index / 64;
             const std::uint64_t bit = std::uint64_t{1} << (index % 64);
             candidate_incident_bits_[
@@ -1636,6 +1644,7 @@ SolveResult BranchBoundSolver::solve()
         std::sort(root_candidates_sorted_.begin(), root_candidates_sorted_.end(),
                   [](const Edge& a, const Edge& b) { return a.w < b.w; });
 
+        // root_tree 同时是根下界证书和 DFS 首棵可变工作树。
         OneTree root_tree = computeOneTree(root, candidates_sorted_);
         if (!root_tree.feasible) {
             result_.feasible = false;
@@ -1659,7 +1668,17 @@ SolveResult BranchBoundSolver::solve()
                     + " upper_bound=" + formatDebugDouble(best_cost_));
             return result_;
         }
+        if (branch_edge_order_ != BranchEdgeOrder::AdjustedWeight) {
+            // 根势优化已经结束，此时的调整权重和根 1-tree 定义了本搜索
+            // epoch 的静态 alpha 先验。若 diversified incumbent 触发根重启，
+            // 新 epoch 会重新计算；默认 weight 路径则完全跳过这项 O(n^2) 预处理。
+            buildRootAlphaNearness(root_tree);
+        } else {
+            root_alpha_by_edge_id_.clear();
+        }
+        // root_pruned 表示根下界已经证明不存在严格优于当前 incumbent 的 tour。
         const bool root_pruned = shouldPrune(root.bound, best_cost_);
+        // fixing 汇总根 reduced-cost 测试；其结果会成为本轮搜索永久约束。
         RootReducedCostStats fixing;
         if (root_pruned) {
             // 根下界已经证明初始 incumbent 最优，候选池不再有使用价值。
@@ -1737,6 +1756,8 @@ SolveResult BranchBoundSolver::solve()
              << result_.stats.potential_updates_pruned
              << " potential_rebuilt="
              << result_.stats.potential_updates_rebuilt
+             << " potential_stopped_prunable="
+             << result_.stats.potential_updates_stopped_prunable
              << " potential_iterations="
              << result_.stats.potential_update_iterations
              << " potential_seconds="
@@ -1754,13 +1775,54 @@ SolveResult BranchBoundSolver::solve()
 BranchBoundSolver::BranchSet BranchBoundSolver::bpPartition(
     PartialSol& node, OneTree& work_tree)
 {
+    // B_set 保存依次发现的关键边，以及禁止该边后 work_tree 的重放信息。
     BranchSet B_set;
 
+    // bpPartition 会临时累积 forbid 前缀；两个 checkpoint 保证函数返回前
+    // 只恢复树和 active 候选，forbidden 标记则在末尾按 B_set 显式清除。
     const std::size_t tree_checkpoint = tree_undo_.size();
     const std::size_t candidate_checkpoint = candidate_undo_.size();
 
     while (true) {
+        // deg_best 指向本轮最终选中的未决 1-tree 边；指针只引用 work_tree，
+        // 在调用 test() 可能替换树边之前使用。
         const Edge* deg_best = nullptr;
+
+        // 该比较器只决定 BP 已选违规顶点上的分支边，不重排
+        // candidates_sorted_：后者仍必须维持调整权重顺序，供 Kruskal 和
+        // 1-tree 增量替换使用。root alpha 因而只改变搜索树遍历顺序，
+        // 不改变节点下界的正确性。
+        auto branch_edge_better = [&](const Edge& candidate,
+                                      const Edge* incumbent) {
+            if (incumbent == nullptr) return true;
+            if (branch_edge_order_ != BranchEdgeOrder::AdjustedWeight
+                && root_alpha_by_edge_id_.size()
+                    == static_cast<std::size_t>(n_)
+                        * static_cast<std::size_t>(n_)) {
+                const double candidate_alpha = root_alpha_by_edge_id_[
+                    edgeId(candidate.u, candidate.v)];
+                const double incumbent_alpha = root_alpha_by_edge_id_[
+                    edgeId(incumbent->u, incumbent->v)];
+                if (candidate_alpha != incumbent_alpha) {
+                    if (branch_edge_order_
+                        == BranchEdgeOrder::RootAlphaAscending) {
+                        return candidate_alpha < incumbent_alpha;
+                    }
+                    return candidate_alpha > incumbent_alpha;
+                }
+            }
+            // 根树边的 alpha 都为 0，平局很常见；按调整权重和端点继续比较，
+            // 保证相同输入下分支顺序确定，并保持默认策略原有的局部偏好。
+            if (candidate.w != incumbent->w) {
+                return candidate.w < incumbent->w;
+            }
+            const int candidate_u = std::min(candidate.u, candidate.v);
+            const int candidate_v = std::max(candidate.u, candidate.v);
+            const int incumbent_u = std::min(incumbent->u, incumbent->v);
+            const int incumbent_v = std::max(incumbent->u, incumbent->v);
+            if (candidate_u != incumbent_u) return candidate_u < incumbent_u;
+            return candidate_v < incumbent_v;
+        };
 
 #ifdef TSP_BRANCH_STRATEGY_MIN_EDGE
         constexpr bool kUseMinEdgeFromOneTree = true;
@@ -1774,11 +1836,13 @@ BranchBoundSolver::BranchSet BranchBoundSolver::bpPartition(
                 const std::size_t eid = edgeId(e.u, e.v);
                 if (node.forced[eid]) continue;
                 if (node.forbidden[eid]) continue;
-                if (!deg_best || e.w < deg_best->w) deg_best = &e;
+                if (branch_edge_better(e, deg_best)) deg_best = &e;
             }
         } else {
             // ── 原选边策略：从度数违规顶点取最小权重未决边 ──
             // 若没有度数 > 2 的顶点，则当前可行 1-tree 已由 isTour() 处理。
+            // branch_vertex 是当前最大超度顶点；max_deg 从合法目标度 2 开始，
+            // 因此只有 degree>2 的顶点能够被选中。
             int branch_vertex = -1;
             int max_deg = 2;
             for (int v = 0; v < n_; ++v) {
@@ -1793,7 +1857,7 @@ BranchBoundSolver::BranchSet BranchBoundSolver::bpPartition(
                     const std::size_t eid = edgeId(e.u, e.v);
                     if (node.forced[eid]) continue;
                     if (node.forbidden[eid]) continue;
-                    if (!deg_best || e.w < deg_best->w) deg_best = &e;
+                    if (branch_edge_better(e, deg_best)) deg_best = &e;
                 }
             }
         }
@@ -1802,11 +1866,14 @@ BranchBoundSolver::BranchSet BranchBoundSolver::bpPartition(
 
         // 选中的边先进入 B；若 forbid 后仍可行且未被 bound 剪枝，则继续划分。
         auto test = [&](Edge e) -> bool {
+            // eid 在本次 lambda 内统一访问 forced、forbidden 和 candidate 状态。
             const std::size_t eid = edgeId(e.u, e.v);
 
             // 记录 forbid 当前边在 work_tree 中要替换的位置；search 会在
             // 兄弟分支间顺序重放该 delta，而不是复制 |B| 棵完整 1-tree。
             // O(1) 查表替代 find_if 扫描。
+            // tree_edge_idx 是被禁边在当前 work_tree.edges 中的位置；后续
+            // search 可在同一位置直接重放替换，避免再次搜索旧边。
             std::size_t tree_edge_idx;
             if (!work_tree.edge_index_in_tree.empty()) {
                 tree_edge_idx = static_cast<std::size_t>(work_tree.edge_index_in_tree[eid]);
@@ -1819,6 +1886,7 @@ BranchBoundSolver::BranchSet BranchBoundSolver::bpPartition(
                 tree_edge_idx = static_cast<std::size_t>(
                     std::distance(work_tree.edges.begin(), removed));
             }
+            // choice 先记录被禁边；成功增量替换后再补充 replacement delta。
             BranchChoice choice;
             choice.edge = e;
             choice.tree_edge_index = tree_edge_idx;
@@ -1827,8 +1895,11 @@ BranchBoundSolver::BranchSet BranchBoundSolver::bpPartition(
             node.forbidden[eid] = 1;
             deactivateCandidate(node, eid);
 
+            // replacement_found 表示 forbid 后仍存在受约束 1-tree；
+            // incremental_valid 还表示当前 work_tree 已由增量路径更新完成。
             bool replacement_found = false;
 #ifndef TSP_DISABLE_INCREMENTAL_ONETREE
+            // 本步自己的 checkpoint 用于增量失败时仅撤销此次替换，再走重建。
             const std::size_t step_tree_checkpoint = tree_undo_.size();
             replacement_found = updateOneTreeAfterForbid(
                 node, candidates_sorted_, work_tree, e, true);
@@ -1937,6 +2008,8 @@ void BranchBoundSolver::search(
         return;
     }
 
+    // update_triggered 只表示通过 ROI/深度/预算门槛；persistent 模式能否
+    // 成功安装 epoch 还取决于新下界是否有实质提升。
     const bool update_triggered = count_node && allow_potential_anchor
         && shouldUpdatePotentials(
             current_tree, depth, node.bound, best_cost_);
@@ -1952,12 +2025,17 @@ void BranchBoundSolver::search(
         const auto update_started_at = std::chrono::steady_clock::now();
         ++result_.stats.potential_updates_attempted;
         ++potential_updates_in_round_;
+        // update 保存本次有限轮上升中的最佳证书，不保证来自最后一轮。
         const NodePotentialUpdateResult update = updateNodePotentialBound(
             node, node.bound, best_cost_, potential_update_iterations_);
         result_.stats.potential_update_iterations += update.iterations;
+        if (update.stopped_prunable) {
+            ++result_.stats.potential_updates_stopped_prunable;
+        }
         result_.stats.potential_update_seconds += std::chrono::duration<double>(
             std::chrono::steady_clock::now() - update_started_at).count();
 
+        // tolerance 用于判断新证书是否实质强于 current_tree，而非剪枝阈值。
         const double tolerance = scaledRoundoffTolerance(
             update.bound, node.bound, static_cast<std::size_t>(n_));
         if (update.feasible && update.bound > node.bound + tolerance) {
@@ -2017,23 +2095,39 @@ void BranchBoundSolver::search(
     }
 
     // Step 5: B 集多路分支。
+    // ForceChanges 是一次 apply_force 的可逆日志：
+    // - forced_id/fu/fv：本次强制边及端点；
+    // - root/rank/size/member：forced DSU 合并前快照；
+    // - merged_scan_*：较小旧分量，供候选过滤只扫描必要顶点；
+    // - old_forced_mst_*：调整权重和及边数的精确快照。
     struct ForceChanges {
+        // edgeId 槽位；无有效修改时保持 -1。
         std::size_t forced_id = static_cast<std::size_t>(-1);
+        // 强制边的两个原始顶点编号。
         int fu = -1, fv = -1;
+        // 合并前两个端点所在的 DSU 根。
         int root_u = -1, root_v = -1;
+        // 合并前根的 rank 和分量大小，用于无路径压缩 DSU 回滚。
         int old_rank_u = -1, old_rank_v = -1;
         int old_size_u = -1, old_size_v = -1;
+        // 按 rank 合并后的胜方根；ru==rv 未发生合并时保持 -1。
         int merge_root = -1;
+        // n>64 路径下，胜方成员 vector 合并前的长度。
         std::size_t old_merge_member_count = 0;
+        // n>64 时较小旧分量的根和成员数；用于局部候选过滤。
         int merged_scan_root = -1;
         std::size_t merged_scan_count = 0;
+        // n<=64 时较小旧分量的成员位图；与上面两个字段互斥使用。
         std::uint64_t merged_scan_bits = 0;
+        // n<=64 时胜方根合并前的完整成员位图。
         std::uint64_t old_merge_member_bits = 0;
+        // forced 内部 MST 缓存的旧值，直接恢复可避免浮点加减漂移。
         double old_forced_mst_cost = 0.0;
         int old_forced_mst_count = 0;
     };
 
     auto forced_find = [&](int x) -> int {
+        // 不做路径压缩：父指针必须能由 ForceChanges 精确恢复。
         while (node.forced_parent[static_cast<std::size_t>(x)] != x) {
             x = node.forced_parent[static_cast<std::size_t>(x)];
         }
@@ -2041,6 +2135,7 @@ void BranchBoundSolver::search(
     };
 
     auto apply_force = [&](const Edge& e, ForceChanges& changes) -> bool {
+        // id 是本次唯一会从 0 改为 1 的 forced 状态槽位。
         const std::size_t id = edgeId(e.u, e.v);
         if (node.forced[id] || node.forbidden[id]
             || !isFinite(dist_[e.u][e.v])) {
@@ -2050,6 +2145,7 @@ void BranchBoundSolver::search(
             || node.forced_degree[static_cast<std::size_t>(e.v)] >= 2) {
             return false;
         }
+        // ru/rv 是修改前的分量根；相等通常意味着强制出子回路。
         const int ru = forced_find(e.u);
         const int rv = forced_find(e.v);
         if (ru == rv) {
@@ -2243,6 +2339,8 @@ void BranchBoundSolver::search(
     //   ...
     //   forbid B[0..k-2] + force B[k-1]
     // 全部 B 边均 forbidden 的剩余分支已由 bpPartition 的终止测试证明不可改进。
+    // parent checkpoint 包围整个 B 集枚举；child checkpoint 只包围当前
+    // force 子节点。这样此前 B 边的 forbid 前缀可跨兄弟节点保留。
     const std::size_t parent_candidate_checkpoint = candidate_undo_.size();
     const std::size_t parent_tree_checkpoint = tree_undo_.size();
 
@@ -2406,6 +2504,7 @@ bool BranchBoundSolver::isForbidden(const std::vector<unsigned char>& forbidden,
 BranchBoundSolver::OneTree BranchBoundSolver::computeOneTree(
     const PartialSol& node_, const std::vector<Edge>& branch_candidates) const
 {
+    // result.cost 以 infinity 初始化；任何结构不足的提前返回自然表示不可行。
     OneTree result;
     result.cost = std::numeric_limits<double>::infinity();
     result.degree.assign(static_cast<std::size_t>(n_), 0);
@@ -2415,8 +2514,11 @@ BranchBoundSolver::OneTree BranchBoundSolver::computeOneTree(
     // 非根 forced 连通关系。
     DisjointSet tree_components(n_);
 
+    // mst_edges/cost 只累计顶点 1..n-1 的内部 MST，直到加入根边阶段；
+    // cost 始终位于当前势的调整权重坐标系，返回前再减势修正和舍入保护。
     int mst_edges = 0;
     double cost = 0.0;
+    // edges 最终恰好包含 n 条 1-tree 边：n-2 条内部边和 2 条根边。
     std::vector<Edge> edges;
     edges.reserve(static_cast<std::size_t>(n_));
 
@@ -2465,6 +2567,8 @@ BranchBoundSolver::OneTree BranchBoundSolver::computeOneTree(
 
     // 1-tree 的第二部分：给 0 号顶点选择两条最小 incident edges。
     // 使用预排序的 root_candidates_sorted_，跳过不在候选集中的边。
+    // root_edges 前 root_edge_count 个槽位有效；forced 根边先占位，剩余
+    // 槽位由 root_candidates_sorted_ 中最轻的 active 边补齐。
     std::array<Edge, 2> root_edges{};
     std::size_t root_edge_count = 0;
     auto add_root_edge = [&](const Edge& e) {
@@ -2529,12 +2633,15 @@ bool BranchBoundSolver::updateOneTreeAfterForbid(
     const Edge& forbidden_edge,
     bool record_undo) const
 {
+    // forbidden_id 是与候选排序无关的稳定边状态下标。
     const std::size_t forbidden_id = edgeId(forbidden_edge.u, forbidden_edge.v);
     if (!tree.feasible || !node.forbidden[forbidden_id] || node.forced[forbidden_id]) {
         return false;
     }
 
     // O(1) 查表替代 find_if 扫描。
+    // removed_index 是禁边在 tree.edges 中的位置；若禁边不是树边，则当前
+    // 最小 1-tree 仍然有效，无需寻找 replacement。
     std::size_t removed_index;
     if (!tree.edge_index_in_tree.empty()) {
         const int idx = tree.edge_index_in_tree[forbidden_id];
@@ -2555,6 +2662,7 @@ bool BranchBoundSolver::updateOneTreeAfterForbid(
             std::distance(tree.edges.begin(), removed));
     }
 
+    // old_edge 是割边；replacement 最终指向预排序候选表中的稳定 Edge 对象。
     const Edge old_edge = tree.edges[removed_index];
     const Edge* replacement = nullptr;
 
@@ -2613,8 +2721,11 @@ bool BranchBoundSolver::updateOneTreeAfterActiveRemoval(
     const PartialSol& node, OneTree& tree,
     std::size_t candidate_checkpoint, bool record_undo) const
 {
+    // scratch 只收集“本轮刚失活且恰好仍在 1-tree 中”的非 forced 边，
+    // 避免遍历和修复所有被候选过滤删除的边。
     removed_candidate_scratch_.clear();
     removed_candidate_scratch_.reserve(tree.edges.size());
+    // removed_count 是 candidate_checkpoint 之后写入 undo 日志的失活边数。
     const std::size_t removed_count =
         candidate_undo_.size() - candidate_checkpoint;
     if (!tree.edge_index_in_tree.empty()
@@ -2715,12 +2826,16 @@ const BranchBoundSolver::Edge* BranchBoundSolver::findMstReplacement(
         throw std::logic_error("dynamic MST state is missing or inconsistent");
     }
 
+    // MST 交换性质保证合法 replacement 不会轻于被删树边，因此从
+    // lower_bound(removed_edge.w) 开始扫描即可跳过不可能候选。
     const auto first = std::lower_bound(
         branch_candidates.begin(), branch_candidates.end(), removed_edge.w,
         [](const Edge& edge, double weight) { return edge.w < weight; });
     const std::size_t first_index = static_cast<std::size_t>(
         std::distance(branch_candidates.begin(), first));
 
+    // 只有生产路径传入全局候选表时，稳定下标、active bitset 和 incident
+    // 位图才属于同一坐标系；局部测试候选必须走兼容扫描路径。
     const bool use_global_candidates = &branch_candidates == &candidates_sorted_;
     if (use_global_candidates
         && candidate_word_count_ != 0
@@ -2732,6 +2847,8 @@ const BranchBoundSolver::Edge* BranchBoundSolver::findMstReplacement(
         // 在 removed edge 的排序位置附近即可命中；先做有预算的顺序扫描，
         // 预算耗尽才支付完整 fundamental-cut XOR 的成本。
         if (mst_selected_component_word_count_ != 0) {
+            // estimated_cut_words 估计构造完整 fundamental-cut 位图的工作量；
+            // scan_budget 在顺序扫描和位图构造之间做自适应切换。
             const std::size_t component_size =
                 populationCount(mst_selected_component_words_[0])
                 + populationCount(mst_selected_component_words_[1]);
@@ -2874,6 +2991,7 @@ const BranchBoundSolver::Edge* BranchBoundSolver::findMstReplacement(
 
 void BranchBoundSolver::initializeDynamicMst(OneTree& tree) const
 {
+    // 每个顶点一行、每行 ceil(n/64) 个 word；仅记录内部 MST 邻接关系。
     const std::size_t words_per_row = (static_cast<std::size_t>(n_) + 63) / 64;
     tree.mst_adjacency_bits.assign(
         static_cast<std::size_t>(n_) * words_per_row, 0);
@@ -2898,6 +3016,7 @@ void BranchBoundSolver::setDynamicMstEdge(
         throw std::logic_error("dynamic MST adjacency has the wrong size");
     }
 
+    // update 修改一个方向的邻接位；无向边由下面两次调用保持对称。
     auto update = [&](int from, int to) {
         std::uint64_t& word = tree.mst_adjacency_bits[
             static_cast<std::size_t>(from) * words_per_row
@@ -2925,6 +3044,8 @@ void BranchBoundSolver::replaceOneTreeEdge(
         initializeDynamicMst(tree);
     }
 
+    // old_edge 与 replacement 必须同属根边区或内部 MST 区；一次交换同步
+    // 更新边集、度数、成本、动态邻接和 edge_index_in_tree。
     const Edge old_edge = tree.edges[edge_index];
     if (record_undo) {
         TreeUndo undo;
@@ -2992,6 +3113,8 @@ void BranchBoundSolver::replaceOneTreeWithRebuild(
 void BranchBoundSolver::rollbackOneTree(
     OneTree& tree, std::size_t checkpoint) const
 {
+    // checkpoint 是进入当前逻辑作用域前 tree_undo_.size()；逆序弹出可确保
+    // 多次边交换、状态变化和完整快照按严格相反顺序恢复。
     while (tree_undo_.size() > checkpoint) {
         const TreeUndo undo = tree_undo_.back();
         tree_undo_.pop_back();
@@ -3030,6 +3153,7 @@ void BranchBoundSolver::rollbackOneTree(
 bool BranchBoundSolver::markMstComponentWithoutEdge(
     const OneTree& tree, const Edge& removed_edge) const
 {
+    // words_per_row 决定采用单 word、双 word 或通用 epoch 标记路径。
     const std::size_t words_per_row = (static_cast<std::size_t>(n_) + 63) / 64;
     const std::size_t expected_size = static_cast<std::size_t>(n_) * words_per_row;
     if (removed_edge.u == 0 || removed_edge.v == 0
@@ -3808,6 +3932,8 @@ void BranchBoundSolver::rollbackCandidates(
 
 void BranchBoundSolver::adjustAvailableDegree(int vertex, int delta) const
 {
+    // available_degree_ 同时计入 forced 边和仍 active 的可选边；
+    // insufficient_degree_count_ 缓存 degree<2 的顶点个数，避免全图重扫。
     int& degree = available_degree_[static_cast<std::size_t>(vertex)];
     const bool was_insufficient = degree < 2;
     degree += delta;
@@ -3820,6 +3946,8 @@ void BranchBoundSolver::adjustAvailableDegree(int vertex, int delta) const
 bool BranchBoundSolver::isCandidateActive(
     const PartialSol& node, std::size_t edge_id) const
 {
+    // has_global_bits 表示 node 的位图与当前 epoch 的全局排序完全对齐；
+    // 否则局部测试可退回 edgeId 兼容掩码。
     const bool has_global_bits =
         node.candidate_bit_count != 0
         && node.candidate_bit_count == candidates_sorted_.size()
@@ -3844,6 +3972,8 @@ void BranchBoundSolver::resetCandidateBits(
 {
     node.candidate_bit_count = candidate_count;
     node.candidate_bits.assign((candidate_count + 63) / 64, ~std::uint64_t{0});
+    // 最后一个 word 超出 candidate_count 的高位必须清零，否则枚举时会把
+    // 不存在的候选下标误判为 active。
     const std::size_t extra_bits = node.candidate_bits.size() * 64 - candidate_count;
     if (!node.candidate_bits.empty() && extra_bits > 0) {
         node.candidate_bits.back() >>= extra_bits;
@@ -3859,6 +3989,7 @@ std::size_t BranchBoundSolver::nextActiveCandidate(
         return begin;
     }
 
+    // word_index/bit_offset 定位 begin；word 会先屏蔽 begin 之前的低位。
     std::size_t word_index = begin / 64;
     const std::size_t bit_offset = begin % 64;
     std::uint64_t word = node.candidate_bits[word_index]
@@ -3925,8 +4056,10 @@ BranchBoundSolver::applyRootReducedCostFixing(
 
     // 顶点 1..n-1 上的内部部分是一棵 MST。对每个起点做一次树 DFS，
     // 预计算路径最大边；根节点规模下这是 O(n^2)，之后每条非树边 O(1)。
+    // negative_infinity 表示对应树路径或根支持边尚不存在。
     const double negative_infinity =
         -std::numeric_limits<double>::infinity();
+    // adjacency 只包含内部 MST；heaviest_root_edge 是非树根边的交换支持边。
     std::vector<std::vector<std::pair<int, double>>> adjacency(
         static_cast<std::size_t>(n_));
     double heaviest_root_edge = negative_infinity;
@@ -3941,6 +4074,7 @@ BranchBoundSolver::applyRootReducedCostFixing(
             {edge.u, edge.w});
     }
 
+    // path_max[start*n+v] 保存 start 到 v 的内部树路径最大调整边权。
     const std::size_t state_size =
         static_cast<std::size_t>(n_) * static_cast<std::size_t>(n_);
     std::vector<double> path_max(state_size, negative_infinity);
@@ -3972,6 +4106,8 @@ BranchBoundSolver::applyRootReducedCostFixing(
         }
     }
 
+    // fixed_indices 收集可以证明 x_e=0 的非树候选下标；先完成全部证明，
+    // 再统一失活，避免遍历过程中修改正在扫描的 active bitset。
     std::vector<std::size_t> fixed_indices;
     fixed_indices.reserve(candidates_sorted_.size());
     for (std::size_t index = nextActiveCandidate(
@@ -3984,6 +4120,8 @@ BranchBoundSolver::applyRootReducedCostFixing(
         if (root_tree.edge_index_in_tree[eid] >= 0) continue;
 
         ++stats.tested;
+        // support_weight 是强制加入 edge 时可删除的最重树边权；两者差值
+        // 给出包含该边的 1-tree 相对根下界至少增加多少。
         const double support_weight = edge.u == 0 || edge.v == 0
             ? heaviest_root_edge
             : path_max[
@@ -4015,14 +4153,17 @@ BranchBoundSolver::applyRootReducedCostFixing(
     // 对根 1-tree 的每条边做一次单边 forbid sensitivity。若禁止该边后
     // 最小受约束 1-tree 已无法改善 incumbent，则所有改进 tour 都必须
     // 包含它，可安全固定为 x_e=1。
+    // mandatory_edges 收集可以证明 x_e=1 的根树边，随后一次性写入 root。
     std::vector<Edge> mandatory_edges;
     mandatory_edges.reserve(root_tree.edges.size());
     for (const Edge& edge : root_tree.edges) {
         ++stats.tree_tested;
         const std::size_t eid = edgeId(edge.u, edge.v);
+        // checkpoint 包围单条树边的临时 forbid sensitivity 测试。
         const std::size_t candidate_checkpoint = candidate_undo_.size();
         root.forbidden[eid] = 1;
         deactivateCandidate(root, eid);
+        // forbid 后若某顶点可用度数不足 2，无需寻找替换边即可证明该边必选。
         const bool structurally_mandatory = insufficient_degree_count_ != 0;
 
         const Edge* replacement = nullptr;
@@ -4044,6 +4185,8 @@ BranchBoundSolver::applyRootReducedCostFixing(
             }
         }
         const bool replacement_found = replacement != nullptr;
+        // replacement_bound 是禁止当前树边后的保守下界；无 replacement 时
+        // 保持 infinity，从而自然满足 mandatory 判定。
         double replacement_bound =
             std::numeric_limits<double>::infinity();
 #ifdef TSP_VERIFY_INCREMENTAL_STATE
@@ -4189,171 +4332,7 @@ BranchBoundSolver::applyRootReducedCostFixing(
     return stats;
 }
 
-bool BranchBoundSolver::findInitialTour(
-    std::vector<int>& tour, double& cost,
-    std::vector<TourCandidate>& alternatives)
-{
-    alternatives.clear();
-    std::map<std::vector<int>, TourCandidate> distinct_tours;
-    double best_cost = std::numeric_limits<double>::infinity();
-    std::vector<int> best_tour;
-
-    auto canonicalize = [&](const std::vector<int>& candidate) {
-        const auto zero = std::find(candidate.begin(), candidate.end(), 0);
-        if (zero == candidate.end()) return std::vector<int>{};
-        const int zero_index = static_cast<int>(
-            std::distance(candidate.begin(), zero));
-        std::vector<int> forward(static_cast<std::size_t>(n_));
-        std::vector<int> reverse(static_cast<std::size_t>(n_));
-        for (int offset = 0; offset < n_; ++offset) {
-            forward[static_cast<std::size_t>(offset)] = candidate[
-                static_cast<std::size_t>((zero_index + offset) % n_)];
-            reverse[static_cast<std::size_t>(offset)] = candidate[
-                static_cast<std::size_t>((zero_index - offset + n_) % n_)];
-        }
-        return reverse < forward ? reverse : forward;
-    };
-
-    // 从每个起点跑一次最近邻，再用 2-opt 局部改进，取最好的可行回路作为初始上界。
-    for (int start = 0; start < n_; ++start) {
-        std::vector<int> candidate;
-        candidate.reserve(static_cast<std::size_t>(n_));
-        std::vector<unsigned char> used(static_cast<std::size_t>(n_), 0);
-
-        int current = start;
-        candidate.push_back(current);
-        used[current] = 1;
-        double candidate_cost = 0.0;
-        bool ok = true;
-
-        for (int step = 1; step < n_; ++step) {
-            int next = -1;
-            double best_edge = std::numeric_limits<double>::infinity();
-            // 最近邻：从当前顶点出发，找尚未访问且距离最短的下一个顶点。
-            for (int v = 0; v < n_; ++v) {
-                if (used[v] || !isFinite(dist_[current][v])) {
-                    continue;
-                }
-                if (dist_[current][v] < best_edge) {
-                    best_edge = dist_[current][v];
-                    next = v;
-                }
-            }
-            if (next < 0) {
-                // 当前起点的最近邻路径断开，换下一个起点尝试。
-                ok = false;
-                break;
-            }
-            candidate_cost += best_edge;
-            current = next;
-            candidate.push_back(current);
-            used[current] = 1;
-        }
-
-        if (!ok || !isFinite(dist_[current][start])) {
-            // 不能回到起点就不是 Hamilton 回路。
-            continue;
-        }
-        candidate_cost += dist_[current][start];
-        // 最近邻只给出初始回路，再用 2-opt 做局部改进。
-        twoOpt(candidate, candidate_cost);
-
-        // 保持原实现的严格小于与首次命中语义，确保便宜的首个 LK 起点
-        // 不因候选池的规范化或排序而改变。
-        if (candidate_cost < best_cost) {
-            best_cost = candidate_cost;
-            best_tour = candidate;
-        }
-
-        std::vector<int> canonical = canonicalize(candidate);
-        if (!canonical.empty()) {
-            distinct_tours.try_emplace(
-                std::move(canonical),
-                TourCandidate{candidate_cost, std::move(candidate)});
-        }
-    }
-
-    if (best_tour.empty()) {
-        return false;
-    }
-
-    const std::size_t distinct_tour_count = distinct_tours.size();
-    distinct_tours.erase(canonicalize(best_tour));
-
-    alternatives.reserve(distinct_tours.size());
-    for (auto& [canonical, candidate] : distinct_tours) {
-        (void)canonical;
-        alternatives.push_back(std::move(candidate));
-    }
-    std::sort(
-        alternatives.begin(), alternatives.end(),
-        [](const TourCandidate& left, const TourCandidate& right) {
-            if (left.cost != right.cost) return left.cost < right.cost;
-            return left.tour < right.tour;
-        });
-
-    // 自适应阶段只需保留最有希望的一小组不同局部最优，避免大实例把
-    // 所有 n 个 tour 带入多启动 LK。
-    constexpr std::size_t kInitialCandidatePoolSize = 24;
-    if (alternatives.size() > kInitialCandidatePoolSize) {
-        alternatives.resize(kInitialCandidatePoolSize);
-    }
-
-    if (debug_.output != nullptr) {
-        std::ostringstream line;
-        line << "initial tour pool: distinct=" << distinct_tour_count
-             << " retained=" << alternatives.size()
-             << " best_2opt=" << formatDebugDouble(best_cost);
-        if (!alternatives.empty()) {
-            line << " next_2opt="
-                 << formatDebugDouble(alternatives.front().cost);
-        }
-        writeDebugLine(debug_, line.str());
-    }
-
-    // 用 Lin-Kernighan 对最佳 NN+2opt 结果做精细优化，获取更紧上界。
-    linKernighan(best_tour, best_cost);
-
-    tour = std::move(best_tour);
-    cost = best_cost;
-    return true;
-}
-
-bool BranchBoundSolver::improveInitialTourDiversified(
-    std::vector<TourCandidate>& alternatives,
-    double root_lower_bound,
-    std::vector<int>& tour, double& cost)
-{
-    constexpr std::size_t kDiversifiedLkStarts = 12;
-    const std::size_t start_count = std::min(
-        alternatives.size(), kDiversifiedLkStarts);
-    bool improved = false;
-    std::size_t starts_run = 0;
-
-    for (std::size_t index = 0; index < start_count; ++index) {
-        std::vector<int> candidate = alternatives[index].tour;
-        double candidate_cost = alternatives[index].cost;
-        linKernighan(candidate, candidate_cost);
-        candidate_cost = tourCost(candidate);
-        ++starts_run;
-
-        if (candidate_cost < cost) {
-            tour = std::move(candidate);
-            cost = candidate_cost;
-            improved = true;
-        }
-        if (isFinite(root_lower_bound)
-            && shouldPrune(root_lower_bound, cost)) {
-            break;
-        }
-    }
-
-    writeDebugLine(
-        debug_,
-        "diversified LK completed: starts=" + std::to_string(starts_run)
-            + " best=" + formatDebugDouble(cost));
-    return improved;
-}
+#include "TspInitialTour.ipp"
 
 void BranchBoundSolver::maybeImproveIncumbentDiversified()
 {
@@ -4362,6 +4341,8 @@ void BranchBoundSolver::maybeImproveIncumbentDiversified()
     constexpr std::size_t kSmallInstanceNodeBudget = 500000;
     constexpr std::size_t kLargeInstanceNodeBudget = 100000;
     constexpr int kLargeInstanceDimension = 64;
+    // node_budget 是“当前精确搜索确实困难”的触发阈值；大实例更早启动
+    // diversified LK，以便用更紧 UB 抵消后续庞大搜索树。
     const std::size_t node_budget = n_ >= kLargeInstanceDimension
         ? kLargeInstanceNodeBudget
         : kSmallInstanceNodeBudget;
@@ -4416,1005 +4397,9 @@ double BranchBoundSolver::tourCost(const std::vector<int>& tour) const
     return cost;
 }
 
-void BranchBoundSolver::twoOpt(std::vector<int>& tour, double& cost) const
-{
-    bool improved = true;
-    // 不断寻找能缩短回路的 2-opt 交换，直到没有改进为止。
-    while (improved) {
-        improved = false;
-        for (int i = 1; i < n_ - 1 && !improved; ++i) {
-            for (int k = i + 1; k < n_ && !improved; ++k) {
-                // 固定 0 号顶点所在位置，从 i..k 翻转中间段。
-                int a = tour[i - 1];
-                int b = tour[i];
-                int c = tour[k];
-                int d = tour[(k + 1) % n_];
-                // 新边不存在时，不能执行这次 2-opt 交换。
-                if (!isFinite(dist_[a][c]) || !isFinite(dist_[b][d])) {
-                    continue;
-                }
-                // 2-opt：用 (a,c)、(b,d) 替换 (a,b)、(c,d)，若总长下降则翻转中间段。
-                double delta = dist_[a][c] + dist_[b][d] - dist_[a][b] - dist_[c][d];
-                if (delta < -kHeuristicEps) {
-                    std::reverse(tour.begin() + i, tour.begin() + k + 1);
-                    cost += delta;
-                    improved = true;
-                }
-            }
-        }
-    }
+#include "TspLinKernighan.ipp"
 
-    // 最后重新计算一次成本，避免多次浮点增量更新累积误差。
-    cost = tourCost(tour);
-}
-
-// ── Lin-Kernighan 启发式 ──────────────────────────────────────────
-
-std::vector<int> BranchBoundSolver::buildPositionMap(const std::vector<int>& tour) const
-{
-    std::vector<int> pos(static_cast<std::size_t>(n_), -1);
-    for (int i = 0; i < static_cast<int>(tour.size()); ++i) {
-        pos[static_cast<std::size_t>(tour[i])] = i;
-    }
-    return pos;
-}
-
-void BranchBoundSolver::buildCandidateSets() const
-{
-    if (candidate_set_built_) {
-        return;
-    }
-    candidate_set_.resize(static_cast<std::size_t>(n_));
-    for (int i = 0; i < n_; ++i) {
-        std::vector<std::pair<double, int>> nb;
-        nb.reserve(static_cast<std::size_t>(n_) - 1);
-        for (int j = 0; j < n_; ++j) {
-            if (i == j || !isFinite(dist_[i][j])) {
-                continue;
-            }
-            nb.emplace_back(dist_[i][j], j);
-        }
-        const int keep = std::min(kLkCandidateSize, static_cast<int>(nb.size()));
-        const auto neighbor_less = [](const auto& left, const auto& right) {
-            if (left.first != right.first) return left.first < right.first;
-            return left.second < right.second;
-        };
-        if (keep < static_cast<int>(nb.size())) {
-            std::nth_element(
-                nb.begin(), nb.begin() + keep, nb.end(), neighbor_less);
-        }
-        nb.resize(static_cast<std::size_t>(keep));
-        std::sort(nb.begin(), nb.end(), neighbor_less);
-        candidate_set_[static_cast<std::size_t>(i)].reserve(static_cast<std::size_t>(keep));
-        for (const auto& p : nb) {
-            candidate_set_[static_cast<std::size_t>(i)].push_back(p.second);
-        }
-    }
-    candidate_set_built_ = true;
-}
-
-bool BranchBoundSolver::lkSearch(int t1, int t2,
-                                  std::vector<int>& next,
-                                  std::vector<int>& prev,
-                                  std::vector<bool>& active) const
-{
-    // LK 交替链中的一步：添加 (from,to)，删除 (to,rem)。
-    struct LKStep {
-        int from = -1;
-        int to = -1;
-        int rem = -1;
-    };
-
-    double best_gain = kHeuristicEps;
-    std::vector<LKStep> best_seq;
-    std::vector<LKStep> cur_seq;
-    std::vector<unsigned char> used(static_cast<std::size_t>(n_), 0);
-
-    used[static_cast<std::size_t>(t1)] = 1;
-    used[static_cast<std::size_t>(t2)] = 1;
-
-    // Phase 1: DFS 搜索最佳 k-opt 序列（固定 t4 = next[t3]，与 LK 原论文一致）。
-    std::function<void(int, double, int)> dfs = [&](int from, double cum_gain, int depth) {
-        if (depth >= kLkMaxDepth) {
-            return;
-        }
-        for (int x : candidate_set_[static_cast<std::size_t>(from)]) {
-            // 尝试 close-up：添加 (from, t1) 闭合回路。
-            if (x == t1) {
-                if (!isFinite(dist_[from][t1])) {
-                    continue;
-                }
-                // 闭合边 (from, t1) 不能是当前 tour 中的边。
-                if (next[static_cast<std::size_t>(from)] == t1
-                    || prev[static_cast<std::size_t>(from)] == t1) {
-                    continue;
-                }
-                double total = cum_gain - dist_[from][t1];
-                if (total > best_gain) {
-                    best_gain = total;
-                    best_seq = cur_seq;
-                }
-                continue;
-            }
-            if (used[static_cast<std::size_t>(x)]) {
-                continue;
-            }
-            if (!isFinite(dist_[from][x])) {
-                continue;
-            }
-            // 增益准则：被加入边必须比累积 gain 小（维持正 gain）。
-            if (dist_[from][x] >= cum_gain - kHeuristicEps) {
-                continue;
-            }
-
-            // 按照 LK 原论文：t4 固定为 next[t3]（一致的前进方向）。
-            int y = next[static_cast<std::size_t>(x)];
-            if (y == from || used[static_cast<std::size_t>(y)]) {
-                continue;
-            }
-
-            double new_gain = cum_gain - dist_[from][x] + dist_[x][y];
-            if (new_gain <= kHeuristicEps) {
-                continue;
-            }
-
-            used[static_cast<std::size_t>(y)] = 1;
-            cur_seq.push_back({from, x, y});
-            dfs(y, new_gain, depth + 1);
-            cur_seq.pop_back();
-            used[static_cast<std::size_t>(y)] = 0;
-        }
-    };
-
-    dfs(t2, dist_[t1][t2], 1);
-
-    if (best_seq.empty()) {
-        return false;
-    }
-
-    // Phase 2: 应用 k-opt 交换。使用邻接表重建 tour。
-    std::vector<std::vector<int>> adj(static_cast<std::size_t>(n_));
-    for (int v = 0; v < n_; ++v) {
-        adj[static_cast<std::size_t>(v)].push_back(next[static_cast<std::size_t>(v)]);
-        adj[static_cast<std::size_t>(v)].push_back(prev[static_cast<std::size_t>(v)]);
-    }
-
-    auto rm_edge = [&](int u, int v) {
-        auto& nu = adj[static_cast<std::size_t>(u)];
-        for (auto it = nu.begin(); it != nu.end(); ++it) {
-            if (*it == v) { nu.erase(it); break; }
-        }
-        auto& nv = adj[static_cast<std::size_t>(v)];
-        for (auto it = nv.begin(); it != nv.end(); ++it) {
-            if (*it == u) { nv.erase(it); break; }
-        }
-    };
-
-    // 删除第一条边 (t1, t2)。
-    rm_edge(t1, t2);
-
-    // 按序列依次添加/删除边。
-    int last = t2;
-    for (const auto& s : best_seq) {
-        adj[static_cast<std::size_t>(s.from)].push_back(s.to);
-        adj[static_cast<std::size_t>(s.to)].push_back(s.from);
-        rm_edge(s.to, s.rem);
-        last = s.rem;
-    }
-
-    // 闭合边 (last, t1)。
-    adj[static_cast<std::size_t>(last)].push_back(t1);
-    adj[static_cast<std::size_t>(t1)].push_back(last);
-
-    // 验证所有顶点度数 = 2 且两个邻居不同（无重复边）。
-    for (int v = 0; v < n_; ++v) {
-        const auto& nb = adj[static_cast<std::size_t>(v)];
-        if (nb.size() != 2) {
-            return false;
-        }
-        if (nb[0] == nb[1]) {
-            return false;  // 两个邻居相同，回路无效。
-        }
-    }
-
-    // 从顶点 0 开始沿邻接表走，验证是否构成单一 Hamilton 回路。
-    // 必须恰好 n 步回到 0，且覆盖所有顶点。
-    std::vector<int> new_tour(static_cast<std::size_t>(n_));
-    std::vector<unsigned char> seen(static_cast<std::size_t>(n_), 0);
-    int cur = 0;
-    int pv = -1;
-    for (int i = 0; i < n_; ++i) {
-        new_tour[static_cast<std::size_t>(i)] = cur;
-        seen[static_cast<std::size_t>(cur)] = 1;
-        const auto& nb = adj[static_cast<std::size_t>(cur)];
-        // 选不是来路的邻居作为下一步。
-        int nxt = (nb[0] != pv) ? nb[0] : nb[1];
-        pv = cur;
-        cur = nxt;
-    }
-    // 必须回到起点且覆盖全部顶点。
-    if (cur != 0) {
-        return false;
-    }
-    for (int v = 0; v < n_; ++v) {
-        if (!seen[static_cast<std::size_t>(v)]) {
-            return false;
-        }
-    }
-
-    // 重建 next / prev 双向链表。
-    for (int i = 0; i < n_; ++i) {
-        int u = new_tour[static_cast<std::size_t>(i)];
-        int v = new_tour[static_cast<std::size_t>((i + 1) % n_)];
-        next[static_cast<std::size_t>(u)] = v;
-        prev[static_cast<std::size_t>(v)] = u;
-    }
-
-    // 重新激活被改动边的顶点，以便下一轮继续尝试改进。
-    active[static_cast<std::size_t>(t1)] = true;
-    active[static_cast<std::size_t>(t2)] = true;
-    for (const auto& s : best_seq) {
-        active[static_cast<std::size_t>(s.from)] = true;
-        active[static_cast<std::size_t>(s.to)] = true;
-        active[static_cast<std::size_t>(s.rem)] = true;
-    }
-
-    return true;
-}
-
-bool BranchBoundSolver::linKernighanImprove(std::vector<int>& tour, double& cost) const
-{
-    // 构建双向链表表示，O(1) 查找前后邻居。
-    std::vector<int> next(static_cast<std::size_t>(n_));
-    std::vector<int> prev(static_cast<std::size_t>(n_));
-    for (int i = 0; i < n_; ++i) {
-        int u = tour[static_cast<std::size_t>(i)];
-        int v = tour[static_cast<std::size_t>((i + 1) % n_)];
-        next[static_cast<std::size_t>(u)] = v;
-        prev[static_cast<std::size_t>(v)] = u;
-    }
-
-    std::vector<bool> active(static_cast<std::size_t>(n_), true);
-    bool improved = false;
-
-    for (int pass = 0; pass < n_; ++pass) {
-        bool pass_improved = false;
-        for (int idx = 0; idx < n_; ++idx) {
-            int t1 = tour[static_cast<std::size_t>(idx)];
-            if (!active[static_cast<std::size_t>(t1)]) {
-                continue;
-            }
-
-            bool found = false;
-            // 两个方向都尝试：next[t1] 和 prev[t1] 作为 t2。
-            int ngb[2] = {next[static_cast<std::size_t>(t1)],
-                          prev[static_cast<std::size_t>(t1)]};
-            for (int t2 : ngb) {
-                if (lkSearch(t1, t2, next, prev, active)) {
-                    improved = true;
-                    pass_improved = true;
-                    found = true;
-                    // 从链表重建 tour。
-                    int cur = 0;
-                    for (int i = 0; i < n_; ++i) {
-                        tour[static_cast<std::size_t>(i)] = cur;
-                        cur = next[static_cast<std::size_t>(cur)];
-                    }
-                    cost = tourCost(tour);
-                    break;
-                }
-            }
-
-            if (!found) {
-                active[static_cast<std::size_t>(t1)] = false;
-            }
-            // 找到改进则重置 don't-look 并重新扫描。
-            if (found) {
-                // active 已在 lkSearch 中部分重置，此处重置全部以安全。
-                std::fill(active.begin(), active.end(), true);
-                break;  // 跳出 idx 循环，从头开始本次 pass。
-            }
-        }
-        if (!pass_improved) {
-            break;  // 本轮无改进，LK 已收敛。
-        }
-    }
-
-    return improved;
-}
-
-void BranchBoundSolver::doubleBridgeKick(std::vector<int>& tour) const
-{
-    if (n_ < 8) {
-        return;
-    }
-
-    // 用基于 n 的确定性断点，避免引入随机数，确保可复现。
-    const int a = 1 + (n_ / 7) % std::max(1, n_ / 4 - 1);
-    const int b = a + 1 + (n_ / 5) % std::max(1, n_ / 4);
-    const int c = b + 1 + (n_ / 3) % std::max(1, n_ / 4);
-    if (c >= n_ - 1) {
-        return;
-    }
-
-    // 四段：A=[0..a], B=[a+1..b], C=[b+1..c], D=[c+1..n_-1]。
-    // Double-bridge 重排为 A + C + B + D。
-    std::vector<int> kicked;
-    kicked.reserve(static_cast<std::size_t>(n_));
-
-    for (int i = 0; i <= a; ++i) {
-        kicked.push_back(tour[static_cast<std::size_t>(i)]);
-    }
-    for (int i = b + 1; i <= c; ++i) {
-        kicked.push_back(tour[static_cast<std::size_t>(i)]);
-    }
-    for (int i = a + 1; i <= b; ++i) {
-        kicked.push_back(tour[static_cast<std::size_t>(i)]);
-    }
-    for (int i = c + 1; i < n_; ++i) {
-        kicked.push_back(tour[static_cast<std::size_t>(i)]);
-    }
-
-    tour = std::move(kicked);
-}
-
-void BranchBoundSolver::linKernighan(std::vector<int>& tour, double& cost) const
-{
-    buildCandidateSets();
-
-    std::vector<int> best_tour = tour;
-    double best_cost = cost;
-
-    for (int kick = 0; kick < kLkMaxKicks; ++kick) {
-        // 连续 LK 改进直到局部最优。
-        while (linKernighanImprove(tour, cost)) {
-            if (cost + kHeuristicEps < best_cost) {
-                best_tour = tour;
-                best_cost = cost;
-            }
-        }
-
-        // 更新当前最优。
-        if (cost + kHeuristicEps < best_cost) {
-            best_tour = tour;
-            best_cost = cost;
-        }
-
-        if (kick == kLkMaxKicks - 1) {
-            break;
-        }
-
-        // Double-bridge kick 跳出局部最优。
-        doubleBridgeKick(tour);
-        cost = tourCost(tour);
-
-        if (cost + kHeuristicEps < best_cost) {
-            best_tour = tour;
-            best_cost = cost;
-        }
-    }
-
-    tour = std::move(best_tour);
-    cost = best_cost;
-}
-
-namespace {
-
-std::vector<std::string> tokenizeSectionLine(const std::string& line)
-{
-    std::istringstream in(line);
-    std::vector<std::string> tokens;
-    std::string token;
-    while (in >> token) {
-        if (upperCopy(token) == "EOF") {
-            break;
-        }
-        tokens.push_back(token);
-    }
-    return tokens;
-}
-
-// TSPLIB 的 header line 可能是 "KEY: VALUE" 格式，也可能是 "KEY VALUE" 格式。这个函数解析出 KEY 和 VALUE，并把 KEY 转成大写、VALUE 去掉首尾空白。
-std::pair<std::string, std::string> parseTsplibHeaderLine(const std::string& line)
-{
-    const std::size_t colon = line.find(':');
-    if (colon != std::string::npos) {
-        return {upperCopy(trimCopy(line.substr(0, colon))), trimCopy(line.substr(colon + 1))};
-    }
-    // 没有冒号时，按空白分隔 KEY 和 VALUE。
-    std::istringstream in(line);
-    std::string key;
-    in >> key;
-    std::string value;
-    std::getline(in, value);
-    return {upperCopy(key), trimCopy(value)};
-}
-
-
-std::vector<std::vector<double>> buildExplicitMatrix(
-    int n,
-    const std::string& format,
-    const std::vector<double>& values)
-{
-    std::vector<std::vector<double>> matrix(static_cast<std::size_t>(n),
-                                            std::vector<double>(static_cast<std::size_t>(n), 0.0));
-    const std::string upper_format = upperCopy(format.empty() ? "FULL_MATRIX" : format);
-    std::size_t cursor = 0;
-
-    auto next_value = [&]() {
-        if (cursor >= values.size()) {
-            throw std::runtime_error("EDGE_WEIGHT_SECTION has fewer values than expected");
-        }
-        return values[cursor++];
-    };
-
-    if (upper_format == "FULL_MATRIX") {
-        for (int i = 0; i < n; ++i) {
-            for (int j = 0; j < n; ++j) {
-                matrix[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = next_value();
-            }
-        }
-    } else if (upper_format == "UPPER_ROW") {
-        for (int i = 0; i < n; ++i) {
-            for (int j = i + 1; j < n; ++j) {
-                const double value = next_value();
-                matrix[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = value;
-                matrix[static_cast<std::size_t>(j)][static_cast<std::size_t>(i)] = value;
-            }
-        }
-    } else if (upper_format == "UPPER_DIAG_ROW") {
-        for (int i = 0; i < n; ++i) {
-            for (int j = i; j < n; ++j) {
-                const double value = next_value();
-                matrix[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = value;
-                matrix[static_cast<std::size_t>(j)][static_cast<std::size_t>(i)] = value;
-            }
-        }
-    } else if (upper_format == "LOWER_ROW") {
-        for (int i = 0; i < n; ++i) {
-            for (int j = 0; j < i; ++j) {
-                const double value = next_value();
-                matrix[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = value;
-                matrix[static_cast<std::size_t>(j)][static_cast<std::size_t>(i)] = value;
-            }
-        }
-    } else if (upper_format == "LOWER_DIAG_ROW") {
-        for (int i = 0; i < n; ++i) {
-            for (int j = 0; j <= i; ++j) {
-                const double value = next_value();
-                matrix[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = value;
-                matrix[static_cast<std::size_t>(j)][static_cast<std::size_t>(i)] = value;
-            }
-        }
-    } else if (upper_format == "UPPER_COL") {
-        for (int j = 0; j < n; ++j) {
-            for (int i = 0; i < j; ++i) {
-                const double value = next_value();
-                matrix[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = value;
-                matrix[static_cast<std::size_t>(j)][static_cast<std::size_t>(i)] = value;
-            }
-        }
-    } else if (upper_format == "UPPER_DIAG_COL") {
-        for (int j = 0; j < n; ++j) {
-            for (int i = 0; i <= j; ++i) {
-                const double value = next_value();
-                matrix[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = value;
-                matrix[static_cast<std::size_t>(j)][static_cast<std::size_t>(i)] = value;
-            }
-        }
-    } else if (upper_format == "LOWER_COL") {
-        for (int j = 0; j < n; ++j) {
-            for (int i = j + 1; i < n; ++i) {
-                const double value = next_value();
-                matrix[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = value;
-                matrix[static_cast<std::size_t>(j)][static_cast<std::size_t>(i)] = value;
-            }
-        }
-    } else if (upper_format == "LOWER_DIAG_COL") {
-        for (int j = 0; j < n; ++j) {
-            for (int i = j; i < n; ++i) {
-                const double value = next_value();
-                matrix[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = value;
-                matrix[static_cast<std::size_t>(j)][static_cast<std::size_t>(i)] = value;
-            }
-        }
-    } else {
-        throw std::runtime_error("unsupported EDGE_WEIGHT_FORMAT: " + format);
-    }
-
-    return matrix;
-}
-
-// 判断输入内容是否看起来像一个纯粹的距离矩阵（没有 TSPLIB 格式的 header 和 section 标记）。
-bool looksLikePlainMatrix(const std::string& content)
-{
-    const std::string trimmed = trimCopy(content);
-    if (trimmed.empty()) {
-        return false;
-    }
-    const char first = trimmed.front();
-    if (!std::isdigit(static_cast<unsigned char>(first)) && first != '+' && first != '-') {
-        return false;
-    }
-    const std::size_t first_line_end = trimmed.find('\n');
-    const std::string first_line = first_line_end == std::string::npos
-        ? trimmed
-        : trimmed.substr(0, first_line_end);
-
-    return first_line.find(':') == std::string::npos;
-}
-
-} // namespace
-
-TspProblem readTspProblem(std::istream& input)
-{
-    const std::string content((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
-    if (looksLikePlainMatrix(content)) {
-        std::istringstream matrix_input(content);
-        TspProblem problem;
-        problem.name = "matrix";
-        problem.type = "TSP";
-        problem.edge_weight_type = "EXPLICIT";
-        problem.edge_weight_format = "FULL_MATRIX";
-        problem.matrix = readDistanceMatrix(matrix_input);
-        return problem;
-    }
-
-    TspProblem problem;
-    std::map<std::string, std::string> header;
-    std::vector<double> edge_values;
-    enum class Section {
-        Header,
-        NodeCoord,
-        EdgeWeight,
-        Ignored
-    };
-    Section section = Section::Header;
-
-    std::istringstream lines(content);
-    std::string line;
-    while (std::getline(lines, line)) {
-
-        line = trimCopy(line);
-        if (line.empty()) {
-            continue;
-        }
-
-        const std::string upper = upperCopy(line);
-        if (upper == "EOF") {
-            break;
-        }
-        if (upper == "NODE_COORD_SECTION") {
-            section = Section::NodeCoord;
-            continue;
-        }
-        if (upper == "EDGE_WEIGHT_SECTION") {
-            section = Section::EdgeWeight;
-            continue;
-        }
-        if (isSectionMarker(line)) {
-            section = Section::Ignored;
-            continue;
-        }
-
-        if (section == Section::Header) {
-            auto [key, value] = parseTsplibHeaderLine(line);
-            if (!key.empty()) {
-                header[key] = value;
-            }
-        } else if (section == Section::NodeCoord) {
-            const std::vector<std::string> tokens = tokenizeSectionLine(line);
-            if (tokens.size() < 3) {
-                continue;
-            }
-            const int id = std::stoi(tokens[0]);
-            const int n = header.count("DIMENSION") ? std::stoi(header["DIMENSION"]) : id;
-            if (static_cast<int>(problem.coordinates.size()) < n) {
-                problem.coordinates.resize(static_cast<std::size_t>(n));
-            }
-            if (id < 1 || id > n) {
-                throw std::runtime_error("NODE_COORD_SECTION contains an out-of-range node id");
-            }
-            Point point;
-            point.x = std::stod(tokens[1]);
-            point.y = std::stod(tokens[2]);
-            if (tokens.size() >= 4) {
-                point.z = std::stod(tokens[3]);
-            }
-            problem.coordinates[static_cast<std::size_t>(id - 1)] = point;
-        } else if (section == Section::EdgeWeight) {
-            const std::vector<std::string> tokens = tokenizeSectionLine(line);
-            for (const std::string& token : tokens) {
-                edge_values.push_back(parseWeight(token));
-            }
-        }
-    }
-
-    problem.name = header.count("NAME") ? header["NAME"] : "tsplib";
-    problem.type = header.count("TYPE") ? upperCopy(header["TYPE"]) : "TSP";
-    problem.edge_weight_type = header.count("EDGE_WEIGHT_TYPE")
-        ? upperCopy(header["EDGE_WEIGHT_TYPE"])
-        : (problem.coordinates.empty() ? "EXPLICIT" : "EUC_2D");
-    problem.edge_weight_format = header.count("EDGE_WEIGHT_FORMAT")
-        ? upperCopy(header["EDGE_WEIGHT_FORMAT"])
-        : (problem.edge_weight_type == "EXPLICIT" ? "FULL_MATRIX" : "");
-
-    const int dimension = header.count("DIMENSION") ? std::stoi(header["DIMENSION"]) : problem.dimension();
-    if (dimension < 3) {
-        throw std::runtime_error("TSP instance must contain at least 3 vertices");
-    }
-
-    if (problem.edge_weight_type == "EXPLICIT") {
-        problem.matrix = buildExplicitMatrix(dimension, problem.edge_weight_format, edge_values);
-        problem.coordinates.clear();
-    } else if (static_cast<int>(problem.coordinates.size()) != dimension) {
-        throw std::runtime_error("NODE_COORD_SECTION does not match DIMENSION");
-    }
-
-    return problem;
-}
-
-std::vector<std::vector<double>> readDistanceMatrix(std::istream& input)
-{
-    int n = 0;
-    // 输入第一项必须是顶点数。
-    if (!(input >> n)) {
-        throw std::runtime_error("input must start with the number of vertices");
-    }
-    if (n < 3) {
-        throw std::runtime_error("TSP instance must contain at least 3 vertices");
-    }
-    //nxn的的距离矩阵，初始化为0.0
-    std::vector<std::vector<double>> distance(static_cast<std::size_t>(n),
-                                              std::vector<double>(static_cast<std::size_t>(n), 0.0));
-    for (int i = 0; i < n; ++i) {
-        for (int j = 0; j < n; ++j) {
-            std::string token;
-            // 矩阵必须完整给出 n*n 个 token。
-            if (!(input >> token)) {
-                throw std::runtime_error("distance matrix has fewer entries than expected");
-            }
-            // parseWeight 负责把 x / inf 等缺边符号转换为 infinity。
-            distance[i][j] = parseWeight(token);
-        }
-    }
-    return distance;
-}
-
-// 计算给定 TSP 回路的总成本，若回路无效（长度不为 n 或存在缺边）则返回 infinity。
-namespace {
-
-double problemTourCost(const TspProblem& problem, const std::vector<int>& tour)
-{
-    const int n = problem.dimension();
-    if (static_cast<int>(tour.size()) != n) {
-        return std::numeric_limits<double>::infinity();
-    }
-
-    double cost = 0.0;
-    for (int i = 0; i < n; ++i) {
-        const double edge = problem.distance(tour[static_cast<std::size_t>(i)],
-                                             tour[static_cast<std::size_t>((i + 1) % n)]);
-        if (!isFinite(edge)) {
-            return std::numeric_limits<double>::infinity();
-        }
-        cost += edge;
-    }
-    return cost;
-}
-
-std::vector<int> sequentialTour(int n)
-{
-    std::vector<int> tour(static_cast<std::size_t>(n));
-    std::iota(tour.begin(), tour.end(), 0);
-    return tour;
-}
-
-// 从指定起点出发，按照最近邻策略构造一个 TSP 回路。起点不同可能得到不同的回路，返回所有起点中成本最低的那个回路。
-std::vector<int> nearestNeighborTour(const TspProblem& problem, int start)
-{
-    const int n = problem.dimension();
-    std::vector<int> tour;
-    tour.reserve(static_cast<std::size_t>(n));
-    std::vector<unsigned char> used(static_cast<std::size_t>(n), 0);
-
-    int current = start;
-    tour.push_back(current);
-    used[static_cast<std::size_t>(current)] = 1;
-
-    for (int step = 1; step < n; ++step) {
-        int next = -1;
-        double best = std::numeric_limits<double>::infinity();
-        for (int v = 0; v < n; ++v) {
-            if (used[static_cast<std::size_t>(v)]) {
-                continue;
-            }
-            const double value = problem.distance(current, v);
-            if (value < best) {
-                best = value;
-                next = v;
-            }
-        }
-        if (next < 0 || !isFinite(best)) {
-            return {};
-        }
-        current = next;
-        used[static_cast<std::size_t>(current)] = 1;
-        tour.push_back(current);
-    }
-
-    if (!isFinite(problem.distance(current, start))) {
-        return {};
-    }
-    return tour;
-}
-
-std::uint64_t partBy1(std::uint32_t value)
-{
-    std::uint64_t result = value;
-    result = (result | (result << 16U)) & 0x0000FFFF0000FFFFULL;
-    result = (result | (result << 8U)) & 0x00FF00FF00FF00FFULL;
-    result = (result | (result << 4U)) & 0x0F0F0F0F0F0F0F0FULL;
-    result = (result | (result << 2U)) & 0x3333333333333333ULL;
-    result = (result | (result << 1U)) & 0x5555555555555555ULL;
-    return result;
-}
-
-std::vector<int> mortonTour(const TspProblem& problem)
-{
-    const int n = problem.dimension();
-    if (!problem.hasCoordinates()) {
-        return sequentialTour(n);
-    }
-
-    double min_x = problem.coordinates.front().x;
-    double max_x = problem.coordinates.front().x;
-    double min_y = problem.coordinates.front().y;
-    double max_y = problem.coordinates.front().y;
-    for (const Point& point : problem.coordinates) {
-        min_x = std::min(min_x, point.x);
-        max_x = std::max(max_x, point.x);
-        min_y = std::min(min_y, point.y);
-        max_y = std::max(max_y, point.y);
-    }
-    const double range_x = std::max(kHeuristicEps, max_x - min_x);
-    const double range_y = std::max(kHeuristicEps, max_y - min_y);
-
-    std::vector<std::pair<std::uint64_t, int>> keyed;
-    keyed.reserve(static_cast<std::size_t>(n));
-    for (int i = 0; i < n; ++i) {
-        const Point& point = problem.coordinates[static_cast<std::size_t>(i)];
-        const auto sx = static_cast<std::uint32_t>(
-            std::max(0.0, std::min(65535.0, 65535.0 * (point.x - min_x) / range_x)));
-        const auto sy = static_cast<std::uint32_t>(
-            std::max(0.0, std::min(65535.0, 65535.0 * (point.y - min_y) / range_y)));
-        const std::uint64_t key = partBy1(sx) | (partBy1(sy) << 1U);
-        keyed.push_back({key, i});
-    }
-    std::sort(keyed.begin(), keyed.end(), [](const auto& lhs, const auto& rhs) {
-        if (lhs.first != rhs.first) {
-            return lhs.first < rhs.first;
-        }
-        return lhs.second < rhs.second;
-    });
-
-    std::vector<int> tour;
-    tour.reserve(static_cast<std::size_t>(n));
-    for (const auto& item : keyed) {
-        tour.push_back(item.second);
-    }
-    return tour;
-}
-
-std::vector<int> initialHeuristicTour(const TspProblem& problem, const HeuristicOptions& options)
-{
-    const int n = problem.dimension();
-    if (static_cast<std::size_t>(n) > options.nearest_scan_limit) {
-        writeDebugLine(options.debug,
-                       "initial tour: morton order because dimension exceeds nearest-scan limit");
-        return mortonTour(problem);
-    }
-
-    std::vector<int> starts;
-    starts.push_back(0);
-    if (n > 4) {
-        starts.push_back(n / 2);
-        starts.push_back(n / 4);
-        starts.push_back((3 * n) / 4);
-    }
-
-    std::mt19937 rng(options.seed);
-    std::uniform_int_distribution<int> distribution(0, n - 1);
-    while (starts.size() < options.starts) {
-        starts.push_back(distribution(rng));
-    }
-    std::sort(starts.begin(), starts.end());
-    starts.erase(std::unique(starts.begin(), starts.end()), starts.end());
-    writeDebugLine(options.debug,
-                   "initial tour: nearest-neighbor starts=" + std::to_string(starts.size()));
-
-    double best_cost = std::numeric_limits<double>::infinity();
-    std::vector<int> best_tour;
-    const std::size_t debug_interval = normalizedDebugInterval(options.debug);
-    std::size_t starts_done = 0;
-    for (int start : starts) {
-        std::vector<int> candidate = nearestNeighborTour(problem, start);
-        ++starts_done;
-        if (candidate.empty()) {
-            if (options.debug.output != nullptr && starts_done % debug_interval == 0) {
-                writeDebugLine(options.debug,
-                               "initial tour progress: tried=" + std::to_string(starts_done)
-                                   + " best=" + formatDebugDouble(best_cost));
-            }
-            continue;
-        }
-        const double cost = problemTourCost(problem, candidate);
-        if (cost < best_cost) {
-            best_cost = cost;
-            best_tour = std::move(candidate);
-            writeDebugLine(options.debug,
-                           "initial tour improved: start=" + std::to_string(start)
-                               + " cost=" + formatDebugDouble(best_cost));
-        } else if (options.debug.output != nullptr && starts_done % debug_interval == 0) {
-            writeDebugLine(options.debug,
-                           "initial tour progress: tried=" + std::to_string(starts_done)
-                               + " best=" + formatDebugDouble(best_cost));
-        }
-    }
-    if (!best_tour.empty()) {
-        return best_tour;
-    }
-    writeDebugLine(options.debug, "initial tour: nearest-neighbor failed; using sequential order");
-    return sequentialTour(n);
-}
-
-void fullTwoOpt(const TspProblem& problem,
-                std::vector<int>& tour,
-                double& cost,
-                std::size_t passes,
-                const DebugOptions& debug)
-{
-    const int n = problem.dimension();
-    for (std::size_t pass = 0; pass < passes; ++pass) {
-        const double before = cost;
-        bool improved = false;
-        for (int i = 1; i < n - 1 && !improved; ++i) {
-            for (int k = i + 1; k < n && !improved; ++k) {
-                const int a = tour[static_cast<std::size_t>(i - 1)];
-                const int b = tour[static_cast<std::size_t>(i)];
-                const int c = tour[static_cast<std::size_t>(k)];
-                const int d = tour[static_cast<std::size_t>((k + 1) % n)];
-                const double ac = problem.distance(a, c);
-                const double bd = problem.distance(b, d);
-                if (!isFinite(ac) || !isFinite(bd)) {
-                    continue;
-                }
-                const double delta = ac + bd - problem.distance(a, b) - problem.distance(c, d);
-                if (delta < -kHeuristicEps) {
-                    std::reverse(tour.begin() + i, tour.begin() + k + 1);
-                    cost += delta;
-                    improved = true;
-                }
-            }
-        }
-        std::ostringstream line;
-        line << "2-opt full pass=" << (pass + 1)
-             << " improved=" << (improved ? "yes" : "no")
-             << " cost=" << formatDebugDouble(cost)
-             << " delta=" << formatDebugDouble(cost - before);
-        writeDebugLine(debug, line.str());
-        if (!improved) {
-            break;
-        }
-    }
-    cost = problemTourCost(problem, tour);
-}
-
-void windowTwoOpt(const TspProblem& problem,
-                  std::vector<int>& tour,
-                  double& cost,
-                  std::size_t window,
-                  std::size_t passes,
-                  const DebugOptions& debug)
-{
-    const int n = problem.dimension();
-    if (window == 0) {
-        writeDebugLine(debug, "2-opt window skipped: window=0");
-        return;
-    }
-    for (std::size_t pass = 0; pass < passes; ++pass) {
-        const double before = cost;
-        bool improved = false;
-        for (int i = 1; i < n - 1; ++i) {
-            const int upper = std::min(n - 1, i + static_cast<int>(window));
-            for (int k = i + 1; k <= upper; ++k) {
-                const int a = tour[static_cast<std::size_t>(i - 1)];
-                const int b = tour[static_cast<std::size_t>(i)];
-                const int c = tour[static_cast<std::size_t>(k)];
-                const int d = tour[static_cast<std::size_t>((k + 1) % n)];
-                const double ac = problem.distance(a, c);
-                const double bd = problem.distance(b, d);
-                if (!isFinite(ac) || !isFinite(bd)) {
-                    continue;
-                }
-                const double delta = ac + bd - problem.distance(a, b) - problem.distance(c, d);
-                if (delta < -kHeuristicEps) {
-                    std::reverse(tour.begin() + i, tour.begin() + k + 1);
-                    cost += delta;
-                    improved = true;
-                    break;
-                }
-            }
-        }
-        std::ostringstream line;
-        line << "2-opt window pass=" << (pass + 1)
-             << " improved=" << (improved ? "yes" : "no")
-             << " cost=" << formatDebugDouble(cost)
-             << " delta=" << formatDebugDouble(cost - before);
-        writeDebugLine(debug, line.str());
-        if (!improved) {
-            break;
-        }
-    }
-    cost = problemTourCost(problem, tour);
-}
-
-} // namespace
-
-SolveResult solveHeuristic(const TspProblem& problem, const HeuristicOptions& options)
-{
-    SolveResult result;
-    const int n = problem.dimension();
-    writeDebugLine(options.debug, "heuristic solve started: vertices=" + std::to_string(n));
-    if (n < 3) {
-        result.cost = std::numeric_limits<double>::infinity();
-        writeDebugLine(options.debug, "heuristic solve stopped: fewer than 3 vertices");
-        return result;
-    }
-
-    std::vector<int> tour = initialHeuristicTour(problem, options);
-    double cost = problemTourCost(problem, tour);
-    if (!isFinite(cost)) {
-        result.cost = std::numeric_limits<double>::infinity();
-        writeDebugLine(options.debug, "heuristic solve stopped: initial tour is infeasible");
-        return result;
-    }
-    writeDebugLine(options.debug, "heuristic initial cost=" + formatDebugDouble(cost));
-
-    if (static_cast<std::size_t>(n) <= options.full_two_opt_limit) {
-        writeDebugLine(options.debug,
-                       "2-opt mode: full passes=" + std::to_string(options.two_opt_passes));
-        fullTwoOpt(problem, tour, cost, options.two_opt_passes, options.debug);
-    } else {
-        writeDebugLine(options.debug,
-                       "2-opt mode: window size=" + std::to_string(options.two_opt_window)
-                           + " passes=" + std::to_string(options.two_opt_passes));
-        windowTwoOpt(problem, tour, cost, options.two_opt_window, options.two_opt_passes, options.debug);
-    }
-
-    result.feasible = isFinite(cost);
-    result.cost = cost;
-    result.tour = std::move(tour);
-    writeDebugLine(options.debug,
-                   "heuristic solve finished: feasible=" + std::string(result.feasible ? "yes" : "no")
-                       + " cost=" + formatDebugDouble(result.cost));
-    return result;
-}
-
-std::string formatTour(const std::vector<int>& tour)
-{
-    std::ostringstream out;
-    // 输出形如 0 -> 1 -> 2 -> 0，末尾补回起点表示闭合回路。
-    for (std::size_t i = 0; i < tour.size(); ++i) {
-        if (i != 0) {
-            out << " -> ";
-        }
-        out << tour[i];
-    }
-    if (!tour.empty()) {
-        out << " -> " << tour.front();
-    }
-    return out.str();
-}
+#include "TspProblemIO.ipp"
+#include "TspHeuristicSolver.ipp"
 
 } // namespace tsp

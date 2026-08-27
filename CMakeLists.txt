@@ -22,6 +22,24 @@ function(tsp_apply_common_settings target)
     endif()
 endfunction()
 
+# 实现按职责拆进若干 .ipp 片段，仍由 TspSolver.cpp 按原顺序组成单个翻译
+# 单元。这样阅读时可以按模块导航，同时保留精确求解热路径原有的内联和
+# 代码布局，避免仅因拆分翻译单元造成性能变化。
+set(TSP_SOLVER_SOURCES src/TspSolver.cpp)
+set(TSP_SOLVER_IMPLEMENTATION_PARTS
+    src/TspProblemText.ipp
+    src/TspProblemWeight.ipp
+    src/TspProblemCoordinate.ipp
+    src/TspProblemModel.ipp
+    src/TspInitialTour.ipp
+    src/TspLinKernighan.ipp
+    src/TspProblemIO.ipp
+    src/TspHeuristicSolver.ipp
+)
+set_source_files_properties(${TSP_SOLVER_IMPLEMENTATION_PARTS}
+    PROPERTIES HEADER_FILE_ONLY TRUE
+)
+
 # All solver variants are built from the same sources. With neither feature
 # macro defined, the implementation is the 2026-07-14 degree/incremental
 # variant used by the main `tsp_bb` target.
@@ -32,12 +50,14 @@ function(tsp_add_solver target)
     if(VARIANT_EXCLUDE_FROM_ALL)
         add_executable(${target} EXCLUDE_FROM_ALL
             src/main.cpp
-            src/TspSolver.cpp
+            ${TSP_SOLVER_SOURCES}
+            ${TSP_SOLVER_IMPLEMENTATION_PARTS}
         )
     else()
         add_executable(${target}
             src/main.cpp
-            src/TspSolver.cpp
+            ${TSP_SOLVER_SOURCES}
+            ${TSP_SOLVER_IMPLEMENTATION_PARTS}
         )
     endif()
 
@@ -73,7 +93,8 @@ add_custom_target(tsp_bb_variants
 if(BUILD_TESTING)
     add_executable(tsp_solver_tests
         tests/TspSolverTests.cpp
-        src/TspSolver.cpp
+        ${TSP_SOLVER_SOURCES}
+        ${TSP_SOLVER_IMPLEMENTATION_PARTS}
     )
 
     tsp_apply_common_settings(tsp_solver_tests)

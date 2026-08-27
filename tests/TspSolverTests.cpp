@@ -211,6 +211,18 @@ struct BranchBoundSolverTestAccess {
                    "Prim potential bound differs from constrained Kruskal");
         }
 
+        void buildRootAlphaNearness()
+        {
+            expect(tree.feasible,
+                   "cannot build root alpha from an infeasible 1-tree");
+            solver.buildRootAlphaNearness(tree);
+        }
+
+        double rootAlpha(int u, int v) const
+        {
+            return solver.root_alpha_by_edge_id_[solver.edgeId(u, v)];
+        }
+
         void validate(const OneTree& value) const
         {
             expect(value.feasible, "cannot validate infeasible 1-tree");
@@ -381,6 +393,41 @@ double bruteForceOptimalCost(const std::vector<std::vector<double>>& matrix)
         }
     } while (std::next_permutation(order.begin(), order.end()));
     return best;
+}
+
+void testRootAlphaNearness()
+{
+    const auto matrix = replacementMatrix();
+    Fixture fixture(matrix);
+    fixture.buildRootAlphaNearness();
+
+    Fixture::expect(fixture.contains(fixture.tree, 1, 2),
+                    "root alpha fixture omitted MST edge 1-2");
+    Fixture::expect(fixture.contains(fixture.tree, 2, 3),
+                    "root alpha fixture omitted MST edge 2-3");
+    Fixture::expect(fixture.contains(fixture.tree, 3, 4),
+                    "root alpha fixture omitted MST edge 3-4");
+    expectCost(fixture.rootAlpha(1, 3), 2.0,
+               "internal non-tree alpha used the wrong path maximum");
+    expectCost(fixture.rootAlpha(1, 4), 7.0,
+               "long internal non-tree alpha is incorrect");
+    expectCost(fixture.rootAlpha(2, 4), 2.0,
+               "internal non-tree replacement alpha is incorrect");
+    expectCost(fixture.rootAlpha(0, 3), 4.0,
+               "non-tree root-edge alpha is incorrect");
+    expectCost(fixture.rootAlpha(0, 4), 5.0,
+               "second non-tree root-edge alpha is incorrect");
+    const double optimum = bruteForceOptimalCost(matrix);
+    for (const tsp::BranchEdgeOrder order : {
+             tsp::BranchEdgeOrder::RootAlphaAscending,
+             tsp::BranchEdgeOrder::RootAlphaDescending}) {
+        tsp::BranchBoundSolver solver(matrix);
+        solver.setRootAscentStrategy(tsp::RootAscentStrategy::None);
+        solver.setBranchEdgeOrder(order);
+        const tsp::SolveResult result = solver.solve();
+        expectCost(result.cost, optimum,
+                   "root alpha branch order changed the exact optimum");
+    }
 }
 
 tsp::SolveResult solveAndCompareWithBruteForce(
@@ -1090,6 +1137,10 @@ void testSearchNodePotentialUpdates()
         throw std::runtime_error(
             "persistent potential regression rebuilt no subtree epoch");
     }
+    if (subtree_result.stats.potential_updates_stopped_prunable == 0) {
+        throw std::runtime_error(
+            "persistent potential regression exercised no prunable early stop");
+    }
 }
 
 void testRootReducedCostFixing()
@@ -1137,6 +1188,7 @@ int main()
 {
     try {
         testInternalReplacement();
+        testRootAlphaNearness();
         testRootReplacement();
         testNonTreeForbid();
         testSequentialForbids();

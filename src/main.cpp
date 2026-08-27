@@ -15,24 +15,43 @@
 namespace {
 
 struct CliOptions {
+    // 单实例文件路径；为空且未指定 batch_path 时从标准输入读取。
     std::string input_path;
+    // 批处理清单路径；清单每个有效行保存一个实例文件路径。
     std::string batch_path;
+    // 坐标实例展开为 n×n 稠密矩阵时允许的最大顶点数，防止意外耗尽内存。
     std::size_t exact_max_n = 10000;
+    // 根节点 Held-Karp 势的上升算法；不影响问题可行域，只影响下界强度。
     tsp::RootAscentStrategy root_ascent = tsp::RootAscentStrategy::Polyak;
+    // 默认沿用调整权重排序；root-alpha 两种取向只切换 BP 内部的分支边
+    // 优先级，用于隔离实验，不改变 1-tree 下界或 Kruskal 候选顺序。
+    tsp::BranchEdgeOrder branch_edge_order
+        = tsp::BranchEdgeOrder::AdjustedWeight;
+    // 搜索节点是否更新势，以及更新势只作临时证书还是安装为子树 epoch。
     tsp::PotentialUpdateStrategy potential_update
         = tsp::PotentialUpdateStrategy::None;
+    // Depth 模式的触发间隔；Adaptive 模式的最小深度；subtree 模式下还
+    // 表示当前节点距离上一势 epoch 至少要相隔多少层。
     std::size_t potential_update_depth = 4;
+    // 每次节点势更新最多执行的次梯度迭代轮数。
     std::size_t potential_update_iterations = 8;
+    // Adaptive 模式允许触发更新的最大相对 gap：(UB-LB)/max(1,|UB|)。
     double potential_update_gap_ratio = 0.05;
+    // 一轮精确搜索允许尝试的节点势更新次数；根重启后重新计数。
     std::size_t potential_update_budget = 1000;
+    // 为 true 时只报告启发式上界和根 1-tree 下界，不进入 BP 精确搜索。
     bool root_bound_only = false;
+    // debug 输出写入 stderr；interval 表示每扩展多少个节点输出一次进度。
     bool debug = false;
     std::size_t debug_interval = 10000;
 };
 
 struct RunResult {
+    // 求解器返回的 tour、成本和搜索统计。
     tsp::SolveResult result;
+    // 输出标签：exact 或 root-bound。
     std::string method;
+    // 解析后的实例名与顶点数，避免输出阶段再次访问已释放的 TspProblem。
     std::string problem_name;
     int dimension = 0;
 };
@@ -40,6 +59,7 @@ struct RunResult {
 // 去掉 batch 清单行首尾空白，便于处理空行和注释行。
 std::string trim(const std::string& text)
 {
+    // begin/end 均为原字符串下标；全空白字符串由 npos 分支单独处理。
     const std::string whitespace = " \t\r\n";
     const std::size_t begin = text.find_first_not_of(whitespace);
     if (begin == std::string::npos) {
@@ -94,6 +114,7 @@ std::string formatTourLimited(const std::vector<int>& tour, std::size_t max_vert
     }
 
     std::ostringstream out;
+    // 超长 tour 只保留首尾两段；prefix + suffix 恒等于显示上限。
     const std::size_t prefix = max_vertices / 2;
     const std::size_t suffix = max_vertices - prefix;
     for (std::size_t i = 0; i < prefix; ++i) {
@@ -132,6 +153,8 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
     auto distance = problem.toDenseMatrix(options.exact_max_n);
     tsp::BranchBoundSolver solver(std::move(distance));
     solver.setRootAscentStrategy(options.root_ascent);
+    // 分支顺序与势更新策略是两个正交开关，便于分别评估搜索树形状和下界质量。
+    solver.setBranchEdgeOrder(options.branch_edge_order);
     solver.setPotentialUpdateOptions(
         options.potential_update,
         options.potential_update_depth,
@@ -171,6 +194,8 @@ void printHumanResult(const RunResult& run)
               << result.stats.potential_updates_pruned << '\n';
     std::cout << "Potential updates rebuilt: "
               << result.stats.potential_updates_rebuilt << '\n';
+    std::cout << "Potential updates stopped prunable: "
+              << result.stats.potential_updates_stopped_prunable << '\n';
     std::cout << "Potential update iterations: "
               << result.stats.potential_update_iterations << '\n';
     std::cout << "Potential update seconds: "
@@ -228,6 +253,7 @@ void printBatchHeader()
         << "nodes_created,nodes_expanded,pruned_by_bound,pruned_infeasible,"
         << "potential_updates_attempted,potential_updates_improved,"
         << "potential_updates_pruned,potential_updates_rebuilt,"
+        << "potential_updates_stopped_prunable,"
         << "potential_update_iterations,potential_update_seconds,"
         << "potential_update_rebuild_seconds,potential_update_total_gain,"
         << "potential_update_max_gain,tour,message\n";
@@ -244,7 +270,7 @@ void printBatchRow(const std::string& path,
 
     if (run == nullptr) {
         // 读取失败、解析失败等情况没有求解统计，只保留错误信息。
-        std::cout << ",,,,,,,,,,,,,,,,,,,"
+        std::cout << ",,,,,,,,,,,,,,,,,,,,"
                   << csvQuote(message) << '\n';
         return;
     }
@@ -264,6 +290,7 @@ void printBatchRow(const std::string& path,
               << result.stats.potential_updates_improved << ','
               << result.stats.potential_updates_pruned << ','
               << result.stats.potential_updates_rebuilt << ','
+              << result.stats.potential_updates_stopped_prunable << ','
               << result.stats.potential_update_iterations << ','
               << formatDouble(result.stats.potential_update_seconds) << ','
               << formatDouble(result.stats.potential_update_rebuild_seconds) << ','
@@ -336,6 +363,7 @@ void printUsage(const char* program)
               << "\nOptions:\n"
               << "  --exact-max-n <n>\n"
               << "  --hk-ascent <none|polyak|helsgaun|hybrid>\n"
+              << "  --branch-edge-order <weight|root-alpha-asc|root-alpha-desc>\n"
               << "  --hk-potential-update <none|depth|adaptive|subtree-depth|subtree-adaptive>\n"
               << "  --hk-update-depth <n>\n"
               << "  --hk-update-iterations <n>\n"
@@ -372,6 +400,21 @@ tsp::PotentialUpdateStrategy parsePotentialUpdateStrategy(
     throw std::runtime_error(
         "invalid value for --hk-potential-update: " + value
         + " (expected none, depth, adaptive, subtree-depth, or subtree-adaptive)");
+}
+
+tsp::BranchEdgeOrder parseBranchEdgeOrder(const std::string& value)
+{
+    // 这里只选择 BP 的边比较器；root alpha 表由求解器在根势优化完成后构建。
+    if (value == "weight") return tsp::BranchEdgeOrder::AdjustedWeight;
+    if (value == "root-alpha-asc") {
+        return tsp::BranchEdgeOrder::RootAlphaAscending;
+    }
+    if (value == "root-alpha-desc") {
+        return tsp::BranchEdgeOrder::RootAlphaDescending;
+    }
+    throw std::runtime_error(
+        "invalid value for --branch-edge-order: " + value
+        + " (expected weight, root-alpha-asc, or root-alpha-desc)");
 }
 
 double parseDoubleOption(const std::string& value, const std::string& name)
@@ -434,6 +477,9 @@ CliOptions parseArgs(int argc, char** argv)
             }
         } else if (arg == "--hk-ascent") {
             options.root_ascent = parseRootAscentStrategy(require_value(arg));
+        } else if (arg == "--branch-edge-order") {
+            options.branch_edge_order =
+                parseBranchEdgeOrder(require_value(arg));
         } else if (arg == "--hk-potential-update") {
             options.potential_update =
                 parsePotentialUpdateStrategy(require_value(arg));
