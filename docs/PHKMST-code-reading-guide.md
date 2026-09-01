@@ -320,6 +320,66 @@ alpha(0,v) = wπ(0,v) - 已选两条根边中的较大权重
 
 因此应当在默认 `AdjustedWeight` 分支流程完全读懂后，再研究 root alpha 实验。
 
+### 当前树 forbid-delta 实验
+
+`CurrentForbidDeltaAscending/Descending` 不再使用根静态先验，而是调用
+`currentForbidReplacementDelta()`，复用当前动态 MST 的 fundamental-cut
+replacement 查询，计算禁止候选树边后的即时成本增量。评分只临时修改并
+回滚候选 active 位，不交换工作 1-tree；真正选中边后仍走原增量更新。
+
+该指标仍只观察 forbid 一侧，而 BP 首先递归的是对应 force 子树，因此实验中
+虽然降序减少了部分 created 节点，却没有减少 expanded，并因额外 cut 查询而
+回退。阅读实现时应重点区分“只读评分查询”和“正式树边替换”。实验数据见
+`docs/PHKMST-current-forbid-delta-branch-experiment-2026-08-27.md`。
+
+`CurrentForbidDeltaDegreeAware` 则先收集所有连接当前最大度热点的树边，再按
+forbid delta、两端超度覆盖和默认权重顺序选择。它消除了原路径只取一个
+最大度顶点造成的编号偏置。关闭节点势更新时 expanded 减少约 69.7%，但逐边
+replacement 查询仍使 wall 增加约 28.6%；与 subtree-adaptive 组合时搜索树
+反而显著扩大。因此阅读该策略时还应关注“分支顺序—势 epoch—incumbent
+重启”之间的耦合。
+
+### 双侧 strong-top2 实验
+
+`TwoSidedStrongBranchingTop2` 先按默认 adjusted-weight 比较器保存两条候选，
+然后调用 `currentForbidReplacementDelta()` 和 `currentForceBranchBound()` 分别
+估计两侧增益，按“较弱侧增益、两侧乘积、默认顺序”选择。force 试算复制
+`PartialSol` 并完整重建局部 1-tree；若候选两端尚无 forced 边，则可证明
+当前树仍然可行，直接走零增益快路。
+
+阅读时要特别观察三层成本差异：forbid 侧只是 fundamental-cut 查询，force
+侧可能是完整 Kruskal，而最终正式分支仍复用增量树。该实验在关闭势更新时
+减少了约 40% expanded，却因试算开销慢约 13.9 倍；开启 subtree-adaptive
+后还会改变势 epoch 和 incumbent 重启时机，因此当前只保留为显式实验模式。
+
+### 根多 1-tree 频率中间分支实验
+
+`RootOneTreeFrequencyMiddle` 横跨两个阅读位置：先看
+`optimizeRootPotentials()` 如何在原有 Polyak/Helsgaun 评估中累计每条边的
+出现次数，再看 `bpPartition()` 如何在所有当前最大度热点树边中最小化
+`|2*count-samples|`。该整数式等价于选择出现频率最接近 1/2 的边。
+
+这份统计属于根搜索 epoch：根重启时重算，但 subtree 势更新和普通 DFS 节点
+不会刷新。它不增加 1-tree 构造，只改变 BP 顺序；没有根上升样本时回退默认
+比较器。九实例中开启节点势后总 expanded 几乎不变但 wall 慢约 11.8%，关闭
+节点势后 expanded 放大约 15.9 倍，因此只保留为实验模式。完整数据见
+[`PHKMST-root-frequency-middle-branch-experiment-2026-08-27.md`](PHKMST-root-frequency-middle-branch-experiment-2026-08-27.md)。
+
+### 低成本度结构与传播实验
+
+`MaximumExcessCoverAdjustedWeight` 直接从当前 1-tree 度数组合
+`max(0, degree[u]-2)+max(0, degree[v]-2)`；`PropagationPotentialAdjustedWeight`
+则读取 `PartialSol::forced_degree` 和求解器的 `available_degree_`，优先预计
+force 后更容易触发度满过滤的边。其余 `MaximumDegree*`、`LocalExcess*` 和
+`ForcedDegree*` 变体用于隔离顶点平局、超度覆盖范围和传播分数来源。
+
+这些策略不执行 replacement 查询或额外 1-tree，评分成本很低；但搜索树仍有
+明显实例依赖。九实例无节点势配置中超度覆盖快约 44.4%，在 `gr48` 上却使
+expanded 增加约 6 倍；传播策略在 `gr48` 的 subtree-adaptive 配置中更快，
+在九实例汇总中却回退。阅读时应把“局部传播潜力”和“整棵 force 子树大小”
+严格区分。完整筛选见
+[`PHKMST-cheap-branch-strategy-screen-2026-08-28.md`](PHKMST-cheap-branch-strategy-screen-2026-08-28.md)。
+
 ## 第十阶段：上界启发式与输入解析
 
 ### 上界启发式
@@ -351,8 +411,9 @@ alpha(0,v) = wπ(0,v) - 已选两条根边中的较大权重
 2. `testRootAscentStrategies()`：验证根势上升；
 3. `testSearchNodePotentialUpdates()`：验证节点势更新；
 4. `testRootAlphaNearness()`：验证 alpha 计算；
-5. 从 `testInternalReplacement()` 到 `testRandomSparseTiedForbids()`：理解增量 MST；
-6. `testRootReducedCostFixing()`：理解根节点 reduced-cost fixing。
+5. `testRootOneTreeFrequencyCollection()`：验证每个根样本累计恰好 `n` 条边；
+6. 从 `testInternalReplacement()` 到 `testRandomSparseTiedForbids()`：理解增量 MST；
+7. `testRootReducedCostFixing()`：理解根节点 reduced-cost fixing。
 
 ## 推荐调试断点
 
@@ -387,5 +448,5 @@ alpha(0,v) = wπ(0,v) - 已选两条根边中的较大权重
 4. 为什么候选位图和动态 1-tree 可以安全回滚？
 5. 增量 MST 失败时为何必须回退到完整 `computeOneTree()`？
 6. 根势、临时节点势和 subtree 势 epoch 的生命周期有何区别？
-7. root alpha 为什么只影响搜索顺序而不影响下界正确性？
+7. root alpha、root frequency 和 strong-top2 为什么只影响搜索顺序而不影响下界正确性？
 8. 哪些代码属于算法正确性主线，哪些代码只是性能优化？

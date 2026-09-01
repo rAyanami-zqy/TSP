@@ -223,6 +223,40 @@ struct BranchBoundSolverTestAccess {
             return solver.root_alpha_by_edge_id_[solver.edgeId(u, v)];
         }
 
+        double currentForbidDelta(int u, int v)
+        {
+            solver.candidates_sorted_ = candidates;
+            const std::size_t state_size =
+                static_cast<std::size_t>(solver.n_) * solver.n_;
+            solver.edge_rank_by_id_.assign(state_size, -1);
+            solver.candidate_word_count_ =
+                (solver.candidates_sorted_.size() + 63) / 64;
+            solver.resetCandidateBits(
+                node, solver.candidates_sorted_.size());
+            solver.available_degree_.assign(
+                static_cast<std::size_t>(solver.n_), 0);
+            solver.insufficient_degree_count_ = 0;
+            for (std::size_t index = 0;
+                 index < solver.candidates_sorted_.size(); ++index) {
+                const Edge& candidate = solver.candidates_sorted_[index];
+                solver.edge_rank_by_id_[solver.edgeId(
+                    candidate.u, candidate.v)] = static_cast<int>(index);
+                ++solver.available_degree_[
+                    static_cast<std::size_t>(candidate.u)];
+                ++solver.available_degree_[
+                    static_cast<std::size_t>(candidate.v)];
+            }
+            const std::size_t id = solver.edgeId(u, v);
+            const auto it = std::find_if(
+                tree.edges.begin(), tree.edges.end(),
+                [&](const Edge& edge) {
+                    return solver.edgeId(edge.u, edge.v) == id;
+                });
+            expect(it != tree.edges.end(),
+                   "forbid-delta test edge is not in the current 1-tree");
+            return solver.currentForbidReplacementDelta(node, tree, *it);
+        }
+
         void validate(const OneTree& value) const
         {
             expect(value.feasible, "cannot validate infeasible 1-tree");
@@ -298,6 +332,29 @@ struct BranchBoundSolverTestAccess {
     {
         BranchBoundSolver solver(std::move(matrix));
         return solver.exact_integer_costs_;
+    }
+
+    struct RootFrequencyStats {
+        SolveResult result;
+        std::uint32_t sample_count = 0;
+        std::uint64_t total_selected_edge_count = 0;
+    };
+
+    static RootFrequencyStats solveWithRootFrequency(
+        std::vector<std::vector<double>> matrix)
+    {
+        BranchBoundSolver solver(std::move(matrix));
+        solver.setRootAscentStrategy(RootAscentStrategy::Polyak);
+        solver.setBranchEdgeOrder(
+            BranchEdgeOrder::RootOneTreeFrequencyMiddle);
+
+        RootFrequencyStats stats;
+        stats.result = solver.solve();
+        stats.sample_count = solver.root_one_tree_sample_count_;
+        stats.total_selected_edge_count = std::accumulate(
+            solver.root_one_tree_edge_counts_.begin(),
+            solver.root_one_tree_edge_counts_.end(), std::uint64_t{0});
+        return stats;
     }
 
     struct DiversifiedTourStats {
@@ -420,14 +477,61 @@ void testRootAlphaNearness()
     const double optimum = bruteForceOptimalCost(matrix);
     for (const tsp::BranchEdgeOrder order : {
              tsp::BranchEdgeOrder::RootAlphaAscending,
-             tsp::BranchEdgeOrder::RootAlphaDescending}) {
+             tsp::BranchEdgeOrder::RootAlphaDescending,
+             tsp::BranchEdgeOrder::AdjustedWeightDescending,
+             tsp::BranchEdgeOrder::MaximumDegreeAllAdjustedWeight,
+             tsp::BranchEdgeOrder::MaximumExcessCoverAdjustedWeight,
+             tsp::BranchEdgeOrder::LocalExcessCoverAdjustedWeight,
+             tsp::BranchEdgeOrder::MaximumDegreeExcessCoverAdjustedWeight,
+             tsp::BranchEdgeOrder::PropagationPotentialAdjustedWeight,
+             tsp::BranchEdgeOrder::ForcedDegreeAdjustedWeight,
+             tsp::BranchEdgeOrder::MaximumDegreeMinimumUndecided,
+             tsp::BranchEdgeOrder::MaximumDegreeMaximumUndecided,
+             tsp::BranchEdgeOrder::CurrentForbidDeltaDescending,
+             tsp::BranchEdgeOrder::CurrentForbidDeltaAscending,
+             tsp::BranchEdgeOrder::CurrentForbidDeltaDegreeAware,
+             tsp::BranchEdgeOrder::RootOneTreeFrequencyMiddle,
+             tsp::BranchEdgeOrder::TwoSidedStrongBranchingTop2}) {
         tsp::BranchBoundSolver solver(matrix);
-        solver.setRootAscentStrategy(tsp::RootAscentStrategy::None);
+        solver.setRootAscentStrategy(
+            order == tsp::BranchEdgeOrder::RootOneTreeFrequencyMiddle
+            ? tsp::RootAscentStrategy::Polyak
+            : tsp::RootAscentStrategy::None);
         solver.setBranchEdgeOrder(order);
         const tsp::SolveResult result = solver.solve();
         expectCost(result.cost, optimum,
-                   "root alpha branch order changed the exact optimum");
+                   "experimental branch order changed the exact optimum");
     }
+}
+
+void testRootOneTreeFrequencyCollection()
+{
+    const auto matrix = replacementMatrix();
+    const auto stats =
+        tsp::BranchBoundSolverTestAccess::solveWithRootFrequency(matrix);
+    expectCost(stats.result.cost, bruteForceOptimalCost(matrix),
+               "root frequency branching changed the exact optimum");
+    Fixture::expect(stats.sample_count > 0,
+                    "root frequency branching collected no ascent samples");
+    Fixture::expect(
+        stats.total_selected_edge_count
+            == static_cast<std::uint64_t>(stats.sample_count) * matrix.size(),
+        "each feasible root ascent sample must contribute exactly n edges");
+}
+
+void testCurrentForbidReplacementDelta()
+{
+    Fixture fixture(replacementMatrix());
+    expectCost(fixture.currentForbidDelta(1, 2), 3.0,
+               "current forbid delta used the wrong cut for edge 1-2");
+    expectCost(fixture.currentForbidDelta(2, 3), 2.0,
+               "current forbid delta used the wrong cut for edge 2-3");
+    expectCost(fixture.currentForbidDelta(3, 4), 2.0,
+               "current forbid delta used the wrong cut for edge 3-4");
+    expectCost(fixture.currentForbidDelta(0, 1), 5.0,
+               "current forbid delta selected the wrong root replacement");
+    expectCost(fixture.currentForbidDelta(0, 2), 4.0,
+               "current forbid delta reused the removed root edge");
 }
 
 tsp::SolveResult solveAndCompareWithBruteForce(
@@ -1094,6 +1198,25 @@ void testSearchNodePotentialUpdates()
         }
     }
 
+    // 节点 Helsgaun 使用与 Polyak 相同的触发与 epoch 路径，只替换一次
+    // updateNodePotentialBound 内部的步长调度。这里要求它实际进入更新循环，
+    // 并保持精确最优值不变；是否改善/剪枝属于后续 A/B 的性能指标。
+    {
+        tsp::BranchBoundSolver solver(matrix);
+        solver.setNodeAscentStrategy(tsp::NodeAscentStrategy::Helsgaun);
+        solver.setPotentialUpdateOptions(
+            tsp::PotentialUpdateStrategy::SubtreeAdaptive,
+            1, 16, 1.0, 100);
+        const tsp::SolveResult result = solver.solve();
+        expectCost(result.cost, 699.0,
+                   "node Helsgaun update changed the exact optimum");
+        if (result.stats.potential_updates_attempted == 0
+            || result.stats.potential_update_iterations == 0) {
+            throw std::runtime_error(
+                "node Helsgaun regression did not exercise its update loop");
+        }
+    }
+
     // 同时对一个独立穷举可验证的受约束搜索实例启用零根势，确保节点
     // 更新生成的证书不会越过真实最优值。
     const std::vector<std::vector<double>> small = {
@@ -1105,17 +1228,22 @@ void testSearchNodePotentialUpdates()
         {768, 778, 834, 399, 325, 0},
     };
     const double small_optimum = bruteForceOptimalCost(small);
-    for (const tsp::PotentialUpdateStrategy strategy : {
-             tsp::PotentialUpdateStrategy::Depth,
-             tsp::PotentialUpdateStrategy::Adaptive,
-             tsp::PotentialUpdateStrategy::SubtreeDepth,
-             tsp::PotentialUpdateStrategy::SubtreeAdaptive}) {
-        tsp::BranchBoundSolver solver(small);
-        solver.setRootAscentStrategy(tsp::RootAscentStrategy::None);
-        solver.setPotentialUpdateOptions(strategy, 1, 16, 1.0, 100);
-        const tsp::SolveResult result = solver.solve();
-        expectCost(result.cost, small_optimum,
-                   "node potential certificate exceeded brute-force optimum");
+    for (const tsp::NodeAscentStrategy node_ascent : {
+             tsp::NodeAscentStrategy::Polyak,
+             tsp::NodeAscentStrategy::Helsgaun}) {
+        for (const tsp::PotentialUpdateStrategy strategy : {
+                 tsp::PotentialUpdateStrategy::Depth,
+                 tsp::PotentialUpdateStrategy::Adaptive,
+                 tsp::PotentialUpdateStrategy::SubtreeDepth,
+                 tsp::PotentialUpdateStrategy::SubtreeAdaptive}) {
+            tsp::BranchBoundSolver solver(small);
+            solver.setRootAscentStrategy(tsp::RootAscentStrategy::None);
+            solver.setNodeAscentStrategy(node_ascent);
+            solver.setPotentialUpdateOptions(strategy, 1, 16, 1.0, 100);
+            const tsp::SolveResult result = solver.solve();
+            expectCost(result.cost, small_optimum,
+                       "node potential certificate exceeded brute-force optimum");
+        }
     }
 
     std::ifstream st70_input(
@@ -1189,6 +1317,8 @@ int main()
     try {
         testInternalReplacement();
         testRootAlphaNearness();
+        testRootOneTreeFrequencyCollection();
+        testCurrentForbidReplacementDelta();
         testRootReplacement();
         testNonTreeForbid();
         testSequentialForbids();

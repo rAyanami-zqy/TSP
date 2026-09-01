@@ -1,0 +1,10 @@
+# Search-node ascent comparison set used by the PHKMST potential-update reports.
+data/classic/tsplib/dantzig42.tsp
+data/classic/tsplib/att48.tsp
+data/classic/tsplib/bayg29.tsp
+data/classic/tsplib/bays29.tsp
+data/classic/tsplib/fri26.tsp
+data/classic/tsplib/st70.tsp
+data/classic/tsplib/eil76.tsp
+data/classic/tsplib/rat99.tsp
+data/classic/tsplib/eil101.tsp

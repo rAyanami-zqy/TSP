@@ -23,8 +23,10 @@ struct CliOptions {
     std::size_t exact_max_n = 10000;
     // 根节点 Held-Karp 势的上升算法；不影响问题可行域，只影响下界强度。
     tsp::RootAscentStrategy root_ascent = tsp::RootAscentStrategy::Polyak;
-    // 默认沿用调整权重排序；root-alpha 两种取向只切换 BP 内部的分支边
-    // 优先级，用于隔离实验，不改变 1-tree 下界或 Kruskal 候选顺序。
+    // 搜索节点一次势更新内部的步长调度；触发和 epoch 语义由下方策略控制。
+    tsp::NodeAscentStrategy node_ascent = tsp::NodeAscentStrategy::Polyak;
+    // 默认沿用调整权重排序；实验策略只切换 BP 内部的分支边优先级，
+    // 不改变 1-tree 下界或 Kruskal 候选顺序。
     tsp::BranchEdgeOrder branch_edge_order
         = tsp::BranchEdgeOrder::AdjustedWeight;
     // 搜索节点是否更新势，以及更新势只作临时证书还是安装为子树 epoch。
@@ -153,6 +155,7 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
     auto distance = problem.toDenseMatrix(options.exact_max_n);
     tsp::BranchBoundSolver solver(std::move(distance));
     solver.setRootAscentStrategy(options.root_ascent);
+    solver.setNodeAscentStrategy(options.node_ascent);
     // 分支顺序与势更新策略是两个正交开关，便于分别评估搜索树形状和下界质量。
     solver.setBranchEdgeOrder(options.branch_edge_order);
     solver.setPotentialUpdateOptions(
@@ -363,7 +366,14 @@ void printUsage(const char* program)
               << "\nOptions:\n"
               << "  --exact-max-n <n>\n"
               << "  --hk-ascent <none|polyak|helsgaun|hybrid>\n"
-              << "  --branch-edge-order <weight|root-alpha-asc|root-alpha-desc>\n"
+              << "  --hk-node-ascent <polyak|helsgaun>\n"
+              << "  --branch-edge-order <weight|root-alpha-asc|root-alpha-desc|"
+                 "forbid-delta-asc|forbid-delta-desc|forbid-degree-desc|"
+                 "root-frequency-middle|strong-top2|weight-desc|"
+                 "max-degree-all-weight|excess-cover-weight|"
+                 "local-excess-cover-weight|max-degree-excess-weight|"
+                 "propagation-weight|forced-degree-weight|"
+                 "max-degree-min-undecided|max-degree-max-undecided>\n"
               << "  --hk-potential-update <none|depth|adaptive|subtree-depth|subtree-adaptive>\n"
               << "  --hk-update-depth <n>\n"
               << "  --hk-update-iterations <n>\n"
@@ -383,6 +393,15 @@ tsp::RootAscentStrategy parseRootAscentStrategy(const std::string& value)
     throw std::runtime_error(
         "invalid value for --hk-ascent: " + value
         + " (expected none, polyak, helsgaun, or hybrid)");
+}
+
+tsp::NodeAscentStrategy parseNodeAscentStrategy(const std::string& value)
+{
+    if (value == "polyak") return tsp::NodeAscentStrategy::Polyak;
+    if (value == "helsgaun") return tsp::NodeAscentStrategy::Helsgaun;
+    throw std::runtime_error(
+        "invalid value for --hk-node-ascent: " + value
+        + " (expected polyak or helsgaun)");
 }
 
 tsp::PotentialUpdateStrategy parsePotentialUpdateStrategy(
@@ -412,9 +431,57 @@ tsp::BranchEdgeOrder parseBranchEdgeOrder(const std::string& value)
     if (value == "root-alpha-desc") {
         return tsp::BranchEdgeOrder::RootAlphaDescending;
     }
+    if (value == "weight-desc") {
+        return tsp::BranchEdgeOrder::AdjustedWeightDescending;
+    }
+    if (value == "max-degree-all-weight") {
+        return tsp::BranchEdgeOrder::MaximumDegreeAllAdjustedWeight;
+    }
+    if (value == "excess-cover-weight") {
+        return tsp::BranchEdgeOrder::MaximumExcessCoverAdjustedWeight;
+    }
+    if (value == "local-excess-cover-weight") {
+        return tsp::BranchEdgeOrder::LocalExcessCoverAdjustedWeight;
+    }
+    if (value == "max-degree-excess-weight") {
+        return tsp::BranchEdgeOrder::MaximumDegreeExcessCoverAdjustedWeight;
+    }
+    if (value == "propagation-weight") {
+        return tsp::BranchEdgeOrder::PropagationPotentialAdjustedWeight;
+    }
+    if (value == "forced-degree-weight") {
+        return tsp::BranchEdgeOrder::ForcedDegreeAdjustedWeight;
+    }
+    if (value == "max-degree-min-undecided") {
+        return tsp::BranchEdgeOrder::MaximumDegreeMinimumUndecided;
+    }
+    if (value == "max-degree-max-undecided") {
+        return tsp::BranchEdgeOrder::MaximumDegreeMaximumUndecided;
+    }
+    if (value == "forbid-delta-desc") {
+        return tsp::BranchEdgeOrder::CurrentForbidDeltaDescending;
+    }
+    if (value == "forbid-delta-asc") {
+        return tsp::BranchEdgeOrder::CurrentForbidDeltaAscending;
+    }
+    if (value == "forbid-degree-desc") {
+        return tsp::BranchEdgeOrder::CurrentForbidDeltaDegreeAware;
+    }
+    if (value == "root-frequency-middle") {
+        return tsp::BranchEdgeOrder::RootOneTreeFrequencyMiddle;
+    }
+    if (value == "strong-top2") {
+        return tsp::BranchEdgeOrder::TwoSidedStrongBranchingTop2;
+    }
     throw std::runtime_error(
         "invalid value for --branch-edge-order: " + value
-        + " (expected weight, root-alpha-asc, or root-alpha-desc)");
+        + " (expected weight, root-alpha-asc, root-alpha-desc, "
+          "forbid-delta-asc, forbid-delta-desc, forbid-degree-desc, "
+          "root-frequency-middle, strong-top2, weight-desc, "
+          "max-degree-all-weight, excess-cover-weight, "
+          "local-excess-cover-weight, max-degree-excess-weight, or "
+          "propagation-weight, forced-degree-weight, "
+          "max-degree-min-undecided, or max-degree-max-undecided)");
 }
 
 double parseDoubleOption(const std::string& value, const std::string& name)
@@ -477,6 +544,8 @@ CliOptions parseArgs(int argc, char** argv)
             }
         } else if (arg == "--hk-ascent") {
             options.root_ascent = parseRootAscentStrategy(require_value(arg));
+        } else if (arg == "--hk-node-ascent") {
+            options.node_ascent = parseNodeAscentStrategy(require_value(arg));
         } else if (arg == "--branch-edge-order") {
             options.branch_edge_order =
                 parseBranchEdgeOrder(require_value(arg));

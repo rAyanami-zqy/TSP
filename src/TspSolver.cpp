@@ -282,10 +282,15 @@ void BranchBoundSolver::setRootAscentStrategy(RootAscentStrategy strategy)
     root_ascent_strategy_ = strategy;
 }
 
+void BranchBoundSolver::setNodeAscentStrategy(NodeAscentStrategy strategy)
+{
+    node_ascent_strategy_ = strategy;
+}
+
 void BranchBoundSolver::setBranchEdgeOrder(BranchEdgeOrder order)
 {
-    // 此处只记录策略。root alpha 依赖最终根势和根 1-tree，必须延迟到
-    // solve() 的每个根搜索 epoch 中计算，不能在配置阶段提前构建。
+    // 此处只记录策略。root alpha 依赖最终根势和根 1-tree；root frequency
+    // 依赖根势上升各轮 1-tree。两者都必须延迟到每个根搜索 epoch 构建。
     branch_edge_order_ = order;
 }
 
@@ -431,6 +436,14 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
 {
     // 用于统计整个根势优化阶段（包括所有候选策略）的墙钟时间。
     const auto started_at = std::chrono::steady_clock::now();
+    // 频率属于一次根势 epoch；即使本次上升提前退出，也不能沿用上次根
+    // 搜索或上一个 solve() 的样本。
+    root_one_tree_edge_counts_.clear();
+    root_one_tree_sample_count_ = 0;
+    const bool collect_root_one_tree_frequency = branch_edge_order_
+        == BranchEdgeOrder::RootOneTreeFrequencyMiddle;
+    const std::size_t edge_state_size = static_cast<std::size_t>(n_)
+        * static_cast<std::size_t>(n_);
     vertex_potential_.assign(static_cast<std::size_t>(n_), 0.0);
     potential_correction_ = 0.0;
     potential_roundoff_guard_ = 0.0;
@@ -460,6 +473,9 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
              << " polyak_bound=" << formatDebugDouble(polyak_bound)
              << " helsgaun_bound=" << formatDebugDouble(helsgaun_bound)
              << " seconds=" << formatDebugDouble(seconds);
+        if (collect_root_one_tree_frequency) {
+            line << " frequency_samples=" << root_one_tree_sample_count_;
+        }
         writeDebugLine(debug_, line.str());
     };
 
@@ -487,6 +503,9 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
         double bound = -std::numeric_limits<double>::infinity();
         // 本次 1-tree 的顶点度数；degree[v]-2 是势的次梯度分量。
         std::vector<int> degree;
+        // 仅 middle-frequency 实验使用：本轮恰好 n 条 1-tree 边的稳定
+        // edgeId。默认策略不填充，避免改变根势基线的分配与热路径。
+        std::vector<std::size_t> selected_edge_ids;
     };
 
     // evaluate 多次复用的内部边缓冲区，只包含顶点 1..n-1 的边。
@@ -496,6 +515,9 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
     auto evaluate = [&](const std::vector<double>& potentials) {
         OneTreeEvaluation evaluation;
         evaluation.degree.assign(static_cast<std::size_t>(n_), 0);
+        if (collect_root_one_tree_frequency) {
+            evaluation.selected_edge_ids.reserve(static_cast<std::size_t>(n_));
+        }
         internal_edges.clear();
         for (int u = 1; u < n_; ++u) {
             for (int v = u + 1; v < n_; ++v) {
@@ -520,6 +542,10 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
             modified_cost += edge.w;
             ++evaluation.degree[static_cast<std::size_t>(edge.u)];
             ++evaluation.degree[static_cast<std::size_t>(edge.v)];
+            if (collect_root_one_tree_frequency) {
+                evaluation.selected_edge_ids.push_back(
+                    edgeId(edge.u, edge.v));
+            }
             if (++mst_edge_count == n_ - 2) break;
         }
         if (mst_edge_count != n_ - 2) return evaluation;
@@ -552,6 +578,10 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
             modified_cost += edge.w;
             ++evaluation.degree[static_cast<std::size_t>(edge.u)];
             ++evaluation.degree[static_cast<std::size_t>(edge.v)];
+            if (collect_root_one_tree_frequency) {
+                evaluation.selected_edge_ids.push_back(
+                    edgeId(edge.u, edge.v));
+            }
         }
 
         const double correction = 2.0
@@ -567,6 +597,22 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
         double bound = -std::numeric_limits<double>::infinity();
         // 实际完成的 1-tree 评估次数，用于实验统计。
         int iterations = 0;
+        // 与本策略所有可行评估同步累计的选边次数；只在 frequency-middle
+        // 模式分配，选中 Polyak/Helsgaun 后直接安装对应一份统计。
+        std::vector<std::uint32_t> edge_counts;
+        std::uint32_t frequency_samples = 0;
+    };
+
+    auto record_frequency = [&](AscentCandidate& candidate,
+                                const OneTreeEvaluation& evaluation) {
+        if (!collect_root_one_tree_frequency || !evaluation.feasible) return;
+        if (candidate.edge_counts.empty()) {
+            candidate.edge_counts.assign(edge_state_size, 0);
+        }
+        ++candidate.frequency_samples;
+        for (const std::size_t id : evaluation.selected_edge_ids) {
+            ++candidate.edge_counts[id];
+        }
     };
 
     auto save_if_better = [&](AscentCandidate& best,
@@ -599,6 +645,7 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
             const OneTreeEvaluation evaluation = evaluate(potentials);
             ++best.iterations;
             if (!evaluation.feasible) break;
+            record_frequency(best, evaluation);
             const double bound = evaluation.bound;
             if (save_if_better(best, potentials, bound)) {
                 no_improvement = 0;
@@ -663,6 +710,7 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
             const OneTreeEvaluation evaluation = evaluate(potentials);
             ++best.iterations;
             if (!evaluation.feasible) break;
+            record_frequency(best, evaluation);
 
             const double bound = evaluation.bound;
             const bool improved_best = save_if_better(best, potentials, bound);
@@ -761,6 +809,11 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
     }
 
     vertex_potential_ = std::move(selected.potentials);
+    if (collect_root_one_tree_frequency
+        && selected.frequency_samples != 0) {
+        root_one_tree_edge_counts_ = std::move(selected.edge_counts);
+        root_one_tree_sample_count_ = selected.frequency_samples;
+    }
     potential_correction_ = 2.0
         * std::accumulate(vertex_potential_.begin(), vertex_potential_.end(), 0.0);
     const bool has_nonzero_potential = std::any_of(
@@ -1172,6 +1225,104 @@ BranchBoundSolver::updateNodePotentialBound(
         potentials.assign(static_cast<std::size_t>(n_), 0.0);
     }
     result.potentials = potentials;
+
+    if (node_ascent_strategy_ == NodeAscentStrategy::Helsgaun) {
+        // 与根节点的 Helsgaun 实验使用同一套适配调度：固定特殊节点 0，
+        // period 内保持步长，使用 0.7/0.3 平滑次梯度。这里仍从父 epoch 势
+        // warm start，并在当前 forced/forbidden/active 约束图上评估。
+        std::vector<double> previous_subgradient(
+            static_cast<std::size_t>(n_), 0.0);
+        bool have_previous = false;
+        double previous_bound = -std::numeric_limits<double>::infinity();
+        double step = 1.0;
+        std::size_t period = std::max<std::size_t>(
+            1, static_cast<std::size_t>(n_) / 2);
+        std::size_t position_in_period = 0;
+        bool first_period = true;
+        bool doubling_step = true;
+
+        for (std::size_t iteration = 0;
+             iteration < max_iterations && period > 0
+                 && step > 0.0 && isFinite(step);
+             ++iteration) {
+            const Evaluation evaluation = evaluate(potentials);
+            ++result.iterations;
+            if (!evaluation.feasible) {
+                result.feasible = false;
+                break;
+            }
+
+            const double tolerance = scaledRoundoffTolerance(
+                evaluation.bound, upper_bound, static_cast<std::size_t>(n_));
+            const bool improved_best =
+                evaluation.bound > result.bound + tolerance;
+            if (improved_best) {
+                result.bound = evaluation.bound;
+                result.potentials = potentials;
+            }
+
+            std::vector<double> subgradient(
+                static_cast<std::size_t>(n_), 0.0);
+            double subgradient_norm = 0.0;
+            for (int vertex = 0; vertex < n_; ++vertex) {
+                const std::size_t index = static_cast<std::size_t>(vertex);
+                const double deviation =
+                    static_cast<double>(evaluation.degree[index] - 2);
+                subgradient[index] = deviation;
+                subgradient_norm += deviation * deviation;
+            }
+
+            const bool prunable = shouldPrune(result.bound, upper_bound);
+            if (subgradient_norm == 0.0 || prunable
+                || evaluation.bound >= upper_bound - tolerance) {
+                result.stopped_prunable =
+                    prunable && iteration + 1 < max_iterations;
+                break;
+            }
+
+            // 论文式首 period 探索：只要本轮下界继续增长就将步长翻倍；
+            // 第一次不增长后，本 period 的剩余迭代保持当前步长。
+            if (first_period && have_previous && doubling_step) {
+                const double previous_tolerance = scaledRoundoffTolerance(
+                    evaluation.bound, previous_bound,
+                    static_cast<std::size_t>(n_));
+                if (evaluation.bound > previous_bound + previous_tolerance
+                    && isFinite(step * 2.0)) {
+                    step *= 2.0;
+                } else {
+                    doubling_step = false;
+                }
+            }
+
+            bool finite_update = true;
+            for (int vertex = 0; vertex < n_; ++vertex) {
+                const std::size_t index = static_cast<std::size_t>(vertex);
+                const double direction = have_previous
+                    ? 0.7 * subgradient[index]
+                        + 0.3 * previous_subgradient[index]
+                    : subgradient[index];
+                potentials[index] += step * direction;
+                finite_update = finite_update && isFinite(potentials[index]);
+            }
+            if (!finite_update) break;
+
+            previous_subgradient = std::move(subgradient);
+            previous_bound = evaluation.bound;
+            have_previous = true;
+            ++position_in_period;
+            if (position_in_period >= period) {
+                std::size_t next_period = period / 2;
+                step *= 0.5;
+                if (improved_best && next_period > 0) {
+                    next_period *= 2;
+                }
+                period = next_period;
+                position_in_period = 0;
+                first_period = false;
+            }
+        }
+        return result;
+    }
 
     // step_scale 控制 Polyak 步长，no_improvement 达到阈值后折半抑制振荡。
     double step_scale = 2.0;
@@ -1668,7 +1819,8 @@ SolveResult BranchBoundSolver::solve()
                     + " upper_bound=" + formatDebugDouble(best_cost_));
             return result_;
         }
-        if (branch_edge_order_ != BranchEdgeOrder::AdjustedWeight) {
+        if (branch_edge_order_ == BranchEdgeOrder::RootAlphaAscending
+            || branch_edge_order_ == BranchEdgeOrder::RootAlphaDescending) {
             // 根势优化已经结束，此时的调整权重和根 1-tree 定义了本搜索
             // epoch 的静态 alpha 先验。若 diversified incumbent 触发根重启，
             // 新 epoch 会重新计算；默认 weight 路径则完全跳过这项 O(n^2) 预处理。
@@ -1772,6 +1924,171 @@ SolveResult BranchBoundSolver::solve()
 
 // ── BP (Branch Partitioning) 实现 ────────────────────────────────
 
+double BranchBoundSolver::currentForbidReplacementDelta(
+    PartialSol& node, const OneTree& tree,
+    const Edge& tree_edge) const
+{
+    const std::size_t removed_id = edgeId(tree_edge.u, tree_edge.v);
+    const Edge* replacement = nullptr;
+
+    // 评分时让被删边在权威 active bitset 中临时失活，使现有 replacement
+    // 查询走与真正 forbid 完全相同的候选集合。checkpoint 会立即恢复候选
+    // 位、available_degree_ 和 undo 栈；工作 1-tree 本身从未修改。
+    const std::size_t candidate_checkpoint = candidate_undo_.size();
+    deactivateCandidate(node, removed_id);
+
+    try {
+        if (tree_edge.u == 0 || tree_edge.v == 0) {
+            // 根边不属于内部 MST；禁止其中一条后，只需寻找当前约束下
+            // 下一条未被 1-tree 选中的合法根边。
+            for (const Edge& candidate : root_candidates_sorted_) {
+                const std::size_t candidate_id = edgeId(candidate.u, candidate.v);
+                if (node.forbidden[candidate_id]) continue;
+                if (!node.forced[candidate_id]
+                    && !isCandidateActive(node, candidate_id)) {
+                    continue;
+                }
+                const bool already_selected = !tree.edge_index_in_tree.empty()
+                    ? tree.edge_index_in_tree[candidate_id] >= 0
+                    : std::any_of(
+                        tree.edges.begin(), tree.edges.end(),
+                        [&](const Edge& edge) {
+                            return edgeId(edge.u, edge.v) == candidate_id;
+                        });
+                if (already_selected) continue;
+                replacement = &candidate;
+                break;
+            }
+        } else {
+            // 默认增量路径已有动态 MST 邻接位图。关闭增量的实验变体仅在
+            // 显式选择本策略时用局部副本补建，以支持相同 CLI 实验。
+            const OneTree* query_tree = &tree;
+            OneTree tree_with_dynamic_mst;
+            if (tree.mst_adjacency_bits.empty()) {
+                tree_with_dynamic_mst = tree;
+                initializeDynamicMst(tree_with_dynamic_mst);
+                query_tree = &tree_with_dynamic_mst;
+            }
+            replacement = findMstReplacement(
+                node, candidates_sorted_, *query_tree, tree_edge);
+        }
+    } catch (...) {
+        rollbackCandidates(node, candidate_checkpoint);
+        throw;
+    }
+
+    const double delta = replacement == nullptr
+        ? std::numeric_limits<double>::infinity()
+        : std::max(0.0, replacement->w - tree_edge.w);
+    rollbackCandidates(node, candidate_checkpoint);
+    // MST 交换性质下 replacement 不轻于被删树边；max(0,...) 只防御
+    // 极小浮点舍入或兼容测试状态，不改变正常排序。
+    return delta;
+}
+
+double BranchBoundSolver::currentForceBranchBound(
+    const PartialSol& node, const OneTree& current_tree,
+    const Edge& tree_edge) const
+{
+    // strong-branching 的试算必须与正式 force 分支具有相同约束语义，但不能
+    // 触碰 DFS 的候选位图、available_degree_ 或回滚栈。因此复制节点，并在
+    // 局部候选表上完整重建一次受约束 1-tree。
+    const std::size_t forced_id = edgeId(tree_edge.u, tree_edge.v);
+    if (node.forced[forced_id] || node.forbidden[forced_id]
+        || !isFinite(dist_[tree_edge.u][tree_edge.v])
+        || node.forced_degree[static_cast<std::size_t>(tree_edge.u)] >= 2
+        || node.forced_degree[static_cast<std::size_t>(tree_edge.v)] >= 2) {
+        return std::numeric_limits<double>::infinity();
+    }
+
+    auto forced_find = [&](int vertex) {
+        // 与可回滚正式 DSU 一样不做路径压缩。
+        while (node.forced_parent[static_cast<std::size_t>(vertex)] != vertex) {
+            vertex = node.forced_parent[static_cast<std::size_t>(vertex)];
+        }
+        return vertex;
+    };
+
+    int root_u = forced_find(tree_edge.u);
+    int root_v = forced_find(tree_edge.v);
+    if (root_u == root_v
+        && node.forced_comp_size[static_cast<std::size_t>(root_u)] < n_) {
+        return std::numeric_limits<double>::infinity();
+    }
+
+    // 两端点都是 forced 单点时，加入一条已经位于 current_tree 中的边：
+    // 不会让端点达到强制度 2，也不会闭合已有 forced 分量。当前 1-tree
+    // 因而仍满足新约束，其最优下界不可能改变，可省掉节点复制后的全量扫描。
+    if (node.forced_degree[static_cast<std::size_t>(tree_edge.u)] == 0
+        && node.forced_degree[static_cast<std::size_t>(tree_edge.v)] == 0) {
+        return current_tree.cost;
+    }
+
+    PartialSol trial = node;
+
+    trial.forced[forced_id] = 1;
+    ++trial.forced_degree[static_cast<std::size_t>(tree_edge.u)];
+    ++trial.forced_degree[static_cast<std::size_t>(tree_edge.v)];
+    trial.forced_edges.push_back(tree_edge);
+    if (tree_edge.u != 0 && tree_edge.v != 0) {
+        trial.forced_mst_cost += tree_edge.w;
+        ++trial.forced_mst_count;
+    }
+
+    if (root_u != root_v) {
+        if (trial.forced_rank[static_cast<std::size_t>(root_u)]
+            < trial.forced_rank[static_cast<std::size_t>(root_v)]) {
+            std::swap(root_u, root_v);
+        }
+        if (!trial.forced_member_bits.empty()) {
+            trial.forced_member_bits[static_cast<std::size_t>(root_u)] |=
+                trial.forced_member_bits[static_cast<std::size_t>(root_v)];
+        } else {
+            auto& members_u =
+                trial.forced_members[static_cast<std::size_t>(root_u)];
+            const auto& members_v =
+                trial.forced_members[static_cast<std::size_t>(root_v)];
+            members_u.insert(
+                members_u.end(), members_v.begin(), members_v.end());
+        }
+        trial.forced_parent[static_cast<std::size_t>(root_v)] = root_u;
+        trial.forced_comp_size[static_cast<std::size_t>(root_u)] +=
+            trial.forced_comp_size[static_cast<std::size_t>(root_v)];
+        if (trial.forced_rank[static_cast<std::size_t>(root_u)]
+            == trial.forced_rank[static_cast<std::size_t>(root_v)]) {
+            ++trial.forced_rank[static_cast<std::size_t>(root_u)];
+        }
+    }
+
+    // 先投影当前节点的 active 集合，再复用完整候选过滤逻辑处理新 force
+    // 导致的度满和子回路删除。局部 vector 仍保持全局 adjusted-weight 顺序。
+    std::vector<Edge> trial_candidates;
+    trial_candidates.reserve(candidates_sorted_.size());
+    for (const Edge& candidate : candidates_sorted_) {
+        if (isCandidateActive(node, edgeId(candidate.u, candidate.v))) {
+            trial_candidates.push_back(candidate);
+        }
+    }
+    if (!buildBranchCandidates(trial, trial_candidates)) {
+        return std::numeric_limits<double>::infinity();
+    }
+
+    // 局部 vector 的下标不再与全局 candidate_bits 对齐。改用 edgeId 掩码，
+    // 这样 computeOneTree 的根边选择也只能看到过滤后仍合法的候选。
+    trial.candidate_bits.clear();
+    trial.candidate_bit_count = 0;
+    trial.candidate_mask.assign(
+        static_cast<std::size_t>(n_) * static_cast<std::size_t>(n_), 0);
+    for (const Edge& candidate : trial_candidates) {
+        trial.candidate_mask[edgeId(candidate.u, candidate.v)] = 1;
+    }
+
+    const OneTree forced_tree = computeOneTree(trial, trial_candidates);
+    return forced_tree.feasible
+        ? forced_tree.cost
+        : std::numeric_limits<double>::infinity();
+}
+
 BranchBoundSolver::BranchSet BranchBoundSolver::bpPartition(
     PartialSol& node, OneTree& work_tree)
 {
@@ -1787,6 +2104,14 @@ BranchBoundSolver::BranchSet BranchBoundSolver::bpPartition(
         // deg_best 指向本轮最终选中的未决 1-tree 边；指针只引用 work_tree，
         // 在调用 test() 可能替换树边之前使用。
         const Edge* deg_best = nullptr;
+        double deg_best_forbid_delta =
+            -std::numeric_limits<double>::infinity();
+        int deg_best_excess_cover = -1;
+        int deg_best_forced_degree = -1;
+        int deg_best_candidate_slack = std::numeric_limits<int>::max();
+        std::uint64_t deg_best_frequency_distance =
+            std::numeric_limits<std::uint64_t>::max();
+        std::array<const Edge*, 2> strong_candidates{{nullptr, nullptr}};
 
         // 该比较器只决定 BP 已选违规顶点上的分支边，不重排
         // candidates_sorted_：后者仍必须维持调整权重顺序，供 Kruskal 和
@@ -1795,7 +2120,11 @@ BranchBoundSolver::BranchSet BranchBoundSolver::bpPartition(
         auto branch_edge_better = [&](const Edge& candidate,
                                       const Edge* incumbent) {
             if (incumbent == nullptr) return true;
-            if (branch_edge_order_ != BranchEdgeOrder::AdjustedWeight
+            const bool use_root_alpha = branch_edge_order_
+                    == BranchEdgeOrder::RootAlphaAscending
+                || branch_edge_order_
+                    == BranchEdgeOrder::RootAlphaDescending;
+            if (use_root_alpha
                 && root_alpha_by_edge_id_.size()
                     == static_cast<std::size_t>(n_)
                         * static_cast<std::size_t>(n_)) {
@@ -1814,6 +2143,10 @@ BranchBoundSolver::BranchSet BranchBoundSolver::bpPartition(
             // 根树边的 alpha 都为 0，平局很常见；按调整权重和端点继续比较，
             // 保证相同输入下分支顺序确定，并保持默认策略原有的局部偏好。
             if (candidate.w != incumbent->w) {
+                if (branch_edge_order_
+                    == BranchEdgeOrder::AdjustedWeightDescending) {
+                    return candidate.w > incumbent->w;
+                }
                 return candidate.w < incumbent->w;
             }
             const int candidate_u = std::min(candidate.u, candidate.v);
@@ -1824,19 +2157,289 @@ BranchBoundSolver::BranchSet BranchBoundSolver::bpPartition(
             return candidate_v < incumbent_v;
         };
 
+        // 单侧策略对每条合格边查询 forbid replacement；双侧策略先按默认
+        // adjusted-weight 顺序保留两条，再在循环之后执行昂贵的 force 试算。
+        auto consider_branch_edge = [&](const Edge& candidate) {
+            if (branch_edge_order_
+                == BranchEdgeOrder::TwoSidedStrongBranchingTop2) {
+                if (branch_edge_better(candidate, strong_candidates[0])) {
+                    strong_candidates[1] = strong_candidates[0];
+                    strong_candidates[0] = &candidate;
+                } else if (branch_edge_better(
+                               candidate, strong_candidates[1])) {
+                    strong_candidates[1] = &candidate;
+                }
+                return;
+            }
+            if (branch_edge_order_
+                    == BranchEdgeOrder::CurrentForbidDeltaDescending
+                || branch_edge_order_
+                    == BranchEdgeOrder::CurrentForbidDeltaAscending) {
+                const double candidate_delta =
+                    currentForbidReplacementDelta(node, work_tree, candidate);
+                if (deg_best != nullptr) {
+                    const bool descending = branch_edge_order_
+                        == BranchEdgeOrder::CurrentForbidDeltaDescending;
+                    if ((descending
+                            && candidate_delta < deg_best_forbid_delta)
+                        || (!descending
+                            && candidate_delta > deg_best_forbid_delta)) {
+                        return;
+                    }
+                    if (candidate_delta == deg_best_forbid_delta
+                        && !branch_edge_better(candidate, deg_best)) {
+                        return;
+                    }
+                }
+                deg_best = &candidate;
+                deg_best_forbid_delta = candidate_delta;
+                return;
+            }
+            if (branch_edge_better(candidate, deg_best)) {
+                deg_best = &candidate;
+            }
+        };
+
 #ifdef TSP_BRANCH_STRATEGY_MIN_EDGE
         constexpr bool kUseMinEdgeFromOneTree = true;
 #else
         constexpr bool kUseMinEdgeFromOneTree = false;
 #endif
 
-        if (kUseMinEdgeFromOneTree) {
+        const bool use_root_frequency_middle = branch_edge_order_
+                == BranchEdgeOrder::RootOneTreeFrequencyMiddle
+            && root_one_tree_sample_count_ != 0
+            && root_one_tree_edge_counts_.size()
+                == static_cast<std::size_t>(n_)
+                    * static_cast<std::size_t>(n_);
+        if (!kUseMinEdgeFromOneTree
+            && branch_edge_order_ == BranchEdgeOrder::AdjustedWeight) {
+            // 默认热路径保持原实现：先取编号最小的最大度违规顶点，再取
+            // 该顶点最轻的未决树边。实验策略的额外计数不进入此循环。
+            int branch_vertex = -1;
+            int max_degree = 2;
+            for (int vertex = 0; vertex < n_; ++vertex) {
+                const int degree =
+                    work_tree.degree[static_cast<std::size_t>(vertex)];
+                if (degree > max_degree) {
+                    max_degree = degree;
+                    branch_vertex = vertex;
+                }
+            }
+            if (branch_vertex >= 0) {
+                for (const Edge& edge : work_tree.edges) {
+                    if (edge.u != branch_vertex && edge.v != branch_vertex) {
+                        continue;
+                    }
+                    const std::size_t edge_id = edgeId(edge.u, edge.v);
+                    if (node.forced[edge_id] || node.forbidden[edge_id]) {
+                        continue;
+                    }
+                    if (branch_edge_better(edge, deg_best)) deg_best = &edge;
+                }
+            }
+        } else if (branch_edge_order_
+                   == BranchEdgeOrder::MaximumDegreeAllAdjustedWeight) {
+            // 默认路径只取编号最小的一个最大度顶点。此策略把所有并列
+            // 最大度热点合并为候选集，其余仍使用默认 adjusted-weight 顺序。
+            int maximum_violating_degree = 2;
+            for (const int degree : work_tree.degree) {
+                maximum_violating_degree = std::max(
+                    maximum_violating_degree, degree);
+            }
+            if (maximum_violating_degree > 2) {
+                for (const Edge& edge : work_tree.edges) {
+                    const int endpoint_max_degree = std::max(
+                        work_tree.degree[static_cast<std::size_t>(edge.u)],
+                        work_tree.degree[static_cast<std::size_t>(edge.v)]);
+                    if (endpoint_max_degree != maximum_violating_degree) {
+                        continue;
+                    }
+                    const std::size_t edge_id = edgeId(edge.u, edge.v);
+                    if (node.forced[edge_id] || node.forbidden[edge_id]) {
+                        continue;
+                    }
+                    if (branch_edge_better(edge, deg_best)) {
+                        deg_best = &edge;
+                    }
+                }
+            }
+        } else if (branch_edge_order_
+                   == BranchEdgeOrder::MaximumExcessCoverAdjustedWeight) {
+            // 一条边若同时连接两个超度顶点，可覆盖更多当前度违规。覆盖量
+            // 是首要离散分数，adjusted weight 只负责平局，不混合不同单位。
+            for (const Edge& edge : work_tree.edges) {
+                const int excess_cover =
+                    std::max(
+                        0,
+                        work_tree.degree[static_cast<std::size_t>(edge.u)] - 2)
+                    + std::max(
+                        0,
+                        work_tree.degree[static_cast<std::size_t>(edge.v)] - 2);
+                if (excess_cover == 0) continue;
+                const std::size_t edge_id = edgeId(edge.u, edge.v);
+                if (node.forced[edge_id] || node.forbidden[edge_id]) continue;
+                if (deg_best != nullptr
+                    && (excess_cover < deg_best_excess_cover
+                        || (excess_cover == deg_best_excess_cover
+                            && !branch_edge_better(edge, deg_best)))) {
+                    continue;
+                }
+                deg_best = &edge;
+                deg_best_excess_cover = excess_cover;
+            }
+        } else if (branch_edge_order_ ==
+                   BranchEdgeOrder::MaximumDegreeExcessCoverAdjustedWeight) {
+            // 候选顶点仍限定为最大度热点，防止全局 cover 策略跳到较低度
+            // 顶点；随后用两端超度覆盖消除并列热点和关联边的平局。
+            int maximum_violating_degree = 2;
+            for (const int degree : work_tree.degree) {
+                maximum_violating_degree = std::max(
+                    maximum_violating_degree, degree);
+            }
+            if (maximum_violating_degree > 2) {
+                for (const Edge& edge : work_tree.edges) {
+                    const int endpoint_max_degree = std::max(
+                        work_tree.degree[static_cast<std::size_t>(edge.u)],
+                        work_tree.degree[static_cast<std::size_t>(edge.v)]);
+                    if (endpoint_max_degree != maximum_violating_degree) {
+                        continue;
+                    }
+                    const std::size_t edge_id = edgeId(edge.u, edge.v);
+                    if (node.forced[edge_id] || node.forbidden[edge_id]) {
+                        continue;
+                    }
+                    const int excess_cover =
+                        std::max(
+                            0,
+                            work_tree.degree[static_cast<std::size_t>(edge.u)]
+                                - 2)
+                        + std::max(
+                            0,
+                            work_tree.degree[static_cast<std::size_t>(edge.v)]
+                                - 2);
+                    if (deg_best != nullptr
+                        && (excess_cover < deg_best_excess_cover
+                            || (excess_cover == deg_best_excess_cover
+                                && !branch_edge_better(edge, deg_best)))) {
+                        continue;
+                    }
+                    deg_best = &edge;
+                    deg_best_excess_cover = excess_cover;
+                }
+            }
+        } else if (use_root_frequency_middle) {
+            // 根上升中的 1-tree 样本近似 LP 分数：count/samples 越接近
+            // 1/2，force/forbid 两侧越可能都保留有效搜索空间。这里仍限制
+            // 在当前最大度热点相邻树边内，避免为“中间性”放弃度违规结构。
+            int maximum_violating_degree = 2;
+            for (const int degree : work_tree.degree) {
+                maximum_violating_degree = std::max(
+                    maximum_violating_degree, degree);
+            }
+            if (maximum_violating_degree > 2) {
+                const std::uint64_t sample_count =
+                    root_one_tree_sample_count_;
+                for (const Edge& edge : work_tree.edges) {
+                    const int endpoint_max_degree = std::max(
+                        work_tree.degree[static_cast<std::size_t>(edge.u)],
+                        work_tree.degree[static_cast<std::size_t>(edge.v)]);
+                    if (endpoint_max_degree != maximum_violating_degree) {
+                        continue;
+                    }
+                    const std::size_t edge_id = edgeId(edge.u, edge.v);
+                    if (node.forced[edge_id] || node.forbidden[edge_id]) {
+                        continue;
+                    }
+
+                    // 比较 |count/samples - 1/2| 时统一乘 2*samples，
+                    // 只需整数距离 |2*count-samples|，没有除法和舍入。
+                    const std::uint64_t doubled_count = 2ULL
+                        * root_one_tree_edge_counts_[edge_id];
+                    const std::uint64_t frequency_distance =
+                        doubled_count >= sample_count
+                        ? doubled_count - sample_count
+                        : sample_count - doubled_count;
+                    const int excess_cover =
+                        std::max(
+                            0,
+                            work_tree.degree[static_cast<std::size_t>(edge.u)]
+                                - 2)
+                        + std::max(
+                            0,
+                            work_tree.degree[static_cast<std::size_t>(edge.v)]
+                                - 2);
+                    if (deg_best != nullptr
+                        && (frequency_distance > deg_best_frequency_distance
+                            || (frequency_distance
+                                    == deg_best_frequency_distance
+                                && (excess_cover < deg_best_excess_cover
+                                    || (excess_cover
+                                            == deg_best_excess_cover
+                                        && !branch_edge_better(
+                                            edge, deg_best)))))) {
+                        continue;
+                    }
+                    deg_best = &edge;
+                    deg_best_frequency_distance = frequency_distance;
+                    deg_best_excess_cover = excess_cover;
+                }
+            }
+        } else if (branch_edge_order_
+                   == BranchEdgeOrder::CurrentForbidDeltaDegreeAware) {
+            // 与原路径只取“编号最小的一个最大度顶点”不同，本实验先找出
+            // 全局最大违规度，再考察所有至少连接一个该度数顶点的树边。
+            int maximum_violating_degree = 2;
+            for (const int degree : work_tree.degree) {
+                maximum_violating_degree = std::max(
+                    maximum_violating_degree, degree);
+            }
+            if (maximum_violating_degree > 2) {
+                for (const Edge& edge : work_tree.edges) {
+                    const int endpoint_max_degree = std::max(
+                        work_tree.degree[static_cast<std::size_t>(edge.u)],
+                        work_tree.degree[static_cast<std::size_t>(edge.v)]);
+                    if (endpoint_max_degree != maximum_violating_degree) {
+                        continue;
+                    }
+                    const std::size_t edge_id = edgeId(edge.u, edge.v);
+                    if (node.forced[edge_id] || node.forbidden[edge_id]) {
+                        continue;
+                    }
+
+                    const double forbid_delta =
+                        currentForbidReplacementDelta(node, work_tree, edge);
+                    const int excess_cover =
+                        std::max(
+                            0,
+                            work_tree.degree[static_cast<std::size_t>(edge.u)]
+                                - 2)
+                        + std::max(
+                            0,
+                            work_tree.degree[static_cast<std::size_t>(edge.v)]
+                                - 2);
+                    if (deg_best != nullptr
+                        && (forbid_delta < deg_best_forbid_delta
+                            || (forbid_delta == deg_best_forbid_delta
+                                && (excess_cover < deg_best_excess_cover
+                                    || (excess_cover
+                                            == deg_best_excess_cover
+                                        && !branch_edge_better(
+                                            edge, deg_best)))))) {
+                        continue;
+                    }
+                    deg_best = &edge;
+                    deg_best_forbid_delta = forbid_delta;
+                    deg_best_excess_cover = excess_cover;
+                }
+            }
+        } else if (kUseMinEdgeFromOneTree) {
             // ── 新选边策略：从 1-tree 所有未决边中直接选最小权重边 ──
             for (const Edge& e : work_tree.edges) {
                 const std::size_t eid = edgeId(e.u, e.v);
                 if (node.forced[eid]) continue;
                 if (node.forbidden[eid]) continue;
-                if (branch_edge_better(e, deg_best)) deg_best = &e;
+                consider_branch_edge(e);
             }
         } else {
             // ── 原选边策略：从度数违规顶点取最小权重未决边 ──
@@ -1845,9 +2448,48 @@ BranchBoundSolver::BranchSet BranchBoundSolver::bpPartition(
             // 因此只有 degree>2 的顶点能够被选中。
             int branch_vertex = -1;
             int max_deg = 2;
+            int selected_undecided_count = 0;
+            const bool use_undecided_tie = branch_edge_order_
+                    == BranchEdgeOrder::MaximumDegreeMinimumUndecided
+                || branch_edge_order_
+                    == BranchEdgeOrder::MaximumDegreeMaximumUndecided;
+            auto count_undecided_tree_edges = [&](int vertex) {
+                int count = 0;
+                for (const Edge& edge : work_tree.edges) {
+                    if (edge.u != vertex && edge.v != vertex) continue;
+                    const std::size_t id = edgeId(edge.u, edge.v);
+                    if (!node.forced[id] && !node.forbidden[id]) ++count;
+                }
+                return count;
+            };
             for (int v = 0; v < n_; ++v) {
-                if (work_tree.degree[static_cast<std::size_t>(v)] > max_deg) {
-                    max_deg = work_tree.degree[static_cast<std::size_t>(v)];
+                const int vertex_degree =
+                    work_tree.degree[static_cast<std::size_t>(v)];
+                if (vertex_degree < max_deg || vertex_degree <= 2) continue;
+
+                if (vertex_degree > max_deg) {
+                    max_deg = vertex_degree;
+                    branch_vertex = v;
+                    selected_undecided_count = use_undecided_tie
+                        ? count_undecided_tree_edges(v) : 0;
+                    continue;
+                }
+
+                if (use_undecided_tie) {
+                    const int undecided_count =
+                        count_undecided_tree_edges(v);
+                    const bool prefer_minimum = branch_edge_order_
+                        == BranchEdgeOrder::MaximumDegreeMinimumUndecided;
+                    if ((prefer_minimum
+                            && undecided_count < selected_undecided_count)
+                        || (!prefer_minimum
+                            && undecided_count > selected_undecided_count)) {
+                        branch_vertex = v;
+                        selected_undecided_count = undecided_count;
+                    }
+                } else if (branch_vertex < 0) {
+                    // 仅防御 max_deg 初值与未来目标度修改；当前 degree>2 且
+                    // vertex_degree==max_deg 的首个顶点也必须可被选中。
                     branch_vertex = v;
                 }
             }
@@ -1857,8 +2499,101 @@ BranchBoundSolver::BranchSet BranchBoundSolver::bpPartition(
                     const std::size_t eid = edgeId(e.u, e.v);
                     if (node.forced[eid]) continue;
                     if (node.forbidden[eid]) continue;
-                    if (branch_edge_better(e, deg_best)) deg_best = &e;
+                    if (branch_edge_order_
+                        == BranchEdgeOrder::LocalExcessCoverAdjustedWeight) {
+                        const int other_vertex = e.u == branch_vertex
+                            ? e.v : e.u;
+                        const int other_excess = std::max(
+                            0,
+                            work_tree.degree[
+                                static_cast<std::size_t>(other_vertex)] - 2);
+                        if (deg_best != nullptr
+                            && (other_excess < deg_best_excess_cover
+                                || (other_excess == deg_best_excess_cover
+                                    && !branch_edge_better(e, deg_best)))) {
+                            continue;
+                        }
+                        deg_best = &e;
+                        deg_best_excess_cover = other_excess;
+                        continue;
+                    }
+                    if (branch_edge_order_ ==
+                        BranchEdgeOrder::PropagationPotentialAdjustedWeight) {
+                        const int forced_degree =
+                            node.forced_degree[static_cast<std::size_t>(e.u)]
+                            + node.forced_degree[static_cast<std::size_t>(e.v)];
+                        const int candidate_slack =
+                            available_degree_[static_cast<std::size_t>(e.u)]
+                            + available_degree_[static_cast<std::size_t>(e.v)]
+                            - forced_degree;
+                        if (deg_best != nullptr
+                            && (forced_degree < deg_best_forced_degree
+                                || (forced_degree == deg_best_forced_degree
+                                    && (candidate_slack
+                                            > deg_best_candidate_slack
+                                        || (candidate_slack
+                                                == deg_best_candidate_slack
+                                            && !branch_edge_better(
+                                                e, deg_best)))))) {
+                            continue;
+                        }
+                        deg_best = &e;
+                        deg_best_forced_degree = forced_degree;
+                        deg_best_candidate_slack = candidate_slack;
+                        continue;
+                    }
+                    if (branch_edge_order_
+                        == BranchEdgeOrder::ForcedDegreeAdjustedWeight) {
+                        const int forced_degree =
+                            node.forced_degree[static_cast<std::size_t>(e.u)]
+                            + node.forced_degree[static_cast<std::size_t>(e.v)];
+                        if (deg_best != nullptr
+                            && (forced_degree < deg_best_forced_degree
+                                || (forced_degree == deg_best_forced_degree
+                                    && !branch_edge_better(e, deg_best)))) {
+                            continue;
+                        }
+                        deg_best = &e;
+                        deg_best_forced_degree = forced_degree;
+                        continue;
+                    }
+                    consider_branch_edge(e);
                 }
+            }
+        }
+
+        if (branch_edge_order_
+            == BranchEdgeOrder::TwoSidedStrongBranchingTop2) {
+            double best_weak_gain =
+                -std::numeric_limits<double>::infinity();
+            double best_product_score =
+                -std::numeric_limits<double>::infinity();
+            for (const Edge* candidate : strong_candidates) {
+                if (candidate == nullptr) continue;
+                const double forbid_gain = currentForbidReplacementDelta(
+                    node, work_tree, *candidate);
+                const double force_bound =
+                    currentForceBranchBound(node, work_tree, *candidate);
+                const double force_gain = isFinite(force_bound)
+                    ? std::max(0.0, force_bound - work_tree.cost)
+                    : std::numeric_limits<double>::infinity();
+                const double weak_gain = std::min(force_gain, forbid_gain);
+                // 若任一侧为零，乘积就是零；先处理该情况可避免 0*inf=NaN。
+                const double product_score =
+                    force_gain == 0.0 || forbid_gain == 0.0
+                    ? 0.0 : force_gain * forbid_gain;
+                if (deg_best != nullptr
+                    && (weak_gain < best_weak_gain
+                        || (weak_gain == best_weak_gain
+                            && (product_score < best_product_score
+                                || (product_score == best_product_score
+                                    && !branch_edge_better(
+                                        *candidate, deg_best)))))) {
+                    continue;
+                }
+                deg_best = candidate;
+                best_weak_gain = weak_gain;
+                best_product_score = product_score;
             }
         }
 

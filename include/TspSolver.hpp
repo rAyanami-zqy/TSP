@@ -83,6 +83,15 @@ enum class RootAscentStrategy {
     Hybrid,
 };
 
+// 搜索节点内部的有限轮势上升算法。触发位置和势的作用范围由
+// PotentialUpdateStrategy 独立控制；这里仅决定一次更新尝试的步长调度。
+enum class NodeAscentStrategy {
+    // 使用 incumbent gap 归一化的 Polyak 步长；这是现有 PHKMST 默认值。
+    Polyak,
+    // 使用 LKH 报告中的 period、步长缩放和 0.7/0.3 平滑次梯度。
+    Helsgaun,
+};
+
 // 搜索节点上的势更新触发策略。Depth/Adaptive 只生成临时证书；
 // SubtreeDepth/SubtreeAdaptive 把更新势安装成可嵌套、回溯恢复的子树 epoch。
 enum class PotentialUpdateStrategy {
@@ -99,14 +108,56 @@ enum class PotentialUpdateStrategy {
 };
 
 // BP 在最高度违规顶点上选择下一条树边的顺序。AdjustedWeight 是现有
-// PHKMST 基线；RootAlpha* 使用根 1-tree 预计算的静态 α-nearness 先验。
+// PHKMST 基线；RootAlpha* 使用根 1-tree 的静态先验；
+// CurrentForbidDeltaDescending 试探当前树边被禁止后的即时 replacement 增量。
 enum class BranchEdgeOrder {
     // 按当前势下的调整权重升序选择分支边；这是默认基线。
     AdjustedWeight,
+    // 仍只考察默认选中的最大度违规顶点，但优先调整权重较大的树边，
+    // 用于验证默认边权方向是否正确。
+    AdjustedWeightDescending,
+    // 同时考察所有并列最大度违规顶点关联的树边，再按调整权重升序选择；
+    // 消除顶点编号平局，不增加 replacement 或 1-tree 试算。
+    MaximumDegreeAllAdjustedWeight,
+    // 考察所有至少连接一个违规顶点的树边，先最大化两端超度覆盖量，
+    // 再按调整权重升序选择。
+    MaximumExcessCoverAdjustedWeight,
+    // 保持默认最大度违规顶点不变，仅在它的关联树边之间优先选择另一端
+    // 超度较大的边；用于隔离“覆盖两个违规点”而不改变分支顶点。
+    LocalExcessCoverAdjustedWeight,
+    // 只考察连接任一最大度违规顶点的树边，先最大化两端超度覆盖量，
+    // 再按调整权重升序选择。
+    MaximumDegreeExcessCoverAdjustedWeight,
+    // 保持默认最大度违规顶点；在其关联树边中优先选择两端 forced 度更高、
+    // active 候选余量更小的边，以提高 force 后触发度满传播的机会。
+    PropagationPotentialAdjustedWeight,
+    // PropagationPotential 的保守拆分：只优先两端已有 forced 度更高的边，
+    // 不使用 active 候选余量；所有 forced 度相同时完全回退默认权重顺序。
+    ForcedDegreeAdjustedWeight,
+    // 最大度仍是首要顶点规则；并列时选择未决 1-tree 关联边最少的顶点，
+    // 再沿用默认调整权重边顺序。
+    MaximumDegreeMinimumUndecided,
+    // 与上一实验相反，并列最大度时选择未决 1-tree 关联边最多的顶点。
+    MaximumDegreeMaximumUndecided,
     // 优先选择根 1-tree alpha-nearness 较小的边。
     RootAlphaAscending,
     // 优先选择根 1-tree alpha-nearness 较大的边。
     RootAlphaDescending,
+    // 优先禁止后使当前 1-tree 下界增量最大的树边；无 replacement 的边
+    // 视为正无穷。评分只查询当前 fundamental cut，不修改工作 1-tree。
+    CurrentForbidDeltaDescending,
+    // 优先禁止后使当前 1-tree 下界增量最小的树边，用于隔离评分方向；
+    // 同样只做只读 replacement 查询。
+    CurrentForbidDeltaAscending,
+    // 先保留连接任一当前最大度违规顶点的树边，再按 forbid 增量、两端
+    // 超度覆盖量和 adjusted-weight 排序，避免同度热点按顶点编号偏置。
+    CurrentForbidDeltaDegreeAware,
+    // 统计根势上升各轮 1-tree 的选边频率；在当前最大度热点中优先选择
+    // 出现频率最接近 1/2 的树边，模拟 LP middle branching 的不确定性。
+    RootOneTreeFrequencyMiddle,
+    // 仅对 adjusted-weight 最优的两条当前树边试探 force/forbid 两侧，
+    // 按较弱一侧的下界增益降序选择，用于受限 strong-branching 实验。
+    TwoSidedStrongBranchingTop2,
 };
 
 // TSPLIB 坐标点。二维格式只使用 x/y，三维格式同时使用 z。
@@ -184,6 +235,8 @@ public:
     void disableDebugOutput();
     // 设置根节点 Held-Karp 势上升算法；应在 solve() 前调用。
     void setRootAscentStrategy(RootAscentStrategy strategy);
+    // 设置搜索节点一次势更新尝试所用的上升算法；不改变触发机制或 epoch 语义。
+    void setNodeAscentStrategy(NodeAscentStrategy strategy);
     // 设置 BP 在违规顶点内部选择分支边的比较顺序；不改变下界算法。
     void setBranchEdgeOrder(BranchEdgeOrder order);
     // 配置搜索节点势更新：depth 是深度/epoch 间隔，iterations 是单次
@@ -429,6 +482,17 @@ private:
     // 基于已安装根势和 root_tree 计算所有非树边的强制加入代价 alpha，
     // 写入 root_alpha_by_edge_id_；只用于分支排序，不参与下界计算。
     void buildRootAlphaNearness(const OneTree& root_tree);
+    // 估计在当前 node/tree 中禁止 tree_edge 后的精确单边 replacement
+    // 增量。仅做只读 cut 查询，不安装 replacement；无替代边时返回 infinity。
+    double currentForbidReplacementDelta(
+        PartialSol& node, const OneTree& tree,
+        const Edge& tree_edge) const;
+    // 在 node 副本上强制 tree_edge、执行隐含候选过滤并构造受约束 1-tree，
+    // 返回 force 侧试探下界；可证明增益为零时直接复用 current_tree.cost。
+    // 函数不修改调用方节点和当前工作树。
+    double currentForceBranchBound(
+        const PartialSol& node, const OneTree& current_tree,
+        const Edge& tree_edge) const;
 
     // 一次搜索节点势更新的最佳证书。
     struct NodePotentialUpdateResult {
@@ -443,9 +507,9 @@ private:
         // 取得 bound 时对应的顶点势，而不是最后一次工作势。
         std::vector<double> potentials;
     };
-    // 从当前 epoch 势 warm start，对 node 临时做至多 max_iterations 轮 Polyak
-    // 更新。current_bound 是已有证书，upper_bound 是 incumbent；返回历史
-    // 最强下界和对应势。函数不安装势，也不修改 node 或全局候选状态。
+    // 从当前 epoch 势 warm start，对 node 临时做至多 max_iterations 轮已配置
+    // 的节点上升。current_bound 是已有证书，upper_bound 是 incumbent；返回
+    // 历史最强下界和对应势。函数不安装势，也不修改 node 或全局候选状态。
     NodePotentialUpdateResult updateNodePotentialBound(
         const PartialSol& node, double current_bound,
         double upper_bound, std::size_t max_iterations) const;
@@ -652,11 +716,19 @@ private:
     double potential_roundoff_guard_ = 0.0;
     // 下一次根搜索使用的根势上升算法配置。
     RootAscentStrategy root_ascent_strategy_ = RootAscentStrategy::Polyak;
+    // 搜索节点一次有限轮势更新内部使用的步长调度；默认保持原 Polyak 行为。
+    NodeAscentStrategy node_ascent_strategy_ = NodeAscentStrategy::Polyak;
     // BP 在最高度违规顶点上比较未决树边的策略。
     BranchEdgeOrder branch_edge_order_ = BranchEdgeOrder::AdjustedWeight;
     // 大小为 n*n、按 edgeId 索引的根静态 alpha；树边为 0，缺失/未知为
     // infinity。默认 AdjustedWeight 策略下清空以避免预处理和内存开销。
     std::vector<double> root_alpha_by_edge_id_;
+    // 根势上升所选策略的所有可行 1-tree 中，每条边按 edgeId 统计的出现
+    // 次数；仅 RootOneTreeFrequencyMiddle 分配。与下面样本数共同表示频率，
+    // 使用整数比较 |2*count-samples| 可避免浮点排序噪声。
+    std::vector<std::uint32_t> root_one_tree_edge_counts_;
+    // root_one_tree_edge_counts_ 的 1-tree 样本总数；根重启时重新统计。
+    std::uint32_t root_one_tree_sample_count_ = 0;
     // 搜索节点势更新的触发和生命周期策略。
     PotentialUpdateStrategy potential_update_strategy_
         = PotentialUpdateStrategy::None;

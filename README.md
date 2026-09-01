@@ -154,9 +154,11 @@ debug 信息写到标准错误，不会破坏批处理模式的 CSV 标准输出
 ### 搜索节点势更新实验
 
 根节点仍先执行 `--hk-ascent`。后续节点可从当前势 warm start，在当前
-forced/forbidden/active-candidate 约束下运行有限轮 Polyak 上升。提供两类
-执行语义：临时证书模式不改变 HKMST；`subtree-*` 模式重建所有依赖势的
-排序和增量状态，使新势在整个锚点子树中持续生效，回溯到兄弟节点时恢复。
+forced/forbidden/active-candidate 约束下运行有限轮势上升。节点内部默认使用
+Polyak，也可用 `--hk-node-ascent helsgaun` 切换到论文式 period 和平滑次梯度；
+触发机制及 epoch 生命周期保持不变。临时证书模式不改变 HKMST；`subtree-*`
+模式重建所有依赖势的排序和增量状态，使新势在整个锚点子树中持续生效，
+回溯到兄弟节点时恢复。
 
 ```bash
 # 每隔 2 层更新一次
@@ -169,7 +171,14 @@ forced/forbidden/active-candidate 约束下运行有限轮 Polyak 上升。提�
   --hk-update-iterations 16 --hk-update-budget 5000 input.tsp
 
 # 推荐的持久子树更新：距上次更新至少 2 层，且节点 gap 不超过 2%
-./build/tsp_bb --hk-potential-update subtree-adaptive \
+./build/tsp_bb --hk-node-ascent polyak \
+  --hk-potential-update subtree-adaptive \
+  --hk-update-depth 2 --hk-update-gap-ratio 0.02 \
+  --hk-update-iterations 16 --hk-update-budget 5000 input.tsp
+
+# 同一触发配置下对照节点 Helsgaun 调度
+./build/tsp_bb --hk-node-ascent helsgaun \
+  --hk-potential-update subtree-adaptive \
   --hk-update-depth 2 --hk-update-gap-ratio 0.02 \
   --hk-update-iterations 16 --hk-update-budget 5000 input.tsp
 ```
@@ -187,7 +196,9 @@ forced/forbidden/active-candidate 约束下运行有限轮 Polyak 上升。提�
 证书模式实验见
 [`docs/HKMST-node-potential-update-experiment-2026-08-06.md`](docs/HKMST-node-potential-update-experiment-2026-08-06.md)，
 持久子树实验见
-[`docs/HKMST-persistent-potential-epoch-experiment-2026-08-06.md`](docs/HKMST-persistent-potential-epoch-experiment-2026-08-06.md)。
+[`docs/HKMST-persistent-potential-epoch-experiment-2026-08-06.md`](docs/HKMST-persistent-potential-epoch-experiment-2026-08-06.md)，
+节点 Polyak/Helsgaun 对照见
+[`docs/PHKMST-node-potential-helsgaun-experiment-2026-09-01.md`](docs/PHKMST-node-potential-helsgaun-experiment-2026-09-01.md)。
 
 从标准输入读取：
 

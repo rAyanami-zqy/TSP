@@ -2,7 +2,7 @@
 
 > 适用分支：`PHKMST`
 >
-> 更新时间：2026-08-27
+> 更新时间：2026-08-28
 > 目标：从软件工程结构、运行时调用关系和核心算法三个层面说明当前项目。
 
 ## 1. 项目定位
@@ -15,6 +15,8 @@
 - 初始 tour、2-opt 和 Lin-Kernighan 上界启发式；
 - 根势与搜索节点势更新实验；
 - root α-nearness 分支排序实验；
+- 根多 1-tree 选边频率的 middle branching 实验；
+- 超度覆盖、传播潜力和最大度顶点平局等低成本分支实验；
 - 历史求解器、实验二进制和 Concorde 参考实现；
 - 随机实例、经典基准、批处理和性能分析工具。
 
@@ -150,6 +152,7 @@ flowchart TB
     Solve["solve<br/>根搜索编排"]
     Upper["findInitialTour<br/>NN + 2-opt + LK"]
     RootPi["optimizeRootPotentials<br/>根 Held-Karp 上升"]
+    RootFreq["可选：累计根多 1-tree 边频率"]
     Candidate["候选边排序与 active 位图"]
     OneTree["computeOneTree<br/>受约束 Kruskal + 两条根边"]
     Alpha["buildRootAlphaNearness<br/>可选静态分支先验"]
@@ -164,6 +167,7 @@ flowchart TB
 
     Solve --> Upper
     Solve --> RootPi
+    RootPi --> RootFreq
     RootPi --> OneTree
     Solve --> Candidate
     Candidate --> OneTree
@@ -216,6 +220,8 @@ function solve():
     loop:
         reset per-root-round potential budget
         optimizeRootPotentials(bestCost)
+        // root-frequency-middle 在已有上升评估中顺带累计边频率，
+        // 不额外构造 1-tree；根重启时重新统计
 
         root = empty PartialSol
         initializeForcedDsu(root)
@@ -428,8 +434,31 @@ function bpPartition(node, workTree):
 
     loop:
         branchVertex = vertex with maximum degree above 2
-        edge = best undecided tree edge incident to branchVertex
-               ordered by adjusted weight or root alpha policy
+        candidates = undecided tree edges incident to branchVertex
+        if order is strong-top2:
+            shortlist = first two candidates by adjusted weight
+            for edge in shortlist:
+                forbidGain = current replacement delta
+                forceGain = trial forced 1-tree bound - workTree.cost
+            edge = maximum by (min gain, gain product, adjusted weight)
+        else if order is root-frequency-middle and root samples exist:
+            shortlist = all edges touching any maximum-degree vertex
+            edge = minimum by (|2*edgeCount-rootSamples|,
+                               -endpoint excess cover, adjusted weight)
+        else if order is excess-cover-weight:
+            shortlist = all edges touching any violating vertex
+            edge = maximum by (endpoint excess cover, -adjusted weight)
+        else if order is propagation-weight:
+            shortlist = undecided edges touching the default branch vertex
+            edge = maximum by (endpoint forced degree,
+                               -active candidate slack, -adjusted weight)
+        else if order is forbid-degree-desc:
+            shortlist = all edges touching any maximum-degree vertex
+            edge = maximum by (forbid gain, endpoint excess cover,
+                               adjusted weight)
+        else:
+            edge = best candidate by adjusted weight, root alpha,
+                   or current forbid-delta policy
         if no edge exists: break
 
         B.append(edge)
@@ -650,6 +679,7 @@ function rollbackOneTree(tree, checkpoint):
 | `forced_parent/rank/size` | `PartialSol` | 当前 DFS 路径 | 无路径压缩，按 `ForceChanges` 恢复 |
 | `OneTree` | 当前 DFS 工作树 | 当前根或子树 | `TreeUndo` 或完整快照 |
 | `root_alpha_by_edge_id_` | 根搜索轮次 | 根势固定后 | 根重启时重新计算 |
+| `root_one_tree_edge_counts_ / sample_count` | 根搜索轮次 | 根势上升期间及当前 DFS | 根重启时清空并重新累计 |
 | `SolveStats` | 求解器 | 整次 `solve()` | 不回滚，跨根重启累计 |
 
 ## 12. 正确性与性能边界
@@ -666,6 +696,10 @@ function rollbackOneTree(tree, checkpoint):
 
 - 初始 tour、2-opt、LK 和 diversified LK 只收紧 UB；
 - root α-nearness 只改变分支边排序；
+- root 1-tree frequency-middle 只复用根上升样本并改变分支边排序；
+- current forbid-delta 只试探当前树边 replacement 并改变分支顺序；
+- forbid-degree-desc 扩展同度热点候选集合并改变分支顺序；
+- strong-top2 在隔离副本中试探 force/forbid 两侧并改变分支顺序；
 - Prim 势更新只尝试增强合法下界；
 - active 位图、动态 MST、replacement cache 和 undo log 只减少重复计算；
 - 任一增量状态不可信时回退完整 `computeOneTree()`。
