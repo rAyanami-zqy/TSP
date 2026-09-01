@@ -166,19 +166,51 @@ debug 信息写到标准错误，不会破坏批处理模式的 CSV 标准输出
 
 这些选项只改变 BP 分支边顺序，不改变候选集、1-tree 下界或精确性。
 
-参数消融可先运行三实例正确性 smoke suite：
+参数消融运行器内置 Concorde 和十四种 PHKMST 配置，默认按代码中的顺序全部
+执行。也可用 `--configs` 选择需要的子集；当前配置先跑完全部实例、写出独立
+结果与汇总，之后才开始下一配置。
 
 ```bash
 python3 tools/run_phkmst_ablation.py \
   --solver ./build/tsp_bb \
-  --suite smoke \
-  --output-dir outputs/phkmst-ablation-smoke
+  --concorde ./concorde/TSP/concorde \
+  --configs Concorde P0 P1 H0 \
+  --workers 5 \
+  --output-root outputs/phkmst-ablation
 ```
 
-脚本内置 `smoke/core/trigger/alpha/all` 五组参数集合；输出配置、原始运行、
-逐实例结果和汇总四份 CSV 及一份 Markdown 表。默认 smoke 清单见
-`data/classic/batch-ablation-smoke.txt`，并以 TSPLIB 已知最优值检查每组结果，
-任一策略成本不一致时返回非零状态。
+默认实例清单是 `data/classic/batch-ablation-smoke.txt`，也可用 `--batch-list`
+或 `--instances` 替换。调用方式与 `tools/compare_strategies.py` 一致：每个实例
+单独启动求解进程，Concorde 使用固定 seed 和独立临时目录，`--timeout` 按实例
+生效，同一配置内部再由 `--workers` 并行。可用 `--list-configs` 查看十五种配置
+的完整参数。自定义 tsp_bb 配置仍可使用 `--strategy '名称=参数'`。
+
+每种配置会生成独立的指纹目录。`results.csv` 只保存运行时间、求解结果和分支
+数，以及关联所需的配置、重复次数、实例和状态字段。tsp_bb 的分支数取
+`nodes_created`，Concorde 取 `bbnodes`。`summary.csv` 是该配置自己的耗时和分支
+数汇总，`configuration.csv` 记录二进制摘要及完整命令。跨配置对比不在本脚本
+中完成，后续可由单独的汇总程序读取这些表。
+
+每完成一个“策略/重复/实例”调用，脚本就立即原子更新该策略的结果表、汇总、
+进度以及共享 `cache.json`，不会等待同一策略的其他实例。成功和超时结果在再次
+执行相同命令时直接复用；普通错误也保留在缓存中供检查，但下次仍会重试。
+二进制、策略参数、实例或运行设置变化后会使用新的指纹，不会混入旧表。需要
+清空当前实验缓存时使用 `--fresh`。
+
+若只想快速完成当前策略的一部分，可限制本次新调用数：
+
+```bash
+python3 tools/run_phkmst_ablation.py \
+  --solver ./build/tsp_bb \
+  --configs P0 H0 \
+  --batch-list data/classic/batch-hk-ascent.txt \
+  --max-runs 4 \
+  --output-root outputs/phkmst-ablation
+```
+
+如果四次调用不足以完成 `P0`，流水线会在写出 `P0` 的部分表后停止，不会提前
+运行 `H0`；重新执行同一命令即可从缓存继续。可先加 `--print-commands` 检查
+每个策略的实际命令和输出目录而不启动实验。
 
 ### 搜索节点势更新实验
 

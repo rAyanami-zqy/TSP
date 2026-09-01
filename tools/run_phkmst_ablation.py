@@ -1,242 +1,333 @@
 #!/usr/bin/env python3
-"""Run reproducible PHKMST parameter ablations and verify exact costs.
+"""Run cached TSP strategies sequentially and write one table per strategy.
 
-The default ``smoke`` suite intentionally uses only three TSPLIB instances.
-It exercises root ascent, node ascent, frequent node updates, and local/global
-alpha branching before a larger experiment is attempted.
+The subprocess model follows ``tools/compare_strategies.py``: every instance is
+passed directly to its executable, subprocess wall time is measured externally,
+timeouts are isolated per instance, and instances inside one strategy may run
+in parallel.  Concorde uses a fixed seed and a private temporary directory.
 
-Outputs:
-  configurations.csv      exact CLI dimensions of every selected group
-  raw_runs.csv             one row per configuration/repeat/instance
-  results_by_instance.csv median metrics and correctness by instance
-  summary.csv              aggregate table used by the experiment report
-  summary.md               compact human-readable version of the tables
+Scheduling is strategy-major.  A strategy finishes all instance/repeat calls
+and writes its own summary before the next strategy starts.  Every completed
+call is printed and atomically checkpointed to both its strategy table and the
+shared cache immediately.
+
+Only three measurements are retained per call: wall time, result cost, and
+branch count (``nodes_created`` for tsp_bb, ``bbnodes`` for Concorde).  A later
+program can perform cross-strategy analysis from these small tables.
 """
 
 from __future__ import annotations
 
 import argparse
 import csv
-import io
+import hashlib
+import json
 import math
+import os
+import re
+import shlex
+import shutil
 import statistics
 import subprocess
 import tempfile
 import time
-from dataclasses import asdict, dataclass
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
+
+import compare_strategies as reference
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_SOLVER = PROJECT_ROOT / "build" / "tsp_bb"
+DEFAULT_CONCORDE = PROJECT_ROOT / "concorde" / "TSP" / "concorde"
 DEFAULT_BATCH = PROJECT_ROOT / "data" / "classic" / "batch-ablation-smoke.txt"
-DEFAULT_OUTPUT = PROJECT_ROOT / "outputs" / "phkmst-ablation-smoke"
-
-# Independent TSPLIB reference values for the default smoke set and the
-# existing node-ascent batch. Unknown instances fall back to cross-strategy
-# agreement with P0 and are marked as such in the output.
-KNOWN_OPTIMA: dict[str, float] = {
-    "dantzig42.tsp": 699.0,
-    "att48.tsp": 10628.0,
-    "bayg29.tsp": 1610.0,
-    "bays29.tsp": 2020.0,
-    "fri26.tsp": 937.0,
-    "st70.tsp": 675.0,
-    "eil76.tsp": 538.0,
-    "rat99.tsp": 1211.0,
-    "eil101.tsp": 629.0,
-}
-
-INTEGER_FIELDS = (
-    "dimension",
-    "nodes_created",
-    "nodes_expanded",
-    "pruned_by_bound",
-    "pruned_infeasible",
-    "potential_updates_attempted",
-    "potential_updates_improved",
-    "potential_updates_pruned",
-    "potential_updates_rebuilt",
-    "potential_updates_stopped_prunable",
-    "potential_update_iterations",
-)
-
-FLOAT_FIELDS = (
-    "cost",
-    "root_lower_bound",
-    "initial_upper_bound",
-    "instance_wall_seconds",
-    "potential_update_seconds",
-    "potential_update_rebuild_seconds",
-    "potential_update_total_gain",
-    "potential_update_max_gain",
-)
+DEFAULT_OUTPUT_ROOT = PROJECT_ROOT / "outputs" / "phkmst-ablation"
+CONCORDE_WORK_ROOT = PROJECT_ROOT / "TS"
+DEFAULT_TIMEOUT = 120.0
+DEFAULT_WORKERS = 5
+DEFAULT_DEBUG_INTERVAL = 5_000_000
+DEFAULT_CONCORDE_SEED = 123
+CACHE_SCHEMA = 2
 
 
 @dataclass(frozen=True)
-class ExperimentConfig:
-    config_id: str
+class Strategy:
+    name: str
+    kind: str
     category: str
-    root_ascent: str = "polyak"
-    node_ascent: str = "polyak"
-    potential_update: str = "none"
-    update_depth: int = 2
-    update_gap_ratio: float = 0.02
-    update_iterations: int = 16
-    update_budget: int = 5000
-    branch_edge_order: str = "weight"
-    description: str = ""
-
-    @property
-    def effective_node_ascent(self) -> str:
-        return "off" if self.potential_update == "none" else self.node_ascent
-
-    def solver_args(self) -> list[str]:
-        args = [
-            "--hk-ascent", self.root_ascent,
-            "--hk-node-ascent", self.node_ascent,
-            "--branch-edge-order", self.branch_edge_order,
-            "--hk-potential-update", self.potential_update,
-        ]
-        if self.potential_update != "none":
-            args.extend([
-                "--hk-update-depth", str(self.update_depth),
-                "--hk-update-gap-ratio", str(self.update_gap_ratio),
-                "--hk-update-iterations", str(self.update_iterations),
-                "--hk-update-budget", str(self.update_budget),
-            ])
-        return args
+    solver_args: tuple[str, ...]
+    description: str
 
 
-CONFIGS: dict[str, ExperimentConfig] = {
-    # Root/node 2x3 core factorial.
-    "P0": ExperimentConfig(
-        "P0", "core", description="root Polyak; node updates disabled"),
-    "P1": ExperimentConfig(
-        "P1", "core", potential_update="subtree-adaptive",
-        description="root Polyak; node Polyak; subtree adaptive"),
-    "P2": ExperimentConfig(
-        "P2", "core", node_ascent="helsgaun",
-        potential_update="subtree-adaptive",
-        description="root Polyak; node Helsgaun; subtree adaptive"),
-    "H0": ExperimentConfig(
-        "H0", "core", root_ascent="helsgaun",
-        description="root Helsgaun; node updates disabled"),
-    "H1": ExperimentConfig(
-        "H1", "core", root_ascent="helsgaun",
-        potential_update="subtree-adaptive",
-        description="root Helsgaun; node Polyak; subtree adaptive"),
-    "H2": ExperimentConfig(
-        "H2", "core", root_ascent="helsgaun", node_ascent="helsgaun",
-        potential_update="subtree-adaptive",
-        description="root Helsgaun; node Helsgaun; subtree adaptive"),
+def phkmst_args(
+    *,
+    root_ascent: str = "polyak",
+    node_ascent: str = "polyak",
+    potential_update: str = "none",
+    update_depth: int = 2,
+    update_gap_ratio: float = 0.02,
+    update_iterations: int = 16,
+    update_budget: int = 5000,
+    branch_edge_order: str = "weight",
+) -> tuple[str, ...]:
+    args = [
+        "--hk-ascent", root_ascent,
+        "--hk-node-ascent", node_ascent,
+        "--branch-edge-order", branch_edge_order,
+        "--hk-potential-update", potential_update,
+    ]
+    if potential_update != "none":
+        args.extend([
+            "--hk-update-depth", str(update_depth),
+            "--hk-update-gap-ratio", str(update_gap_ratio),
+            "--hk-update-iterations", str(update_iterations),
+            "--hk-update-budget", str(update_budget),
+        ])
+    return tuple(args)
 
-    # Trigger/lifecycle ablation. P0 and P1 are the disabled/current anchors.
-    "T1": ExperimentConfig(
-        "T1", "trigger", potential_update="depth", update_depth=1,
-        description="temporary update at every eligible DFS depth"),
-    "T2": ExperimentConfig(
-        "T2", "trigger", potential_update="depth", update_depth=2,
-        description="temporary update every two DFS depths"),
-    "T3": ExperimentConfig(
-        "T3", "trigger", potential_update="adaptive", update_depth=1,
-        description="temporary update when depth>=1 and relative gap<=2%"),
-    "T4": ExperimentConfig(
-        "T4", "trigger", potential_update="subtree-depth", update_depth=1,
-        description="persistent subtree epoch at every eligible depth"),
 
-    # Alpha branching ablation. All groups keep root Polyak and node updates off.
-    "B1": ExperimentConfig(
-        "B1", "alpha", branch_edge_order="root-alpha-asc",
-        description="one maximum-degree vertex; alpha ascending"),
-    "B2": ExperimentConfig(
-        "B2", "alpha", branch_edge_order="root-alpha-desc",
-        description="one maximum-degree vertex; alpha descending"),
-    "B3": ExperimentConfig(
-        "B3", "alpha", branch_edge_order="root-alpha-global-asc",
-        description="all violation-touching edges; alpha ascending first"),
-    "B4": ExperimentConfig(
-        "B4", "alpha", branch_edge_order="root-alpha-global-desc",
-        description="all violation-touching edges; alpha descending first"),
-}
-
-SUITES: dict[str, tuple[str, ...]] = {
-    "smoke": ("P0", "P1", "P2", "H0", "T1", "B1", "B3", "B4"),
-    "core": ("P0", "P1", "P2", "H0", "H1", "H2"),
-    "trigger": ("P0", "T1", "T2", "T3", "T4", "P1"),
-    "alpha": ("P0", "B1", "B2", "B3", "B4"),
-    "all": tuple(CONFIGS),
-}
-
-RAW_FIELDS = (
-    "config_id", "category", "repeat", "instance", "dimension", "status",
-    "cost", "expected_cost", "reference_source", "cost_correct",
-    "root_lower_bound", "initial_upper_bound", "instance_wall_seconds",
-    "nodes_created",
-    "nodes_expanded", "pruned_by_bound", "pruned_infeasible",
-    "potential_updates_attempted", "potential_updates_improved",
-    "potential_updates_pruned", "potential_updates_rebuilt",
-    "potential_updates_stopped_prunable", "potential_update_iterations",
-    "potential_update_seconds", "potential_update_rebuild_seconds",
-    "potential_update_total_gain", "potential_update_max_gain",
-    "batch_wall_seconds",
+# Explicit experiment catalogue.  Order here is the default execution order.
+BUILTIN_STRATEGIES: tuple[Strategy, ...] = (
+    Strategy(
+        "Concorde", "concorde", "reference", (),
+        "Concorde exact solver with a fixed seed"),
+    Strategy(
+        "P0", "tsp_bb", "core", phkmst_args(),
+        "root Polyak; node potential updates disabled"),
+    Strategy(
+        "P1", "tsp_bb", "core",
+        phkmst_args(potential_update="subtree-adaptive"),
+        "root Polyak; node Polyak; subtree adaptive"),
+    Strategy(
+        "P2", "tsp_bb", "core",
+        phkmst_args(
+            node_ascent="helsgaun", potential_update="subtree-adaptive"),
+        "root Polyak; node Helsgaun; subtree adaptive"),
+    Strategy(
+        "H0", "tsp_bb", "core", phkmst_args(root_ascent="helsgaun"),
+        "root Helsgaun; node potential updates disabled"),
+    Strategy(
+        "H1", "tsp_bb", "core",
+        phkmst_args(
+            root_ascent="helsgaun", potential_update="subtree-adaptive"),
+        "root Helsgaun; node Polyak; subtree adaptive"),
+    Strategy(
+        "H2", "tsp_bb", "core",
+        phkmst_args(
+            root_ascent="helsgaun", node_ascent="helsgaun",
+            potential_update="subtree-adaptive"),
+        "root Helsgaun; node Helsgaun; subtree adaptive"),
+    Strategy(
+        "T1", "tsp_bb", "trigger",
+        phkmst_args(potential_update="depth", update_depth=1),
+        "temporary node update at every eligible depth"),
+    Strategy(
+        "T2", "tsp_bb", "trigger",
+        phkmst_args(potential_update="depth", update_depth=2),
+        "temporary node update every two depths"),
+    Strategy(
+        "T3", "tsp_bb", "trigger",
+        phkmst_args(potential_update="adaptive", update_depth=1),
+        "temporary adaptive update from depth one at a 2% gap"),
+    Strategy(
+        "T4", "tsp_bb", "trigger",
+        phkmst_args(potential_update="subtree-depth", update_depth=1),
+        "persistent subtree epoch at every eligible depth"),
+    Strategy(
+        "B1", "tsp_bb", "alpha",
+        phkmst_args(branch_edge_order="root-alpha-asc"),
+        "one maximum-degree vertex; root alpha ascending"),
+    Strategy(
+        "B2", "tsp_bb", "alpha",
+        phkmst_args(branch_edge_order="root-alpha-desc"),
+        "one maximum-degree vertex; root alpha descending"),
+    Strategy(
+        "B3", "tsp_bb", "alpha",
+        phkmst_args(branch_edge_order="root-alpha-global-asc"),
+        "all violation-touching edges; root alpha ascending"),
+    Strategy(
+        "B4", "tsp_bb", "alpha",
+        phkmst_args(branch_edge_order="root-alpha-global-desc"),
+        "all violation-touching edges; root alpha descending"),
 )
 
-INSTANCE_FIELDS = (
-    "config_id", "instance", "dimension", "repeats", "status", "cost",
-    "expected_cost", "reference_source", "cost_correct",
-    "root_lower_bound", "initial_upper_bound", "instance_wall_median_seconds",
-    "instance_wall_ratio_vs_p0", "nodes_created", "nodes_expanded",
-    "expanded_ratio_vs_p0", "pruned_by_bound",
-    "pruned_infeasible", "potential_updates_attempted",
-    "potential_updates_improved", "potential_updates_pruned",
-    "potential_updates_rebuilt", "potential_updates_stopped_prunable",
-    "potential_update_iterations", "potential_update_seconds",
-    "potential_update_rebuild_seconds", "potential_update_total_gain",
-    "potential_update_max_gain",
+BUILTIN_BY_NAME = {strategy.name: strategy for strategy in BUILTIN_STRATEGIES}
+
+RESULT_FIELDS = (
+    "run_id",
+    "strategy",
+    "repeat",
+    "instance",
+    "status",
+    "wall_seconds",
+    "result",
+    "branches",
+)
+
+CONFIGURATION_FIELDS = (
+    "run_id",
+    "strategy",
+    "kind",
+    "category",
+    "description",
+    "executable",
+    "executable_sha256",
+    "solver_args",
+    "timeout_seconds",
+    "workers",
+    "repeats",
+    "instance_count",
+    "command",
 )
 
 SUMMARY_FIELDS = (
-    "config_id", "correct_instances", "total_instances", "nodes_created",
-    "nodes_expanded", "expanded_ratio_vs_p0", "expanded_geomean_ratio_vs_p0",
-    "wins", "ties", "losses", "batch_wall_median_seconds",
-    "wall_ratio_vs_p0", "instance_wall_total_seconds",
-    "instance_wall_geomean_ratio_vs_p0",
-    "potential_updates_attempted", "improvement_rate",
-    "direct_prune_rate", "average_iterations_per_attempt", "epoch_rebuilds",
-    "gain_per_iteration", "potential_update_seconds", "potential_time_share",
+    "run_id",
+    "strategy",
+    "status",
+    "rows",
+    "successful",
+    "timeouts",
+    "errors",
+    "total_wall_seconds",
+    "median_wall_seconds",
+    "total_branches",
+    "median_branches",
 )
+
+MANAGED_TSP_OPTIONS = {
+    "--batch", "--exact-max-n", "--debug", "--debug-interval",
+}
+
+
+def parse_custom_strategy(
+    spec: str, parser: argparse.ArgumentParser,
+) -> Strategy:
+    if "=" not in spec:
+        parser.error(
+            "--strategy must use NAME=ARGS, for example "
+            "'custom=--hk-ascent hybrid --hk-potential-update none'")
+    name, raw_args = spec.split("=", 1)
+    name = name.strip()
+    if not name:
+        parser.error("--strategy name cannot be empty")
+    try:
+        solver_args = tuple(shlex.split(raw_args))
+    except ValueError as error:
+        parser.error(f"invalid arguments for strategy {name!r}: {error}")
+    for token in solver_args:
+        option = token.split("=", 1)[0]
+        if option in MANAGED_TSP_OPTIONS:
+            parser.error(
+                f"strategy {name!r}: {option} is managed by the runner")
+    return Strategy(name, "tsp_bb", "custom", solver_args, "custom strategy")
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--solver", type=Path, default=DEFAULT_SOLVER,
-                        help="tsp_bb executable")
-    parser.add_argument("--suite", choices=SUITES, default="smoke",
-                        help="parameter group to run")
+                        help="compiled tsp_bb executable")
+    parser.add_argument("--concorde", type=Path, default=DEFAULT_CONCORDE,
+                        help="Concorde executable")
+    parser.add_argument(
+        "--configs", "--config", nargs="+", choices=tuple(BUILTIN_BY_NAME),
+        help="built-in configurations in execution order; defaults to all",
+    )
+    parser.add_argument(
+        "--strategy", action="append", default=[], metavar="NAME=ARGS",
+        help="custom tsp_bb strategy; repeat in execution order",
+    )
+    parser.add_argument(
+        "--solver-args",
+        help="single custom strategy compatibility form",
+    )
+    parser.add_argument(
+        "--output-root", "--output-dir", dest="output_root", type=Path,
+        default=DEFAULT_OUTPUT_ROOT,
+        help="root for the shared cache and per-strategy directories",
+    )
+    parser.add_argument("--cache", type=Path,
+                        help="cache path; defaults to <output-root>/cache.json")
     parser.add_argument("--batch-list", type=Path,
-                        help="instance list; defaults to the three-instance smoke list")
+                        help="instance list; defaults to the smoke list")
     parser.add_argument("--instances", nargs="*", type=Path,
                         help="explicit instances instead of a batch list")
+    parser.add_argument("--limit", type=int,
+                        help="use only the first N selected instances")
+    parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT,
+                        help="seconds allowed per configuration/instance call")
+    parser.add_argument("--workers", type=int, default=DEFAULT_WORKERS,
+                        help="parallel instances within the current configuration")
     parser.add_argument("--repeats", type=int, default=1,
-                        help="interleaved repetitions; median wall time is reported")
-    parser.add_argument("--timeout", type=float, default=120.0,
-                        help="seconds allowed for one configuration batch")
+                        help="independent calls per configuration/instance")
     parser.add_argument("--exact-max-n", type=int, default=130,
-                        help="solver exact-size guard")
-    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT,
-                        help="directory for CSV and Markdown tables")
+                        help="tsp_bb exact-size guard")
+    parser.add_argument("--no-debug", dest="debug", action="store_false",
+                        help="do not pass tsp_bb debug progress options")
+    parser.set_defaults(debug=True)
+    parser.add_argument("--debug-interval", type=int,
+                        default=DEFAULT_DEBUG_INTERVAL)
+    parser.add_argument("--concorde-seed", type=int,
+                        default=DEFAULT_CONCORDE_SEED)
+    parser.add_argument(
+        "--max-runs", "--max-batches", dest="max_runs", type=int,
+        help="run at most N uncached calls; a partial strategy stops the pipeline",
+    )
+    parser.add_argument("--fresh", "--restart", dest="fresh",
+                        action="store_true", help="ignore and overwrite the cache")
+    parser.add_argument("--list-instances", action="store_true")
     parser.add_argument("--list-configs", action="store_true",
-                        help="print the selected parameter commands and exit")
+                        help="list every built-in configuration and exit")
+    parser.add_argument(
+        "--print-commands", "--print-command", dest="print_commands",
+        action="store_true",
+        help="print selected commands and output directories, then exit",
+    )
     args = parser.parse_args()
-    if args.repeats <= 0:
-        parser.error("--repeats must be positive")
+
     if args.timeout <= 0:
         parser.error("--timeout must be positive")
+    if args.workers <= 0:
+        parser.error("--workers must be positive")
+    if args.repeats <= 0:
+        parser.error("--repeats must be positive")
     if args.exact_max_n < 3:
         parser.error("--exact-max-n must be at least 3")
+    if args.debug_interval <= 0:
+        parser.error("--debug-interval must be positive")
+    if args.limit is not None and args.limit <= 0:
+        parser.error("--limit must be positive")
+    if args.max_runs is not None and args.max_runs <= 0:
+        parser.error("--max-runs must be positive")
+    selection_forms = sum(bool(value) for value in (
+        args.configs, args.strategy, args.solver_args is not None))
+    if selection_forms > 1:
+        parser.error("use only one of --configs, --strategy, or --solver-args")
+
+    if args.configs:
+        args.strategies = [BUILTIN_BY_NAME[name] for name in args.configs]
+    elif args.strategy:
+        args.strategies = [
+            parse_custom_strategy(spec, parser) for spec in args.strategy]
+    elif args.solver_args is not None:
+        args.strategies = [
+            parse_custom_strategy(f"custom={args.solver_args}", parser)]
+    else:
+        args.strategies = list(BUILTIN_STRATEGIES)
+    names = [strategy.name for strategy in args.strategies]
+    if len(names) != len(set(names)):
+        parser.error("configuration names must be unique")
     return args
+
+
+def list_builtin_configs() -> None:
+    for strategy in BUILTIN_STRATEGIES:
+        args = shlex.join(strategy.solver_args) or "(managed Concorde arguments)"
+        print(
+            f"{strategy.name:<9} [{strategy.kind}/{strategy.category}] "
+            f"{strategy.description}\n"
+            f"          {args}")
 
 
 def resolve_instance(path: Path) -> Path:
@@ -249,6 +340,9 @@ def resolve_instance(path: Path) -> Path:
 
 def read_batch_list(path: Path) -> list[Path]:
     list_path = path if path.is_absolute() else PROJECT_ROOT / path
+    list_path = list_path.resolve()
+    if not list_path.is_file():
+        raise FileNotFoundError(f"batch list not found: {list_path}")
     instances: list[Path] = []
     for raw_line in list_path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
@@ -262,394 +356,539 @@ def select_instances(args: argparse.Namespace) -> list[Path]:
         instances = [resolve_instance(path) for path in args.instances]
     else:
         instances = read_batch_list(args.batch_list or DEFAULT_BATCH)
-    if not instances:
-        raise ValueError("the experiment contains no instances")
     if len({path.resolve() for path in instances}) != len(instances):
         raise ValueError("the experiment contains duplicate instances")
+    if args.limit is not None:
+        instances = instances[:args.limit]
+    if not instances:
+        raise ValueError("the experiment contains no instances")
     return instances
 
 
-def parse_int(value: str) -> int:
-    return int(value) if value else 0
+def binary_digest(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
-def parse_float(value: str) -> float:
-    return float(value) if value else math.nan
+def effective_args(args: argparse.Namespace, strategy: Strategy) -> list[str]:
+    if strategy.kind == "concorde":
+        return [*strategy.solver_args, "-s", str(args.concorde_seed)]
+    result = [
+        *strategy.solver_args, "--exact-max-n", str(args.exact_max_n)]
+    if args.debug:
+        result.extend(["--debug", "--debug-interval", str(args.debug_interval)])
+    return result
 
 
-def costs_match(actual: float, expected: float) -> bool:
-    return math.isfinite(actual) and math.isfinite(expected) and math.isclose(
-        actual, expected, rel_tol=1e-9, abs_tol=1e-8)
-
-
-def run_batch(
-    solver: Path,
-    config: ExperimentConfig,
-    repeat: int,
+def strategy_identity(
+    args: argparse.Namespace,
+    strategy: Strategy,
+    executable: Path,
+    executable_sha256: str,
+    invocation_args: list[str],
     instances: list[Path],
-    batch_list: Path,
+) -> dict[str, Any]:
+    return {
+        "format_version": 2,
+        "strategy": strategy.name,
+        "kind": strategy.kind,
+        "executable": str(executable),
+        "executable_sha256": executable_sha256,
+        "solver_args": invocation_args,
+        "timeout_seconds": args.timeout,
+        "workers": args.workers,
+        "repeats": args.repeats,
+        "instances": [str(instance) for instance in instances],
+    }
+
+
+def identity_fingerprint(identity: dict[str, Any]) -> str:
+    encoded = json.dumps(
+        identity, ensure_ascii=True, sort_keys=True, separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()[:12]
+
+
+def slugify(value: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip()).strip("-._")
+    return slug[:96] or "strategy"
+
+
+def cache_key(repeat: int, instance: Path | str) -> str:
+    return f"{repeat}:{instance}"
+
+
+def empty_result(
+    run_id: str, strategy: Strategy, repeat: int, instance: Path,
+) -> dict[str, Any]:
+    return {
+        "run_id": run_id,
+        "strategy": strategy.name,
+        "repeat": repeat,
+        "instance": str(instance),
+        "status": "error",
+        "wall_seconds": None,
+        "result": None,
+        "branches": None,
+    }
+
+
+def run_tspbb_once(
+    run_id: str,
+    strategy: Strategy,
+    repeat: int,
+    instance: Path,
+    executable: Path,
+    invocation_args: list[str],
     timeout: float,
-    exact_max_n: int,
-) -> tuple[list[dict[str, Any]], float]:
-    command = [
-        str(solver),
-        *config.solver_args(),
-        "--exact-max-n", str(exact_max_n),
-        "--batch", str(batch_list),
-    ]
+) -> tuple[dict[str, Any], str | None]:
+    command = [str(executable), *invocation_args, str(instance)]
     started = time.perf_counter()
-    completed = subprocess.run(
-        command,
-        cwd=PROJECT_ROOT,
-        check=False,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        timeout=timeout,
-    )
-    wall_seconds = time.perf_counter() - started
-    rows = list(csv.DictReader(io.StringIO(completed.stdout)))
-    if completed.returncode != 0 or len(rows) != len(instances):
-        details = completed.stderr.strip() or completed.stdout.strip()
-        raise RuntimeError(
-            f"{config.config_id} repeat {repeat} failed with status "
-            f"{completed.returncode}: {details}")
-
-    expected_paths = {str(path.resolve()) for path in instances}
-    actual_paths = {str(Path(row["instance"]).resolve()) for row in rows}
-    if actual_paths != expected_paths:
-        raise RuntimeError(
-            f"{config.config_id} returned a different instance set")
-
-    parsed_rows: list[dict[str, Any]] = []
-    for row in rows:
-        parsed: dict[str, Any] = {
-            "config_id": config.config_id,
-            "category": config.category,
-            "repeat": repeat,
-            "instance": str(Path(row["instance"]).resolve()),
-            "status": row["status"],
-            "batch_wall_seconds": wall_seconds,
-        }
-        for field in INTEGER_FIELDS:
-            parsed[field] = parse_int(row[field])
-        for field in FLOAT_FIELDS:
-            parsed[field] = parse_float(row[field])
-        parsed_rows.append(parsed)
-    return parsed_rows, wall_seconds
+    try:
+        completed = subprocess.run(
+            command, cwd=PROJECT_ROOT, capture_output=True, text=True,
+            timeout=timeout)
+        row = empty_result(run_id, strategy, repeat, instance)
+        row["wall_seconds"] = time.perf_counter() - started
+        stats = reference.parse_tspbb_stats(completed.stdout)
+        row["result"] = stats.get("cost")
+        row["branches"] = stats.get("nodes_created")
+        if completed.returncode != 0:
+            details = completed.stderr.strip() or completed.stdout.strip()
+            return row, f"exit {completed.returncode}: {details[-500:]}"
+        if not stats.get("feasible") or row["result"] is None:
+            return row, "tsp_bb produced no parseable optimal result"
+        row["status"] = "ok"
+        return row, None
+    except subprocess.TimeoutExpired:
+        row = empty_result(run_id, strategy, repeat, instance)
+        row["status"] = "timeout"
+        row["wall_seconds"] = timeout
+        return row, f"timeout after {timeout:g}s"
+    except Exception as error:  # noqa: BLE001 - stored as an error result
+        row = empty_result(run_id, strategy, repeat, instance)
+        row["wall_seconds"] = time.perf_counter() - started
+        return row, str(error)
 
 
-def median(values: Iterable[float | int]) -> float:
-    return float(statistics.median(list(values)))
+def run_concorde_once(
+    run_id: str,
+    strategy: Strategy,
+    repeat: int,
+    instance: Path,
+    executable: Path,
+    invocation_args: list[str],
+    timeout: float,
+) -> tuple[dict[str, Any], str | None]:
+    started = time.perf_counter()
+    try:
+        CONCORDE_WORK_ROOT.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(
+            prefix="phkmst-concorde-", dir=CONCORDE_WORK_ROOT,
+        ) as temporary_directory:
+            temporary_root = Path(temporary_directory)
+            prepared = Path(reference.ensure_tsplib_for_concorde(
+                str(instance), temporary_directory))
+            local_instance = temporary_root / prepared.name
+            if prepared.resolve() != local_instance.resolve():
+                shutil.copy2(prepared, local_instance)
+            solution = temporary_root / f"{local_instance.stem}.sol"
+            command = [
+                str(executable), *invocation_args,
+                "-o", str(solution), str(local_instance),
+            ]
+            completed = subprocess.run(
+                command, cwd=temporary_root, capture_output=True, text=True,
+                timeout=timeout)
+
+        row = empty_result(run_id, strategy, repeat, instance)
+        row["wall_seconds"] = time.perf_counter() - started
+        stats = reference.parse_concorde_output(completed.stdout)
+        row["result"] = stats.get("cost")
+        row["branches"] = stats.get("bbnodes")
+        if completed.returncode != 0:
+            details = completed.stderr.strip() or completed.stdout.strip()
+            return row, f"exit {completed.returncode}: {details[-500:]}"
+        if not stats.get("feasible") or row["result"] is None:
+            return row, "Concorde produced no parseable optimal result"
+        row["status"] = "ok"
+        return row, None
+    except subprocess.TimeoutExpired:
+        row = empty_result(run_id, strategy, repeat, instance)
+        row["status"] = "timeout"
+        row["wall_seconds"] = timeout
+        return row, f"timeout after {timeout:g}s"
+    except Exception as error:  # noqa: BLE001 - stored as an error result
+        row = empty_result(run_id, strategy, repeat, instance)
+        row["wall_seconds"] = time.perf_counter() - started
+        return row, str(error)
 
 
-def annotate_correctness(raw_rows: list[dict[str, Any]]) -> None:
-    baseline_cost: dict[str, float] = {}
-    for row in raw_rows:
-        if row["config_id"] == "P0" and row["status"] == "ok":
-            baseline_cost.setdefault(row["instance"], row["cost"])
-
-    for row in raw_rows:
-        name = Path(row["instance"]).name
-        if name in KNOWN_OPTIMA:
-            expected = KNOWN_OPTIMA[name]
-            source = "known-optimum"
-        else:
-            expected = baseline_cost.get(row["instance"], math.nan)
-            source = "P0-cross-check"
-        row["expected_cost"] = expected
-        row["reference_source"] = source
-        row["cost_correct"] = (
-            row["status"] == "ok" and costs_match(row["cost"], expected))
-
-
-def aggregate_instances(raw_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
-    for row in raw_rows:
-        grouped.setdefault((row["config_id"], row["instance"]), []).append(row)
-
-    results: list[dict[str, Any]] = []
-    median_fields = (*INTEGER_FIELDS, *FLOAT_FIELDS)
-    for (config_id, instance), rows in grouped.items():
-        result: dict[str, Any] = {
-            "config_id": config_id,
-            "instance": instance,
-            "repeats": len(rows),
-            "status": "ok" if all(row["status"] == "ok" for row in rows) else "error",
-            "expected_cost": rows[0]["expected_cost"],
-            "reference_source": rows[0]["reference_source"],
-            "cost_correct": all(row["cost_correct"] for row in rows),
-        }
-        for field in median_fields:
-            result[field] = median(row[field] for row in rows)
-        result["instance_wall_median_seconds"] = result.pop(
-            "instance_wall_seconds")
-        results.append(result)
-
-    baseline = {
-        row["instance"]: row for row in results if row["config_id"] == "P0"
-    }
-    for row in results:
-        base = baseline[row["instance"]]
-        row["expanded_ratio_vs_p0"] = (
-            row["nodes_expanded"] + 1.0) / (base["nodes_expanded"] + 1.0)
-        row["instance_wall_ratio_vs_p0"] = safe_ratio(
-            row["instance_wall_median_seconds"],
-            base["instance_wall_median_seconds"])
-    return sorted(results, key=lambda row: (row["config_id"], row["instance"]))
-
-
-def safe_ratio(numerator: float, denominator: float) -> float:
-    return numerator / denominator if denominator != 0.0 else math.nan
-
-
-def aggregate_summary(
-    instance_rows: list[dict[str, Any]],
-    batch_wall: dict[str, list[float]],
-    selected_configs: list[ExperimentConfig],
-) -> list[dict[str, Any]]:
-    grouped = {
-        config.config_id: [
-            row for row in instance_rows if row["config_id"] == config.config_id
-        ]
-        for config in selected_configs
-    }
-    baseline = {row["instance"]: row for row in grouped["P0"]}
-    baseline_total_expanded = sum(
-        row["nodes_expanded"] for row in grouped["P0"])
-    baseline_wall = median(batch_wall["P0"])
-
-    summaries: list[dict[str, Any]] = []
-    for config in selected_configs:
-        rows = grouped[config.config_id]
-        total_created = sum(row["nodes_created"] for row in rows)
-        total_expanded = sum(row["nodes_expanded"] for row in rows)
-        attempts = sum(row["potential_updates_attempted"] for row in rows)
-        improved = sum(row["potential_updates_improved"] for row in rows)
-        direct_pruned = sum(row["potential_updates_pruned"] for row in rows)
-        iterations = sum(row["potential_update_iterations"] for row in rows)
-        gain = sum(row["potential_update_total_gain"] for row in rows)
-        potential_seconds = sum(row["potential_update_seconds"] for row in rows)
-        wall = median(batch_wall[config.config_id])
-
-        ratios = [row["expanded_ratio_vs_p0"] for row in rows]
-        instance_wall_ratios = [
-            row["instance_wall_ratio_vs_p0"] for row in rows]
-        wins = sum(
-            row["nodes_expanded"] < baseline[row["instance"]]["nodes_expanded"]
-            for row in rows)
-        ties = sum(
-            row["nodes_expanded"] == baseline[row["instance"]]["nodes_expanded"]
-            for row in rows)
-        losses = len(rows) - wins - ties
-        summaries.append({
-            "config_id": config.config_id,
-            "correct_instances": sum(row["cost_correct"] for row in rows),
-            "total_instances": len(rows),
-            "nodes_created": total_created,
-            "nodes_expanded": total_expanded,
-            "expanded_ratio_vs_p0": safe_ratio(
-                total_expanded, baseline_total_expanded),
-            "expanded_geomean_ratio_vs_p0": math.exp(
-                sum(math.log(value) for value in ratios) / len(ratios)),
-            "wins": wins,
-            "ties": ties,
-            "losses": losses,
-            "batch_wall_median_seconds": wall,
-            "wall_ratio_vs_p0": safe_ratio(wall, baseline_wall),
-            "instance_wall_total_seconds": sum(
-                row["instance_wall_median_seconds"] for row in rows),
-            "instance_wall_geomean_ratio_vs_p0": math.exp(
-                sum(math.log(value) for value in instance_wall_ratios)
-                / len(instance_wall_ratios)),
-            "potential_updates_attempted": attempts,
-            "improvement_rate": safe_ratio(improved, attempts),
-            "direct_prune_rate": safe_ratio(direct_pruned, attempts),
-            "average_iterations_per_attempt": safe_ratio(iterations, attempts),
-            "epoch_rebuilds": sum(
-                row["potential_updates_rebuilt"] for row in rows),
-            "gain_per_iteration": safe_ratio(gain, iterations),
-            "potential_update_seconds": potential_seconds,
-            "potential_time_share": safe_ratio(potential_seconds, wall),
-        })
-    return summaries
+def run_strategy_once(
+    run_id: str,
+    strategy: Strategy,
+    repeat: int,
+    instance: Path,
+    executable: Path,
+    invocation_args: list[str],
+    timeout: float,
+) -> tuple[dict[str, Any], str | None]:
+    runner = run_concorde_once if strategy.kind == "concorde" else run_tspbb_once
+    return runner(
+        run_id, strategy, repeat, instance, executable, invocation_args,
+        timeout)
 
 
 def write_csv(path: Path, fields: Iterable[str], rows: Iterable[dict[str, Any]]) -> None:
-    field_list = list(fields)
-    with path.open("w", encoding="utf-8", newline="") as target:
-        writer = csv.DictWriter(
-            target,
-            fieldnames=field_list,
-            extrasaction="ignore",
-            lineterminator="\n",
-        )
-        writer.writeheader()
-        writer.writerows(rows)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", newline="", dir=path.parent,
+            prefix=f".{path.name}.", suffix=".tmp", delete=False,
+        ) as target:
+            temporary_path = Path(target.name)
+            writer = csv.DictWriter(
+                target, fieldnames=list(fields), extrasaction="ignore",
+                lineterminator="\n")
+            writer.writeheader()
+            writer.writerows(rows)
+        temporary_path.replace(path)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
-def format_number(value: Any, digits: int = 3) -> str:
-    if isinstance(value, bool):
-        return "yes" if value else "no"
-    if isinstance(value, float):
-        if not math.isfinite(value):
-            return "-"
-        return f"{value:.{digits}f}"
-    return str(value)
+def write_text(path: Path, content: str) -> None:
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent,
+            prefix=f".{path.name}.", suffix=".tmp", delete=False,
+        ) as target:
+            temporary_path = Path(target.name)
+            target.write(content)
+        temporary_path.replace(path)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
-def write_markdown(
-    path: Path,
-    configs: list[ExperimentConfig],
-    summaries: list[dict[str, Any]],
-    instance_rows: list[dict[str, Any]],
-) -> None:
-    lines = [
-        "# PHKMST parameter ablation",
-        "",
-        "## Configurations",
-        "",
-        "| ID | Root | Node | Trigger | Depth | Gap | Branch order |",
-        "|---|---|---|---|---:|---:|---|",
-    ]
-    for config in configs:
-        lines.append(
-            f"| {config.config_id} | {config.root_ascent} | "
-            f"{config.effective_node_ascent} | {config.potential_update} | "
-            f"{config.update_depth if config.potential_update != 'none' else '-'} | "
-            f"{format_number(config.update_gap_ratio, 3) if config.potential_update != 'none' else '-'} | "
-            f"{config.branch_edge_order} |")
-
-    lines.extend([
-        "",
-        "## Aggregate results",
-        "",
-        "| ID | Correct | Created | Expanded | Exp/P0 | Geo/P0 | W/T/L | Batch wall(s) | Wall/P0 | Inst wall geo/P0 | Improve | Direct prune |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
-    ])
-    for row in summaries:
-        lines.append(
-            f"| {row['config_id']} | {row['correct_instances']}/{row['total_instances']} | "
-            f"{format_number(row['nodes_created'], 0)} | "
-            f"{format_number(row['nodes_expanded'], 0)} | "
-            f"{format_number(row['expanded_ratio_vs_p0'])} | "
-            f"{format_number(row['expanded_geomean_ratio_vs_p0'])} | "
-            f"{row['wins']}/{row['ties']}/{row['losses']} | "
-            f"{format_number(row['batch_wall_median_seconds'])} | "
-            f"{format_number(row['wall_ratio_vs_p0'])} | "
-            f"{format_number(row['instance_wall_geomean_ratio_vs_p0'])} | "
-            f"{format_number(row['improvement_rate'])} | "
-            f"{format_number(row['direct_prune_rate'])} |")
-    lines.extend([
-        "",
-        "`Exp/P0` is the ratio of aggregate expanded nodes. `Geo/P0` is the "
-        "geometric mean of per-instance `(expanded+1)/(P0 expanded+1)`. "
-        "`W/T/L` compares expanded nodes with P0.",
-        "",
-        "## Per-instance results",
-        "",
-        "| ID | Instance | Correct | Expanded | Exp/P0 | Wall(s) | Wall/P0 |",
-        "|---|---|---:|---:|---:|---:|---:|",
-    ])
-    config_order = {
-        config.config_id: index for index, config in enumerate(configs)}
-    for row in sorted(
-        instance_rows,
-        key=lambda value: (
-            config_order[value["config_id"]], Path(value["instance"]).name),
-    ):
-        lines.append(
-            f"| {row['config_id']} | {Path(row['instance']).name} | "
-            f"{format_number(row['cost_correct'])} | "
-            f"{format_number(row['nodes_expanded'], 0)} | "
-            f"{format_number(row['expanded_ratio_vs_p0'])} | "
-            f"{format_number(row['instance_wall_median_seconds'], 6)} | "
-            f"{format_number(row['instance_wall_ratio_vs_p0'])} |")
-    lines.append("")
-    path.write_text("\n".join(lines), encoding="utf-8")
+def load_cache(path: Path, fresh: bool) -> dict[str, Any]:
+    empty: dict[str, Any] = {"schema": CACHE_SCHEMA, "runs": {}}
+    if fresh or not path.is_file():
+        return empty
+    try:
+        cache = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        print(f"Warning: ignoring unreadable cache: {error}")
+        return empty
+    if cache.get("schema") != CACHE_SCHEMA or not isinstance(cache.get("runs"), dict):
+        print("Cache schema changed; starting with an empty cache.")
+        return empty
+    return cache
 
 
-def config_rows(configs: list[ExperimentConfig]) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for config in configs:
-        row = asdict(config)
-        row["effective_node_ascent"] = config.effective_node_ascent
-        row["command_args"] = " ".join(config.solver_args())
-        rows.append(row)
-    return rows
+def save_cache(path: Path, cache: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_text(
+        path, json.dumps(cache, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+
+
+def numeric_values(
+    rows: Iterable[dict[str, Any]], field: str, integer: bool = False,
+) -> list[int | float]:
+    values: list[int | float] = []
+    for row in rows:
+        value = row.get(field)
+        if value in (None, ""):
+            continue
+        try:
+            parsed = int(value) if integer else float(value)
+        except (TypeError, ValueError):
+            continue
+        if integer or math.isfinite(parsed):
+            values.append(parsed)
+    return values
+
+
+def summarize_strategy(
+    run_id: str, strategy: Strategy, rows: list[dict[str, Any]], status: str,
+) -> dict[str, Any]:
+    successful = [row for row in rows if row["status"] == "ok"]
+    walls = numeric_values(successful, "wall_seconds")
+    branches = numeric_values(successful, "branches", integer=True)
+    return {
+        "run_id": run_id,
+        "strategy": strategy.name,
+        "status": status,
+        "rows": len(rows),
+        "successful": len(successful),
+        "timeouts": sum(row["status"] == "timeout" for row in rows),
+        "errors": sum(row["status"] == "error" for row in rows),
+        "total_wall_seconds": sum(walls) if walls else 0,
+        "median_wall_seconds": statistics.median(walls) if walls else "",
+        "total_branches": sum(branches) if branches else 0,
+        "median_branches": statistics.median(branches) if branches else "",
+    }
+
+
+def configuration_row(
+    args: argparse.Namespace,
+    run_id: str,
+    strategy: Strategy,
+    executable: Path,
+    executable_sha256: str,
+    invocation_args: list[str],
+    instance_count: int,
+) -> dict[str, Any]:
+    if strategy.kind == "concorde":
+        command = [
+            str(executable), *invocation_args,
+            "-o", "<solution-file>", "<instance>",
+        ]
+    else:
+        command = [str(executable), *invocation_args, "<instance>"]
+    return {
+        "run_id": run_id,
+        "strategy": strategy.name,
+        "kind": strategy.kind,
+        "category": strategy.category,
+        "description": strategy.description,
+        "executable": str(executable),
+        "executable_sha256": executable_sha256,
+        "solver_args": shlex.join(invocation_args),
+        "timeout_seconds": args.timeout,
+        "workers": args.workers,
+        "repeats": args.repeats,
+        "instance_count": instance_count,
+        "command": shlex.join(command),
+    }
+
+
+def persist_strategy(
+    output_dir: Path,
+    configuration: dict[str, Any],
+    identity: dict[str, Any],
+    run_id: str,
+    strategy: Strategy,
+    rows_by_key: dict[str, dict[str, Any]],
+    instance_order: dict[str, int],
+    total_rows: int,
+    status: str,
+) -> dict[str, Any]:
+    rows = sorted(rows_by_key.values(), key=lambda row: (
+        row["repeat"], instance_order[row["instance"]]))
+    summary = summarize_strategy(run_id, strategy, rows, status)
+    write_csv(
+        output_dir / "configuration.csv", CONFIGURATION_FIELDS, [configuration])
+    write_csv(output_dir / "results.csv", RESULT_FIELDS, rows)
+    write_csv(output_dir / "summary.csv", SUMMARY_FIELDS, [summary])
+    write_text(
+        output_dir / "progress.json",
+        json.dumps({
+            "run_id": run_id,
+            "run": identity,
+            "status": status,
+            "completed_rows": len(rows),
+            "total_rows": total_rows,
+        }, ensure_ascii=False, indent=2) + "\n")
+    return summary
+
+
+def print_strategy_summary(summary: dict[str, Any], output_dir: Path) -> None:
+    print(f"Strategy table: {output_dir}")
+    print(
+        f"  rows={summary['rows']} ok={summary['successful']} "
+        f"timeout={summary['timeouts']} error={summary['errors']}")
+    if summary["successful"]:
+        branches = summary["median_branches"]
+        branch_text = f"{float(branches):.0f}" if branches != "" else "-"
+        print(
+            f"  median wall={float(summary['median_wall_seconds']):.6f}s "
+            f"branches={branch_text}")
+
+
+def validate_executable(path: Path, label: str) -> Path:
+    resolved = path.resolve()
+    if not resolved.is_file() or not os.access(resolved, os.X_OK):
+        raise FileNotFoundError(f"executable {label} not found: {resolved}")
+    return resolved
 
 
 def main() -> int:
     args = parse_args()
-    selected_configs = [CONFIGS[name] for name in SUITES[args.suite]]
     if args.list_configs:
-        for config in selected_configs:
-            print(f"{config.config_id}: {' '.join(config.solver_args())}")
+        list_builtin_configs()
         return 0
 
-    solver = args.solver.resolve()
-    if not solver.is_file():
-        raise FileNotFoundError(f"solver not found: {solver}")
     instances = select_instances(args)
-    output_dir = args.output_dir.resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    raw_rows: list[dict[str, Any]] = []
-    batch_wall: dict[str, list[float]] = {
-        config.config_id: [] for config in selected_configs
-    }
-    with tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", prefix="phkmst-ablation-",
-        suffix=".txt", delete=False,
-    ) as batch_file:
+    if args.list_instances:
         for instance in instances:
-            batch_file.write(f"{instance}\n")
-        temporary_batch = Path(batch_file.name)
+            print(instance)
+        return 0
 
-    try:
-        for repeat in range(1, args.repeats + 1):
-            # Reverse every second pass to reduce fixed-order timing bias.
-            ordered = selected_configs if repeat % 2 else list(reversed(selected_configs))
-            for config in ordered:
+    needs_tsp = any(strategy.kind == "tsp_bb" for strategy in args.strategies)
+    needs_concorde = any(
+        strategy.kind == "concorde" for strategy in args.strategies)
+    tsp_executable = (
+        validate_executable(args.solver, "tsp_bb") if needs_tsp else None)
+    concorde_executable = (
+        validate_executable(args.concorde, "Concorde")
+        if needs_concorde else None)
+    executable_digests: dict[Path, str] = {}
+
+    output_root = args.output_root.resolve()
+    output_root.mkdir(parents=True, exist_ok=True)
+    cache_path = args.cache.resolve() if args.cache else output_root / "cache.json"
+
+    phases: list[dict[str, Any]] = []
+    for strategy in args.strategies:
+        executable = (
+            concorde_executable if strategy.kind == "concorde"
+            else tsp_executable)
+        assert executable is not None
+        if executable not in executable_digests:
+            executable_digests[executable] = binary_digest(executable)
+        executable_sha256 = executable_digests[executable]
+        invocation_args = effective_args(args, strategy)
+        identity = strategy_identity(
+            args, strategy, executable, executable_sha256, invocation_args,
+            instances)
+        fingerprint = identity_fingerprint(identity)
+        run_id = f"{slugify(strategy.name)}-{fingerprint}"
+        output_dir = output_root / run_id
+        phases.append({
+            "strategy": strategy,
+            "executable": executable,
+            "invocation_args": invocation_args,
+            "identity": identity,
+            "fingerprint": fingerprint,
+            "run_id": run_id,
+            "output_dir": output_dir,
+            "configuration": configuration_row(
+                args, run_id, strategy, executable, executable_sha256,
+                invocation_args, len(instances)),
+        })
+
+    if args.print_commands:
+        for index, phase in enumerate(phases, 1):
+            print(f"[{index}] configuration: {phase['strategy'].name}")
+            print(f"    run_id: {phase['run_id']}")
+            print(f"    output_dir: {phase['output_dir']}")
+            print(f"    command: {phase['configuration']['command']}")
+        return 0
+
+    cache = load_cache(cache_path, args.fresh)
+    if args.fresh:
+        save_cache(cache_path, cache)
+    instance_order = {
+        str(instance): index for index, instance in enumerate(instances)}
+    total_rows = args.repeats * len(instances)
+    remaining_new_runs = args.max_runs
+    any_failures = False
+
+    for phase_index, phase in enumerate(phases, 1):
+        strategy: Strategy = phase["strategy"]
+        fingerprint: str = phase["fingerprint"]
+        run_id: str = phase["run_id"]
+        identity: dict[str, Any] = phase["identity"]
+        output_dir: Path = phase["output_dir"]
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        print(
+            f"\n=== Configuration {phase_index}/{len(phases)}: "
+            f"{strategy.name} ===",
+            flush=True)
+        cache_entry = cache["runs"].get(fingerprint)
+        if cache_entry is None:
+            cache_entry = {"identity": identity, "results": {}}
+            cache["runs"][fingerprint] = cache_entry
+        elif cache_entry.get("identity") != identity:
+            raise RuntimeError(f"cache fingerprint collision for {strategy.name}")
+        cached_results = cache_entry.setdefault("results", {})
+
+        # Successful and timeout records are reusable. Error rows stay in the
+        # cache for inspection but remain pending and are overwritten on retry.
+        rows_by_key: dict[str, dict[str, Any]] = {
+            key: row for key, row in cached_results.items()
+            if row.get("status") in {"ok", "timeout"}
+        }
+        all_tasks = [
+            (repeat, instance)
+            for repeat in range(1, args.repeats + 1)
+            for instance in instances
+            if cache_key(repeat, instance) not in rows_by_key
+        ]
+        scheduled_tasks = all_tasks
+        if remaining_new_runs is not None:
+            scheduled_tasks = all_tasks[:remaining_new_runs]
+
+        persist_strategy(
+            output_dir, phase["configuration"], identity, run_id, strategy,
+            rows_by_key, instance_order, total_rows,
+            "complete" if not all_tasks else "running")
+        print(
+            f"Cached {len(rows_by_key)}/{total_rows}; "
+            f"running {len(scheduled_tasks)} call(s) with workers={args.workers}",
+            flush=True)
+
+        with ThreadPoolExecutor(max_workers=args.workers) as executor:
+            futures = {
+                executor.submit(
+                    run_strategy_once, run_id, strategy, repeat, instance,
+                    phase["executable"], phase["invocation_args"], args.timeout,
+                ): (repeat, instance)
+                for repeat, instance in scheduled_tasks
+            }
+            for future in as_completed(futures):
+                repeat, instance = futures[future]
+                row, error = future.result()
+                key = cache_key(repeat, instance)
+                rows_by_key[key] = row
+
+                # Finest checkpoint unit: one configuration/repeat/instance.
+                cached_results[key] = row
+                save_cache(cache_path, cache)
+                detail = f": {error}" if error else ""
                 print(
-                    f"[{repeat}/{args.repeats}] {config.config_id} "
-                    f"({len(instances)} instances)", flush=True)
-                rows, wall = run_batch(
-                    solver, config, repeat, instances, temporary_batch,
-                    args.timeout, args.exact_max_n)
-                raw_rows.extend(rows)
-                batch_wall[config.config_id].append(wall)
-    finally:
-        temporary_batch.unlink(missing_ok=True)
+                    f"[{len(rows_by_key)}/{total_rows}] repeat {repeat} "
+                    f"{instance.name}: {row['status']} "
+                    f"time={float(row['wall_seconds']):.6f}s "
+                    f"result={row['result']} branches={row['branches']}"
+                    f"{detail}",
+                    flush=True)
+                persist_strategy(
+                    output_dir, phase["configuration"], identity, run_id,
+                    strategy, rows_by_key, instance_order, total_rows, "running")
 
-    annotate_correctness(raw_rows)
-    instance_rows = aggregate_instances(raw_rows)
-    summaries = aggregate_summary(instance_rows, batch_wall, selected_configs)
+        if remaining_new_runs is not None:
+            remaining_new_runs -= len(scheduled_tasks)
+        phase_complete = len(rows_by_key) == total_rows
+        summary = persist_strategy(
+            output_dir, phase["configuration"], identity, run_id, strategy,
+            rows_by_key, instance_order, total_rows,
+            "complete" if phase_complete else "partial")
+        print_strategy_summary(summary, output_dir)
+        any_failures = any_failures or bool(
+            summary["timeouts"] or summary["errors"])
 
-    configuration_fields = (
-        "config_id", "category", "root_ascent", "effective_node_ascent",
-        "node_ascent", "potential_update", "update_depth", "update_gap_ratio",
-        "update_iterations", "update_budget", "branch_edge_order",
-        "description", "command_args",
-    )
-    write_csv(output_dir / "configurations.csv", configuration_fields,
-              config_rows(selected_configs))
-    write_csv(output_dir / "raw_runs.csv", RAW_FIELDS, raw_rows)
-    write_csv(output_dir / "results_by_instance.csv", INSTANCE_FIELDS, instance_rows)
-    write_csv(output_dir / "summary.csv", SUMMARY_FIELDS, summaries)
-    write_markdown(
-        output_dir / "summary.md", selected_configs, summaries, instance_rows)
-
-    failures = [row for row in instance_rows if not row["cost_correct"]]
-    print(f"Wrote experiment tables to {output_dir}")
-    print(f"Correctness: {len(instance_rows) - len(failures)}/{len(instance_rows)}")
-    if failures:
-        for row in failures:
+        if not phase_complete:
             print(
-                f"[FAIL] {row['config_id']} {row['instance']}: "
-                f"cost={row['cost']} expected={row['expected_cost']}")
-        return 1
-    return 0
+                f"Configuration {strategy.name} is partial; later "
+                "configurations were not started. Rerun to continue.",
+                flush=True)
+            break
+        if remaining_new_runs == 0 and phase_index < len(phases):
+            print(
+                "The --max-runs budget is exhausted; later configurations "
+                "were not started. Rerun to continue.",
+                flush=True)
+            break
+
+    return 1 if any_failures else 0
 
 
 if __name__ == "__main__":
