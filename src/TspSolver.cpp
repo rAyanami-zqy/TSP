@@ -1820,7 +1820,9 @@ SolveResult BranchBoundSolver::solve()
             return result_;
         }
         if (branch_edge_order_ == BranchEdgeOrder::RootAlphaAscending
-            || branch_edge_order_ == BranchEdgeOrder::RootAlphaDescending) {
+            || branch_edge_order_ == BranchEdgeOrder::RootAlphaDescending
+            || branch_edge_order_ == BranchEdgeOrder::RootAlphaGlobalAscending
+            || branch_edge_order_ == BranchEdgeOrder::RootAlphaGlobalDescending) {
             // 根势优化已经结束，此时的调整权重和根 1-tree 定义了本搜索
             // epoch 的静态 alpha 先验。若 diversified incumbent 触发根重启，
             // 新 epoch 会重新计算；默认 weight 路径则完全跳过这项 O(n^2) 预处理。
@@ -2123,7 +2125,11 @@ BranchBoundSolver::BranchSet BranchBoundSolver::bpPartition(
             const bool use_root_alpha = branch_edge_order_
                     == BranchEdgeOrder::RootAlphaAscending
                 || branch_edge_order_
-                    == BranchEdgeOrder::RootAlphaDescending;
+                    == BranchEdgeOrder::RootAlphaDescending
+                || branch_edge_order_
+                    == BranchEdgeOrder::RootAlphaGlobalAscending
+                || branch_edge_order_
+                    == BranchEdgeOrder::RootAlphaGlobalDescending;
             if (use_root_alpha
                 && root_alpha_by_edge_id_.size()
                     == static_cast<std::size_t>(n_)
@@ -2133,8 +2139,11 @@ BranchBoundSolver::BranchSet BranchBoundSolver::bpPartition(
                 const double incumbent_alpha = root_alpha_by_edge_id_[
                     edgeId(incumbent->u, incumbent->v)];
                 if (candidate_alpha != incumbent_alpha) {
-                    if (branch_edge_order_
-                        == BranchEdgeOrder::RootAlphaAscending) {
+                    const bool ascending = branch_edge_order_
+                            == BranchEdgeOrder::RootAlphaAscending
+                        || branch_edge_order_
+                            == BranchEdgeOrder::RootAlphaGlobalAscending;
+                    if (ascending) {
                         return candidate_alpha < incumbent_alpha;
                     }
                     return candidate_alpha > incumbent_alpha;
@@ -2236,6 +2245,54 @@ BranchBoundSolver::BranchSet BranchBoundSolver::bpPartition(
                         continue;
                     }
                     if (branch_edge_better(edge, deg_best)) deg_best = &edge;
+                }
+            }
+        } else if (branch_edge_order_
+                       == BranchEdgeOrder::RootAlphaGlobalAscending
+                   || branch_edge_order_
+                       == BranchEdgeOrder::RootAlphaGlobalDescending) {
+            // 与局部 root-alpha 策略相反，这里不先固定一个最大度顶点：
+            // 只要树边至少接触一个 degree>2 的违规顶点，就进入候选集合。
+            // alpha 是首要指标；alpha 平局时才优先覆盖更多两端超度。
+            const bool ascending = branch_edge_order_
+                == BranchEdgeOrder::RootAlphaGlobalAscending;
+            const bool has_root_alpha = root_alpha_by_edge_id_.size()
+                == static_cast<std::size_t>(n_)
+                    * static_cast<std::size_t>(n_);
+            for (const Edge& edge : work_tree.edges) {
+                const int excess_cover =
+                    std::max(
+                        0,
+                        work_tree.degree[static_cast<std::size_t>(edge.u)] - 2)
+                    + std::max(
+                        0,
+                        work_tree.degree[static_cast<std::size_t>(edge.v)] - 2);
+                if (excess_cover == 0) continue;
+                const std::size_t edge_id = edgeId(edge.u, edge.v);
+                if (node.forced[edge_id] || node.forbidden[edge_id]) continue;
+
+                bool select = deg_best == nullptr;
+                if (deg_best != nullptr) {
+                    const double candidate_alpha = has_root_alpha
+                        ? root_alpha_by_edge_id_[edge_id]
+                        : std::numeric_limits<double>::infinity();
+                    const double incumbent_alpha = has_root_alpha
+                        ? root_alpha_by_edge_id_[
+                            edgeId(deg_best->u, deg_best->v)]
+                        : std::numeric_limits<double>::infinity();
+                    if (candidate_alpha != incumbent_alpha) {
+                        select = ascending
+                            ? candidate_alpha < incumbent_alpha
+                            : candidate_alpha > incumbent_alpha;
+                    } else if (excess_cover != deg_best_excess_cover) {
+                        select = excess_cover > deg_best_excess_cover;
+                    } else {
+                        select = branch_edge_better(edge, deg_best);
+                    }
+                }
+                if (select) {
+                    deg_best = &edge;
+                    deg_best_excess_cover = excess_cover;
                 }
             }
         } else if (branch_edge_order_

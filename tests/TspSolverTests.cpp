@@ -22,6 +22,12 @@ struct BranchBoundSolverTestAccess {
     using OneTree = BranchBoundSolver::OneTree;
 
     struct Fixture {
+        struct AlphaEntry {
+            int u = -1;
+            int v = -1;
+            double value = std::numeric_limits<double>::infinity();
+        };
+
         explicit Fixture(std::vector<std::vector<double>> matrix)
             : solver(std::move(matrix))
         {
@@ -257,6 +263,72 @@ struct BranchBoundSolverTestAccess {
             return solver.currentForbidReplacementDelta(node, tree, *it);
         }
 
+        std::pair<int, int> firstBranchEdge(
+            BranchEdgeOrder order,
+            const std::vector<std::pair<int, int>>& tree_edges,
+            const std::vector<AlphaEntry>& alpha_entries)
+        {
+            tree = OneTree{};
+            tree.feasible = true;
+            tree.degree.assign(static_cast<std::size_t>(solver.n_), 0);
+            for (const auto& endpoints : tree_edges) {
+                const Edge selected = edge(endpoints.first, endpoints.second);
+                tree.edges.push_back(selected);
+                tree.cost += selected.w;
+                ++tree.degree[static_cast<std::size_t>(selected.u)];
+                ++tree.degree[static_cast<std::size_t>(selected.v)];
+            }
+            expect(tree.edges.size() == static_cast<std::size_t>(solver.n_),
+                   "branch-order fixture must contain exactly n 1-tree edges");
+
+            const std::size_t state_size =
+                static_cast<std::size_t>(solver.n_) * solver.n_;
+            tree.edge_index_in_tree.assign(state_size, -1);
+            for (std::size_t index = 0; index < tree.edges.size(); ++index) {
+                const Edge& selected = tree.edges[index];
+                tree.edge_index_in_tree[solver.edgeId(
+                    selected.u, selected.v)] = static_cast<int>(index);
+            }
+            solver.initializeDynamicMst(tree);
+
+            solver.candidates_sorted_ = candidates;
+            solver.edge_rank_by_id_.assign(state_size, -1);
+            solver.candidate_word_count_ =
+                (solver.candidates_sorted_.size() + 63) / 64;
+            solver.resetCandidateBits(node, solver.candidates_sorted_.size());
+            solver.available_degree_.assign(
+                static_cast<std::size_t>(solver.n_), 0);
+            solver.insufficient_degree_count_ = 0;
+            for (std::size_t index = 0;
+                 index < solver.candidates_sorted_.size(); ++index) {
+                const Edge& candidate = solver.candidates_sorted_[index];
+                solver.edge_rank_by_id_[solver.edgeId(
+                    candidate.u, candidate.v)] = static_cast<int>(index);
+                ++solver.available_degree_[
+                    static_cast<std::size_t>(candidate.u)];
+                ++solver.available_degree_[
+                    static_cast<std::size_t>(candidate.v)];
+            }
+
+            solver.root_alpha_by_edge_id_.assign(
+                state_size, std::numeric_limits<double>::infinity());
+            for (const AlphaEntry& entry : alpha_entries) {
+                solver.root_alpha_by_edge_id_[solver.edgeId(
+                    entry.u, entry.v)] = entry.value;
+            }
+            solver.branch_edge_order_ = order;
+            solver.best_cost_ = std::numeric_limits<double>::infinity();
+
+            const BranchBoundSolver::BranchSet branches =
+                solver.bpPartition(node, tree);
+            expect(!branches.empty(),
+                   "branch-order fixture produced no branch edge");
+            int u = branches.front().edge.u;
+            int v = branches.front().edge.v;
+            if (u > v) std::swap(u, v);
+            return {u, v};
+        }
+
         void validate(const OneTree& value) const
         {
             expect(value.feasible, "cannot validate infeasible 1-tree");
@@ -478,6 +550,8 @@ void testRootAlphaNearness()
     for (const tsp::BranchEdgeOrder order : {
              tsp::BranchEdgeOrder::RootAlphaAscending,
              tsp::BranchEdgeOrder::RootAlphaDescending,
+             tsp::BranchEdgeOrder::RootAlphaGlobalAscending,
+             tsp::BranchEdgeOrder::RootAlphaGlobalDescending,
              tsp::BranchEdgeOrder::AdjustedWeightDescending,
              tsp::BranchEdgeOrder::MaximumDegreeAllAdjustedWeight,
              tsp::BranchEdgeOrder::MaximumExcessCoverAdjustedWeight,
@@ -502,6 +576,52 @@ void testRootAlphaNearness()
         expectCost(result.cost, optimum,
                    "experimental branch order changed the exact optimum");
     }
+}
+
+void testRootAlphaGlobalPriority()
+{
+    const std::vector<std::vector<double>> matrix = {
+        {0, 1, 2, 20, 21, 22},
+        {1, 0, 3, 4, 5, 23},
+        {2, 3, 0, 24, 25, 6},
+        {20, 4, 24, 0, 26, 27},
+        {21, 5, 25, 26, 0, 28},
+        {22, 23, 6, 27, 28, 0},
+    };
+    // 这是合法 1-tree：顶点 1 的 excess=2，顶点 2 的 excess=1。
+    // 边 (2,5) 只接触较低违规热点，但 alpha 最小，global-asc 必须选它；
+    // (0,1) 的 alpha 最大，global-desc 必须选它。若 alpha 全平，则覆盖
+    // excess=3 的 (1,2) 应当胜出。
+    const std::vector<std::pair<int, int>> tree_edges = {
+        {0, 1}, {0, 2}, {1, 2}, {1, 3}, {1, 4}, {2, 5},
+    };
+    const std::vector<Fixture::AlphaEntry> ordered_alpha = {
+        {0, 1, 5.0}, {0, 2, 4.0}, {1, 2, 3.0},
+        {1, 3, 2.0}, {1, 4, 1.0}, {2, 5, 0.0},
+    };
+
+    Fixture ascending_fixture(matrix);
+    Fixture::expect(
+        ascending_fixture.firstBranchEdge(
+            tsp::BranchEdgeOrder::RootAlphaGlobalAscending,
+            tree_edges, ordered_alpha) == std::pair<int, int>{2, 5},
+        "global ascending alpha did not override degree priority");
+
+    Fixture descending_fixture(matrix);
+    Fixture::expect(
+        descending_fixture.firstBranchEdge(
+            tsp::BranchEdgeOrder::RootAlphaGlobalDescending,
+            tree_edges, ordered_alpha) == std::pair<int, int>{0, 1},
+        "global descending alpha did not override degree priority");
+
+    std::vector<Fixture::AlphaEntry> tied_alpha = ordered_alpha;
+    for (Fixture::AlphaEntry& entry : tied_alpha) entry.value = 0.0;
+    Fixture tied_fixture(matrix);
+    Fixture::expect(
+        tied_fixture.firstBranchEdge(
+            tsp::BranchEdgeOrder::RootAlphaGlobalAscending,
+            tree_edges, tied_alpha) == std::pair<int, int>{1, 2},
+        "global alpha tie did not prefer larger excess coverage");
 }
 
 void testRootOneTreeFrequencyCollection()
@@ -1317,6 +1437,7 @@ int main()
     try {
         testInternalReplacement();
         testRootAlphaNearness();
+        testRootAlphaGlobalPriority();
         testRootOneTreeFrequencyCollection();
         testCurrentForbidReplacementDelta();
         testRootReplacement();

@@ -151,6 +151,35 @@ debug 信息写到标准错误，不会破坏批处理模式的 CSV 标准输出
 最优证明。完整实验与结论见
 [`docs/HKMST-LKH-1tree-experiment-2026-08-06.md`](docs/HKMST-LKH-1tree-experiment-2026-08-06.md)。
 
+### 根 α-nearness 分支顺序
+
+局部策略保持原 BP 规则：先固定一个最大度违规顶点，再用根静态 α 排序其
+关联边。全局策略则考察当前 1-tree 中所有至少接触一个度违规顶点的未决边，
+先比较 α，平局时再优先两端超度覆盖量较大的边：
+
+```bash
+./build/tsp_bb --branch-edge-order root-alpha-asc input.tsp
+./build/tsp_bb --branch-edge-order root-alpha-desc input.tsp
+./build/tsp_bb --branch-edge-order root-alpha-global-asc input.tsp
+./build/tsp_bb --branch-edge-order root-alpha-global-desc input.tsp
+```
+
+这些选项只改变 BP 分支边顺序，不改变候选集、1-tree 下界或精确性。
+
+参数消融可先运行三实例正确性 smoke suite：
+
+```bash
+python3 tools/run_phkmst_ablation.py \
+  --solver ./build/tsp_bb \
+  --suite smoke \
+  --output-dir outputs/phkmst-ablation-smoke
+```
+
+脚本内置 `smoke/core/trigger/alpha/all` 五组参数集合；输出配置、原始运行、
+逐实例结果和汇总四份 CSV 及一份 Markdown 表。默认 smoke 清单见
+`data/classic/batch-ablation-smoke.txt`，并以 TSPLIB 已知最优值检查每组结果，
+任一策略成本不一致时返回非零状态。
+
 ### 搜索节点势更新实验
 
 根节点仍先执行 `--hk-ascent`。后续节点可从当前势 warm start，在当前
@@ -220,14 +249,17 @@ Polyak，也可用 `--hk-node-ascent helsgaun` 切换到论文式 period 和平�
 
 ```text
 instance,status,method,dimension,cost,root_lower_bound,initial_upper_bound,
-nodes_created,nodes_expanded,pruned_by_bound,pruned_infeasible,
+instance_wall_seconds,nodes_created,nodes_expanded,pruned_by_bound,pruned_infeasible,
 potential_updates_attempted,potential_updates_improved,potential_updates_pruned,
-potential_updates_rebuilt,potential_update_iterations,potential_update_seconds,
+potential_updates_rebuilt,potential_updates_stopped_prunable,
+potential_update_iterations,potential_update_seconds,
 potential_update_rebuild_seconds,potential_update_total_gain,
 potential_update_max_gain,tour,message
 ```
 
 `status=ok,method=exact` 表示精确求解得到最优 tour；精确搜索证实无解时为 `status=infeasible`。每个实例的 debug 信息仍只写到标准错误。
+`instance_wall_seconds` 单独计量每个实例从解析输入到 `solve()` 返回的墙钟时间；
+它不包含批处理进程启动和 CSV 输出时间。
 
 后续验证经典数据集时，可以把矩阵或 TSPLIB 实例路径写入一个清单文件：
 

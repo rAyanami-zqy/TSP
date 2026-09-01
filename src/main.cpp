@@ -1,6 +1,7 @@
 #include "TspSolver.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <exception>
@@ -56,6 +57,8 @@ struct RunResult {
     // 解析后的实例名与顶点数，避免输出阶段再次访问已释放的 TspProblem。
     std::string problem_name;
     int dimension = 0;
+    // 从读取实例到 solve() 返回的单实例墙钟时间；批处理逐行输出该值。
+    double instance_wall_seconds = 0.0;
 };
 
 // 去掉 batch 清单行首尾空白，便于处理空行和注释行。
@@ -139,6 +142,7 @@ std::string formatTourLimited(const std::vector<int>& tour, std::size_t max_vert
 // 统一的单实例求解入口：自动识别矩阵或 TSPLIB，进行精确求解。
 RunResult solveInput(std::istream& input, const CliOptions& options)
 {
+    const auto started_at = std::chrono::steady_clock::now();
     tsp::TspProblem problem = tsp::readTspProblem(input);
     const int dimension = problem.dimension();
     RunResult output;
@@ -169,6 +173,8 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
         solver.setDebugOutput(std::cerr, options.debug_interval);
     }
     output.result = solver.solve();
+    output.instance_wall_seconds = std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - started_at).count();
     return output;
 }
 
@@ -185,6 +191,7 @@ void printHumanResult(const RunResult& run)
 
     std::cout << "Root lower bound: " << result.stats.root_lower_bound << '\n';
     std::cout << "Initial upper bound: " << result.stats.initial_upper_bound << '\n';
+    std::cout << "Instance wall seconds: " << run.instance_wall_seconds << '\n';
     std::cout << "Nodes created: " << result.stats.nodes_created << '\n';
     std::cout << "Nodes expanded: " << result.stats.nodes_expanded << '\n';
     std::cout << "Pruned by bound: " << result.stats.nodes_pruned_by_bound << '\n';
@@ -253,6 +260,7 @@ void printBatchHeader()
 {
     std::cout
         << "instance,status,method,dimension,cost,root_lower_bound,initial_upper_bound,"
+        << "instance_wall_seconds,"
         << "nodes_created,nodes_expanded,pruned_by_bound,pruned_infeasible,"
         << "potential_updates_attempted,potential_updates_improved,"
         << "potential_updates_pruned,potential_updates_rebuilt,"
@@ -273,8 +281,11 @@ void printBatchRow(const std::string& path,
 
     if (run == nullptr) {
         // 读取失败、解析失败等情况没有求解统计，只保留错误信息。
-        std::cout << ",,,,,,,,,,,,,,,,,,,,"
-                  << csvQuote(message) << '\n';
+        // method 到 tour 共 21 个空字段；最后一个字段保留错误消息。
+        for (int field = 0; field < 21; ++field) {
+            std::cout << ',';
+        }
+        std::cout << csvQuote(message) << '\n';
         return;
     }
 
@@ -285,6 +296,7 @@ void printBatchRow(const std::string& path,
               << formatDouble(result.cost) << ','
               << formatDouble(result.stats.root_lower_bound) << ','
               << formatDouble(result.stats.initial_upper_bound) << ','
+              << formatDouble(run->instance_wall_seconds) << ','
               << result.stats.nodes_created << ','
               << result.stats.nodes_expanded << ','
               << result.stats.nodes_pruned_by_bound << ','
@@ -368,6 +380,7 @@ void printUsage(const char* program)
               << "  --hk-ascent <none|polyak|helsgaun|hybrid>\n"
               << "  --hk-node-ascent <polyak|helsgaun>\n"
               << "  --branch-edge-order <weight|root-alpha-asc|root-alpha-desc|"
+                 "root-alpha-global-asc|root-alpha-global-desc|"
                  "forbid-delta-asc|forbid-delta-desc|forbid-degree-desc|"
                  "root-frequency-middle|strong-top2|weight-desc|"
                  "max-degree-all-weight|excess-cover-weight|"
@@ -431,6 +444,12 @@ tsp::BranchEdgeOrder parseBranchEdgeOrder(const std::string& value)
     if (value == "root-alpha-desc") {
         return tsp::BranchEdgeOrder::RootAlphaDescending;
     }
+    if (value == "root-alpha-global-asc") {
+        return tsp::BranchEdgeOrder::RootAlphaGlobalAscending;
+    }
+    if (value == "root-alpha-global-desc") {
+        return tsp::BranchEdgeOrder::RootAlphaGlobalDescending;
+    }
     if (value == "weight-desc") {
         return tsp::BranchEdgeOrder::AdjustedWeightDescending;
     }
@@ -476,6 +495,7 @@ tsp::BranchEdgeOrder parseBranchEdgeOrder(const std::string& value)
     throw std::runtime_error(
         "invalid value for --branch-edge-order: " + value
         + " (expected weight, root-alpha-asc, root-alpha-desc, "
+          "root-alpha-global-asc, root-alpha-global-desc, "
           "forbid-delta-asc, forbid-delta-desc, forbid-degree-desc, "
           "root-frequency-middle, strong-top2, weight-desc, "
           "max-degree-all-weight, excess-cover-weight, "

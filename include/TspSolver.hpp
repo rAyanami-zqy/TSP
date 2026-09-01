@@ -143,6 +143,11 @@ enum class BranchEdgeOrder {
     RootAlphaAscending,
     // 优先选择根 1-tree alpha-nearness 较大的边。
     RootAlphaDescending,
+    // 扩大到所有接触度违规顶点的未决树边，先按 alpha-nearness 升序，
+    // alpha 相同时再优先覆盖更多两端超度。
+    RootAlphaGlobalAscending,
+    // 候选范围同上，但先按 alpha-nearness 降序，再按超度覆盖降序。
+    RootAlphaGlobalDescending,
     // 优先禁止后使当前 1-tree 下界增量最大的树边；无 replacement 的边
     // 视为正无穷。评分只查询当前 fundamental cut，不修改工作 1-tree。
     CurrentForbidDeltaDescending,
