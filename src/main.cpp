@@ -30,18 +30,28 @@ struct CliOptions {
     // 不改变 1-tree 下界或 Kruskal 候选顺序。
     tsp::BranchEdgeOrder branch_edge_order
         = tsp::BranchEdgeOrder::AdjustedWeight;
-    // 搜索节点是否更新势，以及更新势只作临时证书还是安装为子树 epoch。
+    // 搜索节点是否更新势；启用时新势始终安装为子树 epoch。
     tsp::PotentialUpdateStrategy potential_update
         = tsp::PotentialUpdateStrategy::None;
-    // Depth 模式的触发间隔；Adaptive 模式的最小深度；subtree 模式下还
-    // 表示当前节点距离上一势 epoch 至少要相隔多少层。
+    // 当前节点距离上一势 epoch 至少要相隔多少层。
     std::size_t potential_update_depth = 4;
     // 每次节点势更新最多执行的次梯度迭代轮数。
     std::size_t potential_update_iterations = 8;
-    // Adaptive 模式允许触发更新的最大相对 gap：(UB-LB)/max(1,|UB|)。
+    // SubtreeAdaptive 允许触发更新的最大相对 gap：(UB-LB)/max(1,|UB|)。
     double potential_update_gap_ratio = 0.05;
+    // SubtreeAdaptive 的最小相对 gap；默认 0 表示不设下限。
+    double potential_update_min_gap_ratio = 0.0;
+    // 可选的大 gap 分档起点和迭代上限；iterations=0 表示关闭分档。
+    double potential_update_large_gap_ratio = 0.0;
+    std::size_t potential_update_large_gap_iterations = 0;
     // 一轮精确搜索允许尝试的节点势更新次数；根重启后重新计数。
     std::size_t potential_update_budget = 1000;
+    // 两阶段筛选默认关闭；正数表示完整上升前先观察多少次实际势更新。
+    std::size_t potential_update_probe_updates = 0;
+    // 初始相对 gap 大于该值时才执行 probe，较小 gap 直接完成全部迭代。
+    double potential_update_probe_min_gap_ratio = 0.0;
+    // probe 最强证书必须覆盖原 gap 的最小比例，否则丢弃该次更新。
+    double potential_update_probe_min_coverage = 0.0;
     // 为 true 时只报告启发式上界和根 1-tree 下界，不进入 BP 精确搜索。
     bool root_bound_only = false;
     // debug 输出写入 stderr；interval 表示每扩展多少个节点输出一次进度。
@@ -168,6 +178,14 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
         options.potential_update_iterations,
         options.potential_update_gap_ratio,
         options.potential_update_budget);
+    solver.setPotentialUpdateGapSchedule(
+        options.potential_update_min_gap_ratio,
+        options.potential_update_large_gap_ratio,
+        options.potential_update_large_gap_iterations);
+    solver.setPotentialUpdateProbeOptions(
+        options.potential_update_probe_updates,
+        options.potential_update_probe_min_gap_ratio,
+        options.potential_update_probe_min_coverage);
     solver.setRootBoundOnly(options.root_bound_only);
     if (options.debug) {
         solver.setDebugOutput(std::cerr, options.debug_interval);
@@ -191,13 +209,37 @@ void printHumanResult(const RunResult& run)
 
     std::cout << "Root lower bound: " << result.stats.root_lower_bound << '\n';
     std::cout << "Initial upper bound: " << result.stats.initial_upper_bound << '\n';
+    std::cout << "Root potential iterations: "
+              << result.stats.root_potential_iterations << '\n';
     std::cout << "Instance wall seconds: " << run.instance_wall_seconds << '\n';
     std::cout << "Nodes created: " << result.stats.nodes_created << '\n';
     std::cout << "Nodes expanded: " << result.stats.nodes_expanded << '\n';
     std::cout << "Pruned by bound: " << result.stats.nodes_pruned_by_bound << '\n';
     std::cout << "Pruned infeasible: " << result.stats.nodes_pruned_infeasible << '\n';
-    std::cout << "Potential updates attempted: "
-              << result.stats.potential_updates_attempted << '\n';
+    std::cout << "Search-node potential update candidates: "
+              << result.stats.search_node_potential_update_candidates << '\n';
+    std::cout << "Search-node potential updates triggered: "
+              << result.stats.search_node_potential_updates_triggered << '\n';
+    std::cout << "Potential updates skipped strategy none: "
+              << result.stats.search_node_potential_updates_skipped_strategy_none << '\n';
+    std::cout << "Potential updates skipped update depth zero: "
+              << result.stats.search_node_potential_updates_skipped_update_depth_zero << '\n';
+    std::cout << "Potential updates skipped budget exhausted: "
+              << result.stats.search_node_potential_updates_skipped_budget_exhausted << '\n';
+    std::cout << "Potential updates skipped numerically unsafe: "
+              << result.stats.search_node_potential_updates_skipped_numerically_unsafe << '\n';
+    std::cout << "Potential updates skipped invalid state: "
+              << result.stats.search_node_potential_updates_skipped_invalid_state << '\n';
+    std::cout << "Potential updates skipped zero violation: "
+              << result.stats.search_node_potential_updates_skipped_zero_violation << '\n';
+    std::cout << "Potential updates skipped zero iteration limit: "
+              << result.stats.search_node_potential_updates_skipped_zero_iteration_limit << '\n';
+    std::cout << "Potential updates skipped depth interval: "
+              << result.stats.search_node_potential_updates_skipped_depth_interval << '\n';
+    std::cout << "Potential updates skipped gap below minimum: "
+              << result.stats.search_node_potential_updates_skipped_gap_below_minimum << '\n';
+    std::cout << "Potential updates skipped gap above maximum: "
+              << result.stats.search_node_potential_updates_skipped_gap_above_maximum << '\n';
     std::cout << "Potential updates improved: "
               << result.stats.potential_updates_improved << '\n';
     std::cout << "Potential updates pruned: "
@@ -206,8 +248,16 @@ void printHumanResult(const RunResult& run)
               << result.stats.potential_updates_rebuilt << '\n';
     std::cout << "Potential updates stopped prunable: "
               << result.stats.potential_updates_stopped_prunable << '\n';
-    std::cout << "Potential update iterations: "
-              << result.stats.potential_update_iterations << '\n';
+    std::cout << "Potential updates large-gap tier: "
+              << result.stats.potential_updates_large_gap_tier << '\n';
+    std::cout << "Potential update probes started: "
+              << result.stats.potential_update_probes_started << '\n';
+    std::cout << "Potential update probes continued: "
+              << result.stats.potential_update_probes_continued << '\n';
+    std::cout << "Potential update probes rejected: "
+              << result.stats.potential_update_probes_rejected << '\n';
+    std::cout << "Search-node potential iterations: "
+              << result.stats.search_node_potential_iterations << '\n';
     std::cout << "Potential update seconds: "
               << result.stats.potential_update_seconds << '\n';
     std::cout << "Potential update rebuild seconds: "
@@ -260,14 +310,30 @@ void printBatchHeader()
 {
     std::cout
         << "instance,status,method,dimension,cost,root_lower_bound,initial_upper_bound,"
+        << "root_potential_iterations,"
         << "instance_wall_seconds,"
         << "nodes_created,nodes_expanded,pruned_by_bound,pruned_infeasible,"
-        << "potential_updates_attempted,potential_updates_improved,"
+        << "search_node_potential_update_candidates,"
+        << "search_node_potential_updates_triggered,"
+        << "search_node_potential_updates_skipped_strategy_none,"
+        << "search_node_potential_updates_skipped_update_depth_zero,"
+        << "search_node_potential_updates_skipped_budget_exhausted,"
+        << "search_node_potential_updates_skipped_numerically_unsafe,"
+        << "search_node_potential_updates_skipped_invalid_state,"
+        << "search_node_potential_updates_skipped_zero_violation,"
+        << "search_node_potential_updates_skipped_zero_iteration_limit,"
+        << "search_node_potential_updates_skipped_depth_interval,"
+        << "search_node_potential_updates_skipped_gap_below_minimum,"
+        << "search_node_potential_updates_skipped_gap_above_maximum,"
+        << "potential_updates_improved,"
         << "potential_updates_pruned,potential_updates_rebuilt,"
         << "potential_updates_stopped_prunable,"
-        << "potential_update_iterations,potential_update_seconds,"
+        << "potential_updates_large_gap_tier,"
+        << "search_node_potential_iterations,potential_update_seconds,"
         << "potential_update_rebuild_seconds,potential_update_total_gain,"
-        << "potential_update_max_gain,tour,message\n";
+        << "potential_update_max_gain,potential_update_probes_started,"
+        << "potential_update_probes_continued,potential_update_probes_rejected,"
+        << "tour,message\n";
 }
 
 // 输出一条批处理记录。result 为空表示文件读取或解析阶段已经失败。
@@ -281,8 +347,9 @@ void printBatchRow(const std::string& path,
 
     if (run == nullptr) {
         // 读取失败、解析失败等情况没有求解统计，只保留错误信息。
-        // method 到 tour 共 21 个空字段；最后一个字段保留错误消息。
-        for (int field = 0; field < 21; ++field) {
+        // method 到 tour 共 37 个空字段；最后一个字段保留错误消息。
+        // 新增批量列时必须同步此数量，确保错误行也与 CSV 表头严格对齐。
+        for (int field = 0; field < 37; ++field) {
             std::cout << ',';
         }
         std::cout << csvQuote(message) << '\n';
@@ -296,21 +363,37 @@ void printBatchRow(const std::string& path,
               << formatDouble(result.cost) << ','
               << formatDouble(result.stats.root_lower_bound) << ','
               << formatDouble(result.stats.initial_upper_bound) << ','
+              << result.stats.root_potential_iterations << ','
               << formatDouble(run->instance_wall_seconds) << ','
               << result.stats.nodes_created << ','
               << result.stats.nodes_expanded << ','
               << result.stats.nodes_pruned_by_bound << ','
               << result.stats.nodes_pruned_infeasible << ','
-              << result.stats.potential_updates_attempted << ','
+              << result.stats.search_node_potential_update_candidates << ','
+              << result.stats.search_node_potential_updates_triggered << ','
+              << result.stats.search_node_potential_updates_skipped_strategy_none << ','
+              << result.stats.search_node_potential_updates_skipped_update_depth_zero << ','
+              << result.stats.search_node_potential_updates_skipped_budget_exhausted << ','
+              << result.stats.search_node_potential_updates_skipped_numerically_unsafe << ','
+              << result.stats.search_node_potential_updates_skipped_invalid_state << ','
+              << result.stats.search_node_potential_updates_skipped_zero_violation << ','
+              << result.stats.search_node_potential_updates_skipped_zero_iteration_limit << ','
+              << result.stats.search_node_potential_updates_skipped_depth_interval << ','
+              << result.stats.search_node_potential_updates_skipped_gap_below_minimum << ','
+              << result.stats.search_node_potential_updates_skipped_gap_above_maximum << ','
               << result.stats.potential_updates_improved << ','
               << result.stats.potential_updates_pruned << ','
               << result.stats.potential_updates_rebuilt << ','
               << result.stats.potential_updates_stopped_prunable << ','
-              << result.stats.potential_update_iterations << ','
+              << result.stats.potential_updates_large_gap_tier << ','
+              << result.stats.search_node_potential_iterations << ','
               << formatDouble(result.stats.potential_update_seconds) << ','
               << formatDouble(result.stats.potential_update_rebuild_seconds) << ','
               << formatDouble(result.stats.potential_update_total_gain) << ','
               << formatDouble(result.stats.potential_update_max_gain) << ','
+              << result.stats.potential_update_probes_started << ','
+              << result.stats.potential_update_probes_continued << ','
+              << result.stats.potential_update_probes_rejected << ','
               << csvQuote(formatTourLimited(result.tour)) << ','
               << csvQuote(message) << '\n';
 }
@@ -387,11 +470,17 @@ void printUsage(const char* program)
                  "local-excess-cover-weight|max-degree-excess-weight|"
                  "propagation-weight|forced-degree-weight|"
                  "max-degree-min-undecided|max-degree-max-undecided>\n"
-              << "  --hk-potential-update <none|depth|adaptive|subtree-depth|subtree-adaptive>\n"
+              << "  --hk-potential-update <none|subtree-depth|subtree-adaptive>\n"
               << "  --hk-update-depth <n>\n"
               << "  --hk-update-iterations <n>\n"
               << "  --hk-update-gap-ratio <x>\n"
+              << "  --hk-update-min-gap-ratio <x>\n"
+              << "  --hk-update-large-gap-ratio <x>\n"
+              << "  --hk-update-large-gap-iterations <n>\n"
               << "  --hk-update-budget <n>\n"
+              << "  --hk-update-probe-updates <n>\n"
+              << "  --hk-update-probe-min-gap-ratio <x>\n"
+              << "  --hk-update-probe-min-coverage <x in [0,1]>\n"
               << "  --root-bound-only\n"
               << "  --debug\n"
               << "  --debug-interval <n>\n";
@@ -421,8 +510,6 @@ tsp::PotentialUpdateStrategy parsePotentialUpdateStrategy(
     const std::string& value)
 {
     if (value == "none") return tsp::PotentialUpdateStrategy::None;
-    if (value == "depth") return tsp::PotentialUpdateStrategy::Depth;
-    if (value == "adaptive") return tsp::PotentialUpdateStrategy::Adaptive;
     if (value == "subtree-depth") {
         return tsp::PotentialUpdateStrategy::SubtreeDepth;
     }
@@ -431,7 +518,7 @@ tsp::PotentialUpdateStrategy parsePotentialUpdateStrategy(
     }
     throw std::runtime_error(
         "invalid value for --hk-potential-update: " + value
-        + " (expected none, depth, adaptive, subtree-depth, or subtree-adaptive)");
+        + " (expected none, subtree-depth, or subtree-adaptive)");
 }
 
 tsp::BranchEdgeOrder parseBranchEdgeOrder(const std::string& value)
@@ -543,6 +630,8 @@ std::size_t parseSizeOption(const std::string& value, const std::string& name)
 CliOptions parseArgs(int argc, char** argv)
 {
     CliOptions options;
+    bool large_gap_ratio_seen = false;
+    bool large_gap_iterations_seen = false;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         auto require_value = [&](const std::string& option_name) -> std::string {
@@ -579,18 +668,56 @@ CliOptions parseArgs(int argc, char** argv)
             }
         } else if (arg == "--hk-update-iterations") {
             options.potential_update_iterations = parseSizeOption(require_value(arg), arg);
-            if (options.potential_update_iterations == 0) {
-                throw std::runtime_error("--hk-update-iterations must be greater than zero");
-            }
         } else if (arg == "--hk-update-gap-ratio") {
             options.potential_update_gap_ratio = parseDoubleOption(require_value(arg), arg);
             if (options.potential_update_gap_ratio < 0.0) {
                 throw std::runtime_error("--hk-update-gap-ratio must be non-negative");
             }
+        } else if (arg == "--hk-update-min-gap-ratio") {
+            options.potential_update_min_gap_ratio =
+                parseDoubleOption(require_value(arg), arg);
+            if (options.potential_update_min_gap_ratio < 0.0) {
+                throw std::runtime_error(
+                    "--hk-update-min-gap-ratio must be non-negative");
+            }
+        } else if (arg == "--hk-update-large-gap-ratio") {
+            options.potential_update_large_gap_ratio =
+                parseDoubleOption(require_value(arg), arg);
+            if (options.potential_update_large_gap_ratio < 0.0) {
+                throw std::runtime_error(
+                    "--hk-update-large-gap-ratio must be non-negative");
+            }
+            large_gap_ratio_seen = true;
+        } else if (arg == "--hk-update-large-gap-iterations") {
+            options.potential_update_large_gap_iterations =
+                parseSizeOption(require_value(arg), arg);
+            if (options.potential_update_large_gap_iterations == 0) {
+                throw std::runtime_error(
+                    "--hk-update-large-gap-iterations must be greater than zero");
+            }
+            large_gap_iterations_seen = true;
         } else if (arg == "--hk-update-budget") {
             options.potential_update_budget = parseSizeOption(require_value(arg), arg);
             if (options.potential_update_budget == 0) {
                 throw std::runtime_error("--hk-update-budget must be greater than zero");
+            }
+        } else if (arg == "--hk-update-probe-updates") {
+            options.potential_update_probe_updates =
+                parseSizeOption(require_value(arg), arg);
+        } else if (arg == "--hk-update-probe-min-gap-ratio") {
+            options.potential_update_probe_min_gap_ratio =
+                parseDoubleOption(require_value(arg), arg);
+            if (options.potential_update_probe_min_gap_ratio < 0.0) {
+                throw std::runtime_error(
+                    "--hk-update-probe-min-gap-ratio must be non-negative");
+            }
+        } else if (arg == "--hk-update-probe-min-coverage") {
+            options.potential_update_probe_min_coverage =
+                parseDoubleOption(require_value(arg), arg);
+            if (options.potential_update_probe_min_coverage < 0.0
+                || options.potential_update_probe_min_coverage > 1.0) {
+                throw std::runtime_error(
+                    "--hk-update-probe-min-coverage must be in [0, 1]");
             }
         } else if (arg == "--root-bound-only") {
             options.root_bound_only = true;
@@ -608,6 +735,11 @@ CliOptions parseArgs(int argc, char** argv)
         } else {
             throw std::runtime_error("multiple input files provided");
         }
+    }
+    if (large_gap_ratio_seen != large_gap_iterations_seen) {
+        throw std::runtime_error(
+            "--hk-update-large-gap-ratio and "
+            "--hk-update-large-gap-iterations must be used together");
     }
     return options;
 }

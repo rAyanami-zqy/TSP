@@ -495,6 +495,29 @@ void expectCost(double actual, double expected, const std::string& message)
     }
 }
 
+void expectPotentialUpdateDecisionAccounting(
+    const tsp::SolveStats& stats, const std::string& context)
+{
+    // 所有未触发计数均为互斥的“首个阻止原因”。该恒等式既能防止新增判断
+    // 时漏记原因，也能防止同一候选节点被多个原因重复累计。
+    const std::size_t skipped =
+        stats.search_node_potential_updates_skipped_strategy_none
+        + stats.search_node_potential_updates_skipped_update_depth_zero
+        + stats.search_node_potential_updates_skipped_budget_exhausted
+        + stats.search_node_potential_updates_skipped_numerically_unsafe
+        + stats.search_node_potential_updates_skipped_invalid_state
+        + stats.search_node_potential_updates_skipped_zero_violation
+        + stats.search_node_potential_updates_skipped_zero_iteration_limit
+        + stats.search_node_potential_updates_skipped_depth_interval
+        + stats.search_node_potential_updates_skipped_gap_below_minimum
+        + stats.search_node_potential_updates_skipped_gap_above_maximum;
+    if (stats.search_node_potential_update_candidates
+        != stats.search_node_potential_updates_triggered + skipped) {
+        throw std::runtime_error(
+            context + ": potential-update decision counters do not add up");
+    }
+}
+
 double bruteForceOptimalCost(const std::vector<std::vector<double>>& matrix)
 {
     const int n = static_cast<int>(matrix.size());
@@ -1031,11 +1054,13 @@ void testMixedMagnitudeForceRollback()
     tsp::BranchBoundSolver update_solver(matrix);
     update_solver.setRootAscentStrategy(tsp::RootAscentStrategy::None);
     update_solver.setPotentialUpdateOptions(
-        tsp::PotentialUpdateStrategy::Adaptive, 1, 16, 1.0, 100);
+        tsp::PotentialUpdateStrategy::SubtreeAdaptive, 1, 16, 1.0, 100);
     const tsp::SolveResult update_result = update_solver.solve();
     expectCost(update_result.cost, result.cost,
                "mixed-magnitude potential safety changed the optimum");
-    if (update_result.stats.potential_updates_attempted != 0) {
+    expectPotentialUpdateDecisionAccounting(
+        update_result.stats, "mixed-magnitude potential safety");
+    if (update_result.stats.search_node_potential_updates_triggered != 0) {
         throw std::runtime_error(
             "mixed-magnitude instance did not disable node potential updates");
     }
@@ -1068,7 +1093,7 @@ void testRandomCompleteSolveAgainstBruteForce()
             update_solver.setRootAscentStrategy(tsp::RootAscentStrategy::None);
             update_solver.setPotentialUpdateOptions(
                 case_index % 2 == 0
-                    ? tsp::PotentialUpdateStrategy::Adaptive
+                    ? tsp::PotentialUpdateStrategy::SubtreeDepth
                     : tsp::PotentialUpdateStrategy::SubtreeAdaptive,
                 1, 16, 1.0, 100);
             const tsp::SolveResult update_result = update_solver.solve();
@@ -1124,7 +1149,7 @@ void testRandomSparseSolveAgainstBruteForce()
             update_solver.setRootAscentStrategy(tsp::RootAscentStrategy::None);
             update_solver.setPotentialUpdateOptions(
                 case_index % 2 == 0
-                    ? tsp::PotentialUpdateStrategy::Adaptive
+                    ? tsp::PotentialUpdateStrategy::SubtreeDepth
                     : tsp::PotentialUpdateStrategy::SubtreeAdaptive,
                 1, 16, 1.0, 100);
             const tsp::SolveResult update_result = update_solver.solve();
@@ -1263,6 +1288,11 @@ void testRootAscentStrategies()
             throw std::runtime_error(
                 "root ascent produced an invalid TSP lower bound");
         }
+        const bool should_run = strategy != tsp::RootAscentStrategy::None;
+        if ((result.stats.root_potential_iterations != 0) != should_run) {
+            throw std::runtime_error(
+                "root potential iteration statistics do not match the strategy");
+        }
         return result.stats.root_lower_bound;
     };
 
@@ -1300,8 +1330,6 @@ void testSearchNodePotentialUpdates()
     const auto matrix = problem.toDenseMatrix(42);
 
     for (const tsp::PotentialUpdateStrategy strategy : {
-             tsp::PotentialUpdateStrategy::Depth,
-             tsp::PotentialUpdateStrategy::Adaptive,
              tsp::PotentialUpdateStrategy::SubtreeDepth,
              tsp::PotentialUpdateStrategy::SubtreeAdaptive}) {
         tsp::BranchBoundSolver solver(matrix);
@@ -1309,12 +1337,65 @@ void testSearchNodePotentialUpdates()
         const tsp::SolveResult result = solver.solve();
         expectCost(result.cost, 699.0,
                    "node potential update changed the exact optimum");
-        if (result.stats.potential_updates_attempted == 0
+        expectPotentialUpdateDecisionAccounting(
+            result.stats, "node potential update");
+        if (result.stats.search_node_potential_updates_triggered == 0
             || result.stats.potential_updates_improved == 0
             || result.stats.potential_updates_pruned == 0
-            || result.stats.potential_update_iterations == 0) {
+            || result.stats.search_node_potential_iterations == 0) {
             throw std::runtime_error(
                 "node potential update regression did not exercise its trigger");
+        }
+        if (result.stats.potential_updates_improved
+            != result.stats.potential_updates_pruned
+                + result.stats.potential_updates_rebuilt) {
+            throw std::runtime_error(
+                "node potential update did not persist every non-pruning improvement");
+        }
+    }
+
+    // 基础轮数为 0 时，可只启用大 gap 分档；threshold=0 使本例所有命中
+    // gap/深度门的尝试都走 8 轮分档。
+    {
+        tsp::BranchBoundSolver solver(matrix);
+        solver.setPotentialUpdateOptions(
+            tsp::PotentialUpdateStrategy::SubtreeAdaptive,
+            1, 0, 1.0, 100);
+        solver.setPotentialUpdateGapSchedule(0.0, 0.0, 8);
+        const tsp::SolveResult result = solver.solve();
+        expectCost(result.cost, 699.0,
+                   "large-gap iteration tier changed the exact optimum");
+        expectPotentialUpdateDecisionAccounting(
+            result.stats, "large-gap iteration tier");
+        if (result.stats.search_node_potential_updates_triggered == 0
+            || result.stats.potential_updates_large_gap_tier
+                != result.stats.search_node_potential_updates_triggered) {
+            throw std::runtime_error(
+                "large-gap iteration tier did not classify every update");
+        }
+    }
+
+    // dantzig42 搜索中的相对 gap 远小于 100%；把最小门设为 100% 应完全
+    // 阻止 Adaptive 更新，同时不改变精确结果。
+    {
+        tsp::BranchBoundSolver solver(matrix);
+        solver.setPotentialUpdateOptions(
+            tsp::PotentialUpdateStrategy::SubtreeAdaptive,
+            1, 8, 1.0, 100);
+        solver.setPotentialUpdateGapSchedule(1.0, 0.0, 0);
+        const tsp::SolveResult result = solver.solve();
+        expectCost(result.cost, 699.0,
+                   "minimum gap gate changed the exact optimum");
+        expectPotentialUpdateDecisionAccounting(
+            result.stats, "minimum gap gate");
+        if (result.stats.search_node_potential_updates_triggered != 0) {
+            throw std::runtime_error(
+                "minimum gap gate unexpectedly allowed an update");
+        }
+        if (result.stats.search_node_potential_updates_skipped_gap_below_minimum
+            == 0) {
+            throw std::runtime_error(
+                "minimum gap gate did not report its skipped nodes");
         }
     }
 
@@ -1330,8 +1411,10 @@ void testSearchNodePotentialUpdates()
         const tsp::SolveResult result = solver.solve();
         expectCost(result.cost, 699.0,
                    "node Helsgaun update changed the exact optimum");
-        if (result.stats.potential_updates_attempted == 0
-            || result.stats.potential_update_iterations == 0) {
+        expectPotentialUpdateDecisionAccounting(
+            result.stats, "node Helsgaun update");
+        if (result.stats.search_node_potential_updates_triggered == 0
+            || result.stats.search_node_potential_iterations == 0) {
             throw std::runtime_error(
                 "node Helsgaun regression did not exercise its update loop");
         }
@@ -1352,8 +1435,6 @@ void testSearchNodePotentialUpdates()
              tsp::NodeAscentStrategy::Polyak,
              tsp::NodeAscentStrategy::Helsgaun}) {
         for (const tsp::PotentialUpdateStrategy strategy : {
-                 tsp::PotentialUpdateStrategy::Depth,
-                 tsp::PotentialUpdateStrategy::Adaptive,
                  tsp::PotentialUpdateStrategy::SubtreeDepth,
                  tsp::PotentialUpdateStrategy::SubtreeAdaptive}) {
             tsp::BranchBoundSolver solver(small);
@@ -1362,7 +1443,7 @@ void testSearchNodePotentialUpdates()
             solver.setPotentialUpdateOptions(strategy, 1, 16, 1.0, 100);
             const tsp::SolveResult result = solver.solve();
             expectCost(result.cost, small_optimum,
-                       "node potential certificate exceeded brute-force optimum");
+                       "node potential epoch exceeded brute-force optimum");
         }
     }
 
@@ -1388,6 +1469,27 @@ void testSearchNodePotentialUpdates()
     if (subtree_result.stats.potential_updates_stopped_prunable == 0) {
         throw std::runtime_error(
             "persistent potential regression exercised no prunable early stop");
+    }
+
+    // 两阶段筛选在 2%--5% 的外层 gap 区间先观察两次势移动。coverage=1
+    // 会拒绝所有尚未直接形成剪枝证书的 probe，用于同时覆盖“进入”和
+    // “丢弃”路径；2% 内的节点仍按原策略跑满。
+    tsp::BranchBoundSolver probe_solver(st70_problem.toDenseMatrix(70));
+    probe_solver.setPotentialUpdateOptions(
+        tsp::PotentialUpdateStrategy::SubtreeAdaptive,
+        2, 16, 0.05, 5000);
+    probe_solver.setPotentialUpdateProbeOptions(2, 0.02, 1.0);
+    const tsp::SolveResult probe_result = probe_solver.solve();
+    expectCost(probe_result.cost, 675.0,
+               "potential probe changed the st70 optimum");
+    if (probe_result.stats.potential_update_probes_started == 0
+        || probe_result.stats.potential_update_probes_rejected == 0) {
+        throw std::runtime_error(
+            "potential probe regression exercised no rejected probe");
+    }
+    if (probe_result.stats.potential_update_probes_continued != 0) {
+        throw std::runtime_error(
+            "coverage=1 unexpectedly continued a non-pruning probe");
     }
 }
 

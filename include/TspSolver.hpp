@@ -25,10 +25,37 @@ struct SolveStats {
     double root_lower_bound = 0.0;
     // 进入精确搜索前由 NN、2-opt 和 LK 得到的初始可行 tour 成本。
     double initial_upper_bound = 0.0;
-    // 搜索节点上的势更新统计。证书模式只使用临时下界；subtree 模式
-    // 还会重建候选排序和 HKMST 状态，并让新势在该锚点子树内持续生效。
+    // 所有根势优化实际执行的 1-tree/次梯度评估总轮数；Hybrid
+    // 会累加 Polyak 和 Helsgaun 阶段，根搜索重启时也继续累加。
+    std::size_t root_potential_iterations = 0;
+    // 搜索节点上的势更新统计。成功改善且未立即剪枝的新势会
+    // 重建候选排序和 HKMST 状态，并在该锚点子树内持续生效。
+    // 实际进入势更新触发判定的非根逻辑搜索节点数。它不包含在触发判定前
+    // 已被不可行性/下界剪枝的节点，也不重复计算新 epoch 对同一锚点的重入。
+    std::size_t search_node_potential_update_candidates = 0;
     // 通过触发条件并实际开始执行的节点势更新次数。
-    std::size_t potential_updates_attempted = 0;
+    std::size_t search_node_potential_updates_triggered = 0;
+    // 以下 skipped 计数互斥：每个候选节点只按判定顺序记入第一个阻止原因。
+    // 势更新策略为 none，因而没有启用任何搜索节点势优化。
+    std::size_t search_node_potential_updates_skipped_strategy_none = 0;
+    // --hk-update-depth=0 显式关闭了搜索节点势优化。
+    std::size_t search_node_potential_updates_skipped_update_depth_zero = 0;
+    // 当前根搜索轮次允许的势更新尝试预算已经耗尽。
+    std::size_t search_node_potential_updates_skipped_budget_exhausted = 0;
+    // 当前数值尺度无法为势修正提供可靠的有限精度安全余量。
+    std::size_t search_node_potential_updates_skipped_numerically_unsafe = 0;
+    // 1-tree、节点下界或 incumbent 上界不是可用于触发判断的有限状态。
+    std::size_t search_node_potential_updates_skipped_invalid_state = 0;
+    // 当前 1-tree 每个顶点的度均为 2，没有非零次梯度可用于势上升。
+    std::size_t search_node_potential_updates_skipped_zero_violation = 0;
+    // 当前 gap 分档选出的节点势上升最大轮数为 0。
+    std::size_t search_node_potential_updates_skipped_zero_iteration_limit = 0;
+    // 与最近一次持久化势 epoch 的深度距离小于配置的更新间隔。
+    std::size_t search_node_potential_updates_skipped_depth_interval = 0;
+    // 相对 gap 小于 --hk-update-min-gap-ratio。
+    std::size_t search_node_potential_updates_skipped_gap_below_minimum = 0;
+    // 相对 gap 大于 --hk-update-gap-ratio。
+    std::size_t search_node_potential_updates_skipped_gap_above_maximum = 0;
     // 得到严格强于原节点下界的势更新次数。
     std::size_t potential_updates_improved = 0;
     // 新势下界直接达到剪枝条件的次数。
@@ -37,8 +64,16 @@ struct SolveStats {
     std::size_t potential_updates_rebuilt = 0;
     // 已取得足以安全剪枝的证书，因此不再执行剩余势迭代的尝试数。
     std::size_t potential_updates_stopped_prunable = 0;
+    // 使用“大 gap”分档迭代上限的更新尝试数。
+    std::size_t potential_updates_large_gap_tier = 0;
+    // 初始相对 gap 落在 probe 区间、实际进入短轮次筛选的更新次数。
+    std::size_t potential_update_probes_started = 0;
+    // 完成 probe 后达到最小 gap 覆盖率、继续执行完整势上升的次数。
+    std::size_t potential_update_probes_continued = 0;
+    // 完成 probe 后覆盖率不足，丢弃其势和临时下界的次数。
+    std::size_t potential_update_probes_rejected = 0;
     // 所有节点势更新实际执行的次梯度轮数之和。
-    std::size_t potential_update_iterations = 0;
+    std::size_t search_node_potential_iterations = 0;
     // 节点势上升本身的累计墙钟秒数，不含 subtree 状态重建。
     double potential_update_seconds = 0.0;
     // subtree 模式重建候选排序、位图和 1-tree 的累计墙钟秒数。
@@ -92,15 +127,11 @@ enum class NodeAscentStrategy {
     Helsgaun,
 };
 
-// 搜索节点上的势更新触发策略。Depth/Adaptive 只生成临时证书；
-// SubtreeDepth/SubtreeAdaptive 把更新势安装成可嵌套、回溯恢复的子树 epoch。
+// 搜索节点上的势更新触发策略。所有启用的策略都把新势安装成
+// 可嵌套、回溯恢复的子树 epoch；不再提供只生成临时证书的模式。
 enum class PotentialUpdateStrategy {
     // 搜索节点不做额外势更新，只使用根势。
     None,
-    // 每隔固定 DFS 深度做临时势更新证书。
-    Depth,
-    // 深度达到门槛且相对 UB-LB gap 足够小时做临时证书。
-    Adaptive,
     // 每隔固定 epoch 深度安装一组在整棵子树内持续生效的新势。
     SubtreeDepth,
     // 同时满足 epoch 深度间隔和相对 gap 时安装子树势。
@@ -244,14 +275,28 @@ public:
     void setNodeAscentStrategy(NodeAscentStrategy strategy);
     // 设置 BP 在违规顶点内部选择分支边的比较顺序；不改变下界算法。
     void setBranchEdgeOrder(BranchEdgeOrder order);
-    // 配置搜索节点势更新：depth 是深度/epoch 间隔，iterations 是单次
-    // 最大轮数，gap_ratio 是 Adaptive 的相对 gap，budget 是每轮根搜索
-    // 的最大尝试次数。启用策略时 depth/iterations/budget 必须为正。
+    // 配置搜索节点势更新：depth 是深度/epoch 间隔，iterations 是小 gap
+    // 档的单次最大轮数，gap_ratio 是 Adaptive 的最大相对 gap，budget 是
+    // 每轮根搜索的最大尝试次数。iterations 可为 0，以便只启用大 gap 档。
     void setPotentialUpdateOptions(PotentialUpdateStrategy strategy,
                                    std::size_t depth,
                                    std::size_t iterations,
                                    double gap_ratio,
                                    std::size_t budget);
+    // SubtreeAdaptive 的最小 gap 及可选分档上限。相对 gap 小于
+    // min_gap_ratio 时不触发；large_gap_iterations>0 且 gap 不小于
+    // large_gap_ratio 时，用该轮数替换基础 iterations。默认 (0,0,0)
+    // 保留原有“只设 gap 上限、固定轮数”的行为。
+    void setPotentialUpdateGapSchedule(double min_gap_ratio,
+                                       double large_gap_ratio,
+                                       std::size_t large_gap_iterations);
+    // 可选的两阶段节点势更新筛选。updates 是完整上升前先观察的实际势更新
+    // 次数（需要 updates+1 次 1-tree 评估）；只有初始相对 gap 严格大于
+    // min_gap_ratio 时启用 probe。probe 最强下界覆盖原 gap 的比例低于
+    // min_coverage 时丢弃结果。updates=0 完全关闭并保留原有路径。
+    void setPotentialUpdateProbeOptions(std::size_t updates,
+                                        double min_gap_ratio,
+                                        double min_coverage);
     // 只建立启发式上界、根势和根 1-tree，不进入精确 BP 搜索。该模式用于
     // 可复现地下界实验；返回的 cost/tour 只是可行上界，不能视作最优证明。
     void setRootBoundOnly(bool enabled);
@@ -505,6 +550,12 @@ private:
         bool feasible = false;
         // 是否因正式剪枝谓词成立而省掉至少一轮剩余迭代。
         bool stopped_prunable = false;
+        // 本次更新的初始 gap 是否落入已配置的 probe 区间。
+        bool probe_started = false;
+        // probe 覆盖率达标并继续执行了后续完整上升。
+        bool probe_continued = false;
+        // probe 覆盖率不足；调用方必须丢弃其势和下界。
+        bool probe_rejected = false;
         // 所有已评估势中最强的原问题下界。
         double bound = -std::numeric_limits<double>::infinity();
         // 实际完成的 1-tree/次梯度评估次数。
@@ -518,12 +569,32 @@ private:
     NodePotentialUpdateResult updateNodePotentialBound(
         const PartialSol& node, double current_bound,
         double upper_bound, std::size_t max_iterations) const;
-    // 根据策略、深度、相对 gap、次梯度是否非零和本轮预算判断当前节点
-    // 是否值得尝试势更新；仅作判断，不消耗预算也不修改搜索状态。
-    bool shouldUpdatePotentials(const OneTree& tree, int depth,
-                                double bound, double upper_bound) const;
-    // 当前策略是否会安装并持续使用子树势 epoch。
-    bool usesPersistentPotentialUpdates() const;
+    // 搜索节点势更新的互斥判定结果。枚举顺序不表示优先级；实际优先级由
+    // classifyPotentialUpdate 中与历史 shouldUpdatePotentials 相同的检查顺序定义。
+    enum class PotentialUpdateDecision {
+        Trigger,
+        StrategyNone,
+        UpdateDepthZero,
+        BudgetExhausted,
+        NumericallyUnsafe,
+        InvalidState,
+        ZeroViolation,
+        ZeroIterationLimit,
+        DepthInterval,
+        GapBelowMinimum,
+        GapAboveMaximum,
+    };
+    // 根据策略、深度、相对 gap、次梯度是否非零和本轮预算分类当前节点。
+    // 仅作判断，不消耗预算也不修改搜索状态；调用方负责累计互斥统计。
+    PotentialUpdateDecision classifyPotentialUpdate(
+        const OneTree& tree, int depth,
+        double bound, double upper_bound) const;
+    // 按当前节点相对 gap 选择基础或大 gap 档的最大迭代数。
+    std::size_t potentialUpdateIterationLimit(
+        double bound, double upper_bound) const;
+    // 当前节点是否命中已启用的大 gap 迭代档。
+    bool usesLargeGapPotentialUpdateTier(
+        double bound, double upper_bound) const;
     // 在选中的锚点尝试安装新势和新候选排序，并递归搜索整棵子树。返回
     // true 表示该子树已被新证书剪枝或已由新 epoch 完整处理，调用者不应
     // 再走父势路径；false 表示提升不足或重建失败，应继续原路径。
@@ -737,14 +808,26 @@ private:
     // 搜索节点势更新的触发和生命周期策略。
     PotentialUpdateStrategy potential_update_strategy_
         = PotentialUpdateStrategy::None;
-    // Depth 策略的层间隔、Adaptive 的最小深度，也是 subtree epoch 的最小间隔。
+    // SubtreeDepth/SubtreeAdaptive 中两次成功安装 epoch 的最小层间隔。
     std::size_t potential_update_depth_ = 4;
     // 每次 updateNodePotentialBound 最多执行的次梯度轮数。
     std::size_t potential_update_iterations_ = 8;
-    // Adaptive/SubtreeAdaptive 允许更新的最大相对 gap。
+    // SubtreeAdaptive 允许更新的最大相对 gap。
     double potential_update_gap_ratio_ = 0.05;
+    // SubtreeAdaptive 允许更新的最小相对 gap；默认不设下限。
+    double potential_update_min_gap_ratio_ = 0.0;
+    // 大 gap 分档起点；只有 large_gap_iterations_>0 时生效。
+    double potential_update_large_gap_ratio_ = 0.0;
+    // 大 gap 分档的最大迭代数；0 完全关闭分档。
+    std::size_t potential_update_large_gap_iterations_ = 0;
     // 每轮根搜索最多尝试多少次节点势更新。
     std::size_t potential_update_budget_ = 1000;
+    // 0 关闭两阶段筛选；正数表示 probe 中实际观察多少次势更新。
+    std::size_t potential_update_probe_updates_ = 0;
+    // 初始相对 gap 严格大于该值时才使用 probe；更近剪枝线的节点直接跑满。
+    double potential_update_probe_min_gap_ratio_ = 0.0;
+    // probe 最强下界至少需要覆盖原 UB-LB gap 的比例。
+    double potential_update_probe_min_coverage_ = 0.0;
     // 预算按一次精确 DFS 轮次计算；incumbent 改善并重启时清零。
     std::size_t potential_updates_in_round_ = 0;
     // 当前已安装势 epoch 的锚点 DFS 深度；根势 epoch 为 0。

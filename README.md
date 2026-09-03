@@ -166,14 +166,12 @@ debug 信息写到标准错误，不会破坏批处理模式的 CSV 标准输出
 
 这些选项只改变 BP 分支边顺序，不改变候选集、1-tree 下界或精确性。
 
-参数消融运行器内置 Concorde 和十四种 PHKMST 配置，默认按代码中的顺序全部
+参数消融运行器内置 Concorde 和多种 PHKMST 配置，默认按代码中的顺序全部
 执行。也可用 `--configs` 选择需要的子集；当前配置先跑完全部实例、写出独立
 结果与汇总，之后才开始下一配置。
 
 ```bash
 python3 tools/run_phkmst_ablation.py \
-  --solver ./build/tsp_bb \
-  --concorde ./concorde/TSP/concorde \
   --configs Concorde P0 P1 H0 \
   --workers 5 \
   --output-root outputs/phkmst-ablation
@@ -182,14 +180,54 @@ python3 tools/run_phkmst_ablation.py \
 默认实例清单是 `data/classic/batch-ablation-smoke.txt`，也可用 `--batch-list`
 或 `--instances` 替换。调用方式与 `tools/compare_strategies.py` 一致：每个实例
 单独启动求解进程，Concorde 使用固定 seed 和独立临时目录，`--timeout` 按实例
-生效，同一配置内部再由 `--workers` 并行。可用 `--list-configs` 查看十五种配置
-的完整参数。自定义 tsp_bb 配置仍可使用 `--strategy '名称=参数'`。
+生效，同一配置内部再由 `--workers` 并行。可用 `--list-configs` 查看代码配置区
+的完整求解器路径与参数；新增配置直接编辑下述代码配置区。
 
-每种配置会生成独立的指纹目录。`results.csv` 只保存运行时间、求解结果和分支
-数，以及关联所需的配置、重复次数、实例和状态字段。tsp_bb 的分支数取
-`nodes_created`，Concorde 取 `bbnodes`。`summary.csv` 是该配置自己的耗时和分支
-数汇总，`configuration.csv` 记录二进制摘要及完整命令。跨配置对比不在本脚本
-中完成，后续可由单独的汇总程序读取这些表。
+求解器版本及参数统一在脚本顶部“用户配置区 2”中声明。每个 `Strategy` 都直接
+保存自己的 `executable` 和 `solver_args`，因此同一次实验可以混用多个二进制，
+且不同版本完全不需要使用相同参数。例如可在 `SOLVER_CONFIGURATIONS` 中加入：
+
+```python
+Strategy(
+    name="legacy",
+    kind="tsp_bb",
+    category="version",
+    executable=PROJECT_ROOT / "build" / "tsp_bb_26_07_02",
+    solver_args=solver_arguments("--branch-strategy smart"),
+    description="2026-07-02 archived solver"),
+Strategy(
+    name="current",
+    kind="tsp_bb",
+    category="version",
+    executable=PROJECT_ROOT / "build" / "tsp_bb",
+    solver_args=solver_arguments(
+        "--hk-ascent polyak --hk-potential-update none"),
+    description="current solver"),
+```
+
+之后直接用 `--configs legacy current` 选择即可。运行器会分别从两个程序的
+`--help` 探测参数能力：`--exact-max-n`、debug 等运行器参数只会传给支持它们的
+版本；会改变实验含义的策略参数如果不受支持，对应配置会被明确跳过，不会静默
+降级。求解器路径和参数不再从命令行拼接，运行命令只负责用 `--configs` 选择
+代码中已经定义完整的配置。
+
+CSV 统计列集中定义在“用户配置区 1”的 `OUTPUT_STATISTICS`。当前默认输出成本、
+创建节点数（兼容列名 `branches`）、扩展节点数、下界剪枝数、不可行剪枝数、
+根节点势优化总轮次、搜索节点势更新候选数、触发次数、十类互斥的未触发原因，
+以及搜索节点势优化总轮次，并在 `summary.csv` 中生成对应的 total/median。
+继续扩充时只需增加标签、类型和是否汇总；求解器后来新增但未登记的
+`标签: 值` 会被安全忽略，不影响解析。
+
+每种配置会生成独立的指纹目录。`results.csv` 保存运行时间、求解结果、创建与
+扩展节点数、两项剪枝数和上述三项势优化统计，以及关联所需的配置、重复次数、
+实例和状态字段。tsp_bb 的兼容列 `branches` 取 `nodes_created`，Concorde 取
+`bbnodes`。`summary.csv` 是该配置自己的耗时、节点数、剪枝数和势优化统计汇总，
+`configuration.csv` 记录二进制摘要及完整命令。跨配置对比不在本脚本中完成，
+后续可由单独的汇总程序读取这些表。
+
+Concorde 使用独立的精简表头：逐实例结果只保留固定标识字段、`wall_seconds`、
+`result` 和 `branches`；汇总表只统计 wall time 与 branches。PHKMST 专属的
+根势、搜索节点、剪枝和未触发原因不会在 Concorde CSV 中生成空列。
 
 每完成一个“策略/重复/实例”调用，脚本就立即原子更新该策略的结果表、汇总、
 进度以及共享 `cache.json`，不会等待同一策略的其他实例。成功和超时结果在再次
@@ -201,7 +239,6 @@ python3 tools/run_phkmst_ablation.py \
 
 ```bash
 python3 tools/run_phkmst_ablation.py \
-  --solver ./build/tsp_bb \
   --configs P0 H0 \
   --batch-list data/classic/batch-hk-ascent.txt \
   --max-runs 4 \
@@ -217,21 +254,12 @@ python3 tools/run_phkmst_ablation.py \
 根节点仍先执行 `--hk-ascent`。后续节点可从当前势 warm start，在当前
 forced/forbidden/active-candidate 约束下运行有限轮势上升。节点内部默认使用
 Polyak，也可用 `--hk-node-ascent helsgaun` 切换到论文式 period 和平滑次梯度；
-触发机制及 epoch 生命周期保持不变。临时证书模式不改变 HKMST；`subtree-*`
-模式重建所有依赖势的排序和增量状态，使新势在整个锚点子树中持续生效，
-回溯到兄弟节点时恢复。
+触发机制及 epoch 生命周期保持不变。启用搜索节点势更新时，永远重建所有
+依赖势的排序和增量状态，使新势在整个锚点子树中持续生效，回溯到
+兄弟节点时恢复。
 
 ```bash
-# 每隔 2 层更新一次
-./build/tsp_bb --hk-potential-update depth \
-  --hk-update-depth 2 --hk-update-iterations 16 input.tsp
-
-# 达到深度 1 后，只在节点 gap 不超过 1% 时更新
-./build/tsp_bb --hk-potential-update adaptive \
-  --hk-update-depth 1 --hk-update-gap-ratio 0.01 \
-  --hk-update-iterations 16 --hk-update-budget 5000 input.tsp
-
-# 推荐的持久子树更新：距上次更新至少 2 层，且节点 gap 不超过 2%
+# 推荐配置：距上次更新至少 2 层，且节点 gap 不超过 2%
 ./build/tsp_bb --hk-node-ascent polyak \
   --hk-potential-update subtree-adaptive \
   --hk-update-depth 2 --hk-update-gap-ratio 0.02 \
@@ -242,16 +270,52 @@ Polyak，也可用 `--hk-node-ascent helsgaun` 切换到论文式 period 和平�
   --hk-potential-update subtree-adaptive \
   --hk-update-depth 2 --hk-update-gap-ratio 0.02 \
   --hk-update-iterations 16 --hk-update-budget 5000 input.tsp
+
+# 实验性两阶段门：gap<=2% 直接跑满；2%<gap<=5% 先移动势一次，
+# 若已覆盖原 UB-LB gap 的至少 5%，再继续到 16 轮
+./build/tsp_bb --hk-node-ascent polyak \
+  --hk-potential-update subtree-adaptive \
+  --hk-update-depth 2 --hk-update-gap-ratio 0.05 \
+  --hk-update-iterations 16 --hk-update-budget 5000 \
+  --hk-update-probe-updates 1 \
+  --hk-update-probe-min-gap-ratio 0.02 \
+  --hk-update-probe-min-coverage 0.05 input.tsp
+
+# gap 分档：所有 gap 至少 16 轮，gap>=2% 时最多 32 轮
+./build/tsp_bb --hk-node-ascent polyak \
+  --hk-potential-update subtree-adaptive \
+  --hk-update-depth 2 --hk-update-gap-ratio 1 \
+  --hk-update-iterations 16 --hk-update-budget 5000 \
+  --hk-update-large-gap-ratio 0.02 \
+  --hk-update-large-gap-iterations 32 input.tsp
+
+# 只在 2%<=gap<=100% 时更新；基础轮数也可设为 0，并用上面的
+# large-gap 两个参数只开启大 gap 档
+./build/tsp_bb --hk-potential-update subtree-adaptive \
+  --hk-update-depth 2 --hk-update-min-gap-ratio 0.02 \
+  --hk-update-gap-ratio 1 --hk-update-iterations 16 input.tsp
 ```
 
 - `none`：默认值，不在搜索节点更新势；
-- `depth`：深度为 `--hk-update-depth` 整数倍时触发；
-- `adaptive`：深度不小于该值、1-tree 仍有度数违规，且
-  `(UB-LB)/max(1,|UB|)` 不超过 `--hk-update-gap-ratio` 时触发；
 - `subtree-depth`：距当前势 epoch 至少指定层数时更新并重建子树状态；
 - `subtree-adaptive`：在 `subtree-depth` 条件上再加相对 gap 门槛；
+- `--hk-update-min-gap-ratio` 与 `--hk-update-gap-ratio` 分别是
+  `subtree-adaptive` 触发区间的下限和上限，默认下限为 0。`subtree-*` 中
+  `--hk-update-depth` 是两次成功安装 epoch 的最小层距；达到层距后，后续
+  子节点仍会检查 gap，并非只在深度的整数倍检查；
+- `--hk-update-large-gap-ratio` 与 `--hk-update-large-gap-iterations` 必须成对
+  使用。命中大 gap 档时，后者替换基础 `--hk-update-iterations`；基础轮数
+  可为 0，从而让较小 gap 完全不更新；
 - `--hk-update-budget` 是每轮精确 DFS 的最大更新尝试次数。diversified-LK
   探测轮自动封顶 1000，重启或探测结束后使用完整预算。
+- `--hk-update-probe-updates 0` 是默认值，完全关闭两阶段筛选。正数表示先
+  观察多少次实际势移动；筛选需要额外评估起始势，所以一次移动对应两次
+  1-tree 评估；
+- probe 仅用于初始相对 gap 严格大于
+  `--hk-update-probe-min-gap-ratio` 的更新。coverage 定义为
+  `(probe_best_LB-original_LB)/(UB-original_LB)`；低于
+  `--hk-update-probe-min-coverage` 时丢弃 probe 证书和势，否则在同一次上升中
+  继续。probe 无论是否接受都算一次更新尝试。
 
 批处理 CSV 和单实例输出还会报告成功安装的 subtree epoch 数及重建时间。
 证书模式实验见
@@ -281,12 +345,26 @@ Polyak，也可用 `--hk-node-ascent helsgaun` 切换到论文式 period 和平�
 
 ```text
 instance,status,method,dimension,cost,root_lower_bound,initial_upper_bound,
+root_potential_iterations,
 instance_wall_seconds,nodes_created,nodes_expanded,pruned_by_bound,pruned_infeasible,
-potential_updates_attempted,potential_updates_improved,potential_updates_pruned,
+search_node_potential_update_candidates,search_node_potential_updates_triggered,
+search_node_potential_updates_skipped_strategy_none,
+search_node_potential_updates_skipped_update_depth_zero,
+search_node_potential_updates_skipped_budget_exhausted,
+search_node_potential_updates_skipped_numerically_unsafe,
+search_node_potential_updates_skipped_invalid_state,
+search_node_potential_updates_skipped_zero_violation,
+search_node_potential_updates_skipped_zero_iteration_limit,
+search_node_potential_updates_skipped_depth_interval,
+search_node_potential_updates_skipped_gap_below_minimum,
+search_node_potential_updates_skipped_gap_above_maximum,
+potential_updates_improved,potential_updates_pruned,
 potential_updates_rebuilt,potential_updates_stopped_prunable,
-potential_update_iterations,potential_update_seconds,
+potential_updates_large_gap_tier,
+search_node_potential_iterations,potential_update_seconds,
 potential_update_rebuild_seconds,potential_update_total_gain,
-potential_update_max_gain,tour,message
+potential_update_max_gain,potential_update_probes_started,
+potential_update_probes_continued,potential_update_probes_rejected,tour,message
 ```
 
 `status=ok,method=exact` 表示精确求解得到最优 tour；精确搜索证实无解时为 `status=infeasible`。每个实例的 debug 信息仍只写到标准错误。
