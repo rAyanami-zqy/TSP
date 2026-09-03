@@ -306,8 +306,9 @@ Polyak，也可用 `--hk-node-ascent helsgaun` 切换到论文式 period 和平�
 - `--hk-update-large-gap-ratio` 与 `--hk-update-large-gap-iterations` 必须成对
   使用。命中大 gap 档时，后者替换基础 `--hk-update-iterations`；基础轮数
   可为 0，从而让较小 gap 完全不更新；
-- `--hk-update-budget` 是每轮精确 DFS 的最大更新尝试次数。diversified-LK
-  探测轮自动封顶 1000，重启或探测结束后使用完整预算。
+- `--hk-update-budget` 是每轮精确 DFS 的最大更新尝试次数；设为 `0` 时
+  不限制更新次数，同时关闭 diversified-LK 初始探测轮的 1000 次保护。
+  正数预算下，探测轮自动封顶 1000，重启或探测结束后使用完整预算。
 - `--hk-update-probe-updates 0` 是默认值，完全关闭两阶段筛选。正数表示先
   观察多少次实际势移动；筛选需要额外评估起始势，所以一次移动对应两次
   1-tree 评估；

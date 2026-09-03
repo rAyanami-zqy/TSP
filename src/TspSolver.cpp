@@ -298,10 +298,9 @@ void BranchBoundSolver::setPotentialUpdateOptions(
     PotentialUpdateStrategy strategy, std::size_t depth,
     std::size_t iterations, double gap_ratio, std::size_t budget)
 {
-    if (strategy != PotentialUpdateStrategy::None
-        && (depth == 0 || budget == 0)) {
+    if (strategy != PotentialUpdateStrategy::None && depth == 0) {
         throw std::invalid_argument(
-            "potential update depth and budget must be positive");
+            "potential update depth must be positive");
     }
     if (!isFinite(gap_ratio) || gap_ratio < 0.0) {
         throw std::invalid_argument(
@@ -919,8 +918,11 @@ BranchBoundSolver::classifyPotentialUpdate(
     // incumbent，该轮会整体回滚。先给它一个保守预算，探测完成或重启后
     // 再开放完整用户预算，避免在注定丢弃的轮次做大量局部上升。
     // active_budget 是当前根搜索轮次实际可用的尝试上限，不是剩余次数。
+    // 用户预算为 0 时表示完全不限；初始探测轮的 1000 次保护也随之关闭。
     const std::size_t active_budget =
-        !diversified_tour_attempted_ && !initial_tour_alternatives_.empty()
+        potential_update_budget_ != 0
+            && !diversified_tour_attempted_
+            && !initial_tour_alternatives_.empty()
         ? std::min<std::size_t>(potential_update_budget_, 1000)
         : potential_update_budget_;
     // 调用方只会为 depth>0 的非根逻辑节点调用本函数。这里仍把非正深度
@@ -931,7 +933,7 @@ BranchBoundSolver::classifyPotentialUpdate(
     if (potential_update_depth_ == 0) {
         return PotentialUpdateDecision::UpdateDepthZero;
     }
-    if (potential_updates_in_round_ >= active_budget) {
+    if (active_budget != 0 && potential_updates_in_round_ >= active_budget) {
         return PotentialUpdateDecision::BudgetExhausted;
     }
     if (!potential_ascent_numerically_safe_) {

@@ -126,6 +126,16 @@ if(BUILD_TESTING)
         WILL_FAIL TRUE
     )
 
+    add_test(NAME tsp_cli_unlimited_potential_update_budget
+        COMMAND $<TARGET_FILE:tsp_bb>
+            --hk-potential-update subtree-depth
+            --hk-update-budget 0
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/five-city.txt
+    )
+    set_tests_properties(tsp_cli_unlimited_potential_update_budget PROPERTIES
+        PASS_REGULAR_EXPRESSION "Method: exact"
+    )
+
     add_test(NAME tsp_cli_tsplib
         COMMAND $<TARGET_FILE:tsp_bb>
             ${CMAKE_CURRENT_SOURCE_DIR}/examples/tsplib/five-node-euc.tsp

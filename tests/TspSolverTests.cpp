@@ -217,6 +217,34 @@ struct BranchBoundSolverTestAccess {
                    "Prim potential bound differs from constrained Kruskal");
         }
 
+        void verifyUnlimitedPotentialUpdateBudget()
+        {
+            solver.initial_tour_alternatives_.push_back(
+                BranchBoundSolver::TourCandidate{});
+            solver.setPotentialUpdateOptions(
+                PotentialUpdateStrategy::SubtreeDepth,
+                1, 1, 1.0, 5000);
+            solver.potential_updates_in_round_ = 1000;
+            const auto limited = solver.classifyPotentialUpdate(
+                tree, 1, tree.cost,
+                tree.cost + std::max(1.0, std::fabs(tree.cost)));
+            expect(
+                limited
+                    == BranchBoundSolver::PotentialUpdateDecision::BudgetExhausted,
+                   "positive node-potential budget was not enforced");
+
+            solver.setPotentialUpdateOptions(
+                PotentialUpdateStrategy::SubtreeDepth,
+                1, 1, 1.0, 0);
+            const auto unlimited = solver.classifyPotentialUpdate(
+                tree, 1, tree.cost,
+                tree.cost + std::max(1.0, std::fabs(tree.cost)));
+            expect(
+                unlimited
+                    != BranchBoundSolver::PotentialUpdateDecision::BudgetExhausted,
+                "zero node-potential budget did not disable the limit");
+        }
+
         void buildRootAlphaNearness()
         {
             expect(tree.feasible,
@@ -1066,6 +1094,12 @@ void testMixedMagnitudeForceRollback()
     }
 }
 
+void testUnlimitedPotentialUpdateBudget()
+{
+    Fixture fixture(replacementMatrix());
+    fixture.verifyUnlimitedPotentialUpdateBudget();
+}
+
 void testRandomCompleteSolveAgainstBruteForce()
 {
     std::mt19937 generator(2026071501);
@@ -1557,6 +1591,7 @@ int main()
         testBpPrefixTreeRegressions();
         testScaleSafeExactSearch();
         testMixedMagnitudeForceRollback();
+        testUnlimitedPotentialUpdateBudget();
         testRandomCompleteSolveAgainstBruteForce();
         testRandomSparseSolveAgainstBruteForce();
         testProblemParsingDoesNotWriteStdout();

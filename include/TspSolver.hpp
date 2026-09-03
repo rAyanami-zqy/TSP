@@ -277,7 +277,8 @@ public:
     void setBranchEdgeOrder(BranchEdgeOrder order);
     // 配置搜索节点势更新：depth 是深度/epoch 间隔，iterations 是小 gap
     // 档的单次最大轮数，gap_ratio 是 Adaptive 的最大相对 gap，budget 是
-    // 每轮根搜索的最大尝试次数。iterations 可为 0，以便只启用大 gap 档。
+    // 每轮根搜索的最大尝试次数；budget=0 表示不限制。iterations 可为 0，
+    // 以便只启用大 gap 档。
     void setPotentialUpdateOptions(PotentialUpdateStrategy strategy,
                                    std::size_t depth,
                                    std::size_t iterations,
@@ -820,7 +821,7 @@ private:
     double potential_update_large_gap_ratio_ = 0.0;
     // 大 gap 分档的最大迭代数；0 完全关闭分档。
     std::size_t potential_update_large_gap_iterations_ = 0;
-    // 每轮根搜索最多尝试多少次节点势更新。
+    // 每轮根搜索最多尝试多少次节点势更新；0 表示不限制。
     std::size_t potential_update_budget_ = 1000;
     // 0 关闭两阶段筛选；正数表示 probe 中实际观察多少次势更新。
     std::size_t potential_update_probe_updates_ = 0;

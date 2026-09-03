@@ -44,7 +44,7 @@ struct CliOptions {
     // 可选的大 gap 分档起点和迭代上限；iterations=0 表示关闭分档。
     double potential_update_large_gap_ratio = 0.0;
     std::size_t potential_update_large_gap_iterations = 0;
-    // 一轮精确搜索允许尝试的节点势更新次数；根重启后重新计数。
+    // 一轮精确搜索允许尝试的节点势更新次数；根重启后重新计数，0 不限。
     std::size_t potential_update_budget = 1000;
     // 两阶段筛选默认关闭；正数表示完整上升前先观察多少次实际势更新。
     std::size_t potential_update_probe_updates = 0;
@@ -477,7 +477,7 @@ void printUsage(const char* program)
               << "  --hk-update-min-gap-ratio <x>\n"
               << "  --hk-update-large-gap-ratio <x>\n"
               << "  --hk-update-large-gap-iterations <n>\n"
-              << "  --hk-update-budget <n>\n"
+              << "  --hk-update-budget <n> (0 = unlimited)\n"
               << "  --hk-update-probe-updates <n>\n"
               << "  --hk-update-probe-min-gap-ratio <x>\n"
               << "  --hk-update-probe-min-coverage <x in [0,1]>\n"
@@ -698,9 +698,6 @@ CliOptions parseArgs(int argc, char** argv)
             large_gap_iterations_seen = true;
         } else if (arg == "--hk-update-budget") {
             options.potential_update_budget = parseSizeOption(require_value(arg), arg);
-            if (options.potential_update_budget == 0) {
-                throw std::runtime_error("--hk-update-budget must be greater than zero");
-            }
         } else if (arg == "--hk-update-probe-updates") {
             options.potential_update_probe_updates =
                 parseSizeOption(require_value(arg), arg);
