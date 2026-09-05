@@ -1,0 +1,255 @@
+{
+  "run_id": "H4-48c8a8573883",
+  "run": {
+    "format_version": 2,
+    "strategy": "H4",
+    "kind": "tsp_bb",
+    "executable": "/home/wj/code/TSP/build/tsp_bb",
+    "executable_sha256": "52008dbba2074e03e6715cf4b9ea52f3d09408db5c42f902402df89fed92f74b",
+    "solver_args": [
+      "--hk-ascent",
+      "polyak",
+      "--hk-node-ascent",
+      "polyak",
+      "--branch-edge-order",
+      "weight",
+      "--hk-potential-update",
+      "subtree-adaptive",
+      "--hk-update-depth",
+      "4",
+      "--hk-update-gap-ratio",
+      "0.02",
+      "--hk-update-min-gap-ratio",
+      "0.0",
+      "--hk-update-iterations",
+      "16",
+      "--hk-update-budget",
+      "0",
+      "--exact-max-n",
+      "199",
+      "--debug",
+      "--debug-interval",
+      "5000000"
+    ],
+    "timeout_seconds": 1800.0,
+    "workers": 5,
+    "repeats": 1,
+    "instances": [
+      "/home/wj/code/TSP/data/classic/tsplib/att48.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/bayg29.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/bays29.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/berlin52.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/bier127.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/brazil58.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/brg180.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/burma14.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/ch130.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/ch150.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/d198.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/dantzig42.tsp",
+      "/home/wj/code/TSP/data/classic/national/dj38.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/eil101.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/eil51.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/eil76.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/fri26.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/gr120.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/gr137.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/gr17.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/gr21.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/gr24.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/gr48.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/gr96.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/hk48.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/kroA100.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/kroA150.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/kroB100.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/kroB150.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/kroC100.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/kroD100.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/kroE100.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/lin105.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/pr107.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/pr124.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/pr136.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/pr144.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/pr152.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/pr76.tsp",
+      "/home/wj/code/TSP/data/classic/national/qa194.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/rat195.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/rat99.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/rd100.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/si175.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/st70.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/swiss42.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/u159.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/ulysses16.tsp",
+      "/home/wj/code/TSP/data/classic/national/wi29.tsp",
+      "/home/wj/code/TSP/data/classic/vlsi/vlsi/xqf131.tsp"
+    ],
+    "output_statistics": [
+      {
+        "column": "result",
+        "tspbb_labels": [
+          "Optimal cost",
+          "Optimal tour cost",
+          "Optimum cost"
+        ],
+        "kind": "float",
+        "concorde_key": "cost"
+      },
+      {
+        "column": "branches",
+        "tspbb_labels": [
+          "Nodes created",
+          "B&B nodes",
+          "BB nodes",
+          "Branch-and-bound nodes"
+        ],
+        "kind": "int",
+        "concorde_key": "bbnodes"
+      },
+      {
+        "column": "nodes_expanded",
+        "tspbb_labels": [
+          "Nodes expanded"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "pruned_by_bound",
+        "tspbb_labels": [
+          "Pruned by bound"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "pruned_infeasible",
+        "tspbb_labels": [
+          "Pruned infeasible",
+          "Pruned by infeasibility"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "root_potential_iterations",
+        "tspbb_labels": [
+          "Root potential iterations"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_update_candidates",
+        "tspbb_labels": [
+          "Search-node potential update candidates"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_updates_triggered",
+        "tspbb_labels": [
+          "Search-node potential updates triggered",
+          "Potential updates attempted"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_updates_skipped_strategy_none",
+        "tspbb_labels": [
+          "Potential updates skipped strategy none"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_updates_skipped_update_depth_zero",
+        "tspbb_labels": [
+          "Potential updates skipped update depth zero"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_updates_skipped_budget_exhausted",
+        "tspbb_labels": [
+          "Potential updates skipped budget exhausted"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_updates_skipped_numerically_unsafe",
+        "tspbb_labels": [
+          "Potential updates skipped numerically unsafe"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_updates_skipped_invalid_state",
+        "tspbb_labels": [
+          "Potential updates skipped invalid state"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_updates_skipped_zero_violation",
+        "tspbb_labels": [
+          "Potential updates skipped zero violation"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_updates_skipped_zero_iteration_limit",
+        "tspbb_labels": [
+          "Potential updates skipped zero iteration limit"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_updates_skipped_depth_interval",
+        "tspbb_labels": [
+          "Potential updates skipped depth interval"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_updates_skipped_gap_below_minimum",
+        "tspbb_labels": [
+          "Potential updates skipped gap below minimum"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_updates_skipped_gap_above_maximum",
+        "tspbb_labels": [
+          "Potential updates skipped gap above maximum"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_iterations",
+        "tspbb_labels": [
+          "Search-node potential iterations",
+          "Potential update iterations"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      }
+    ]
+  },
+  "status": "complete",
+  "completed_rows": 50,
+  "total_rows": 50
+}

@@ -18,3 +18,4 @@ solver/NEWHKMST/tsp_bb
 *.mas
 *.idx
 *.bak
+build-phkmst-release/
