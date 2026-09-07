@@ -1,0 +1,2 @@
+run_id,strategy,status,rows,successful,timeouts,errors,total_wall_seconds,median_wall_seconds,total_branches,median_branches
+T1-17e082cca5ca,T1,complete,50,30,20,0,1589.8072537388653,0.07654213812202215,351753298,66.5
