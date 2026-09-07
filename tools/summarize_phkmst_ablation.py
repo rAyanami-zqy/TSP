@@ -98,6 +98,44 @@ COLLAPSIBLE_SKIP_REASON_FIELDS = frozenset({
     "search_node_potential_updates_skipped_zero_violation",
 })
 MISSING_FACTOR = "<未设置>"
+HK_NODE_ASCENT_OPTION = "--hk-node-ascent"
+HK_UPDATE_ITERATIONS_OPTION = "--hk-update-iterations"
+HK_UPDATE_DEPTH_OPTION = "--hk-update-depth"
+HK_UPDATE_GAP_RATIO_OPTION = "--hk-update-gap-ratio"
+COMPARISON_GROUPS = (
+    (
+        "polyak-iterations",
+        "一、Polyak 节点势优化：hk-update-iterations 对比",
+        "保持其余参数不变，仅比较 hk-update-iterations；每组按成功实例数优先、共同成功集总运行时间次之给出结论。",
+    ),
+    (
+        "polyak-depth-iterations-32",
+        "二、Polyak 节点势优化 + iterations=32：depth 对比",
+        "保持 hk-update-iterations=32 和其余参数不变，比较不同 depth；优先展示与 depth=1 的对比。",
+    ),
+    (
+        "polyak-ratio-iterations-32",
+        "三、Polyak 节点势优化 + iterations=32：ratio 对比",
+        "保持 hk-update-iterations=32、depth 等其余参数不变，仅比较 hk-update-gap-ratio。",
+    ),
+    (
+        "node-ascent-strategy",
+        "四、仅节点势优化策略不同的对比",
+        "在各组既定 depth、hk-update-iterations 和 ratio 下，仅切换 hk-node-ascent 策略。",
+    ),
+    (
+        "other",
+        "五、其他单因素与重复性对比",
+        "保留其余自动发现的单因素及相同配置重复运行对比，计算与展示口径不变。",
+    ),
+)
+COMPARISON_GROUP_BY_ID = {
+    group_id: (title, description)
+    for group_id, title, description in COMPARISON_GROUPS
+}
+COMPARISON_GROUP_ORDER = {
+    group_id: index for index, (group_id, _, _) in enumerate(COMPARISON_GROUPS)
+}
 
 
 @dataclass(frozen=True)
@@ -541,6 +579,130 @@ def automatic_comparisons(runs: Sequence[Run]) -> list[Comparison]:
     return comparisons_found
 
 
+def comparison_factor_key(comparison: Comparison) -> str | None:
+    """Return the sole changed solver option, if this is a one-factor pair."""
+    factor_keys = sorted(set(comparison.left.options) | set(comparison.right.options))
+    changed = differences(comparison.left, comparison.right, factor_keys)
+    return changed[0][0] if len(changed) == 1 else None
+
+
+def pair_option_is(comparison: Comparison, option: str, expected: str) -> bool:
+    return all(
+        run.options.get(option, MISSING_FACTOR) == expected
+        for run in (comparison.left, comparison.right)
+    )
+
+
+def comparison_group_id(comparison: Comparison) -> str:
+    factor = comparison_factor_key(comparison)
+    polyak_node_ascent = pair_option_is(
+        comparison, HK_NODE_ASCENT_OPTION, "polyak")
+    iterations_32 = pair_option_is(
+        comparison, HK_UPDATE_ITERATIONS_OPTION, "32")
+    if factor == HK_UPDATE_ITERATIONS_OPTION and polyak_node_ascent:
+        return "polyak-iterations"
+    if (factor == HK_UPDATE_DEPTH_OPTION and polyak_node_ascent
+            and iterations_32):
+        return "polyak-depth-iterations-32"
+    if (factor == HK_UPDATE_GAP_RATIO_OPTION and polyak_node_ascent
+            and iterations_32):
+        return "polyak-ratio-iterations-32"
+    if factor == HK_NODE_ASCENT_OPTION:
+        return "node-ascent-strategy"
+    return "other"
+
+
+def option_sort_value(value: str) -> tuple[int, float | str]:
+    try:
+        return (0, float(value))
+    except ValueError:
+        return (1, value)
+
+
+def non_anchor_option_sort_value(
+    comparison: Comparison, option: str, anchor: str,
+) -> tuple[int, float | str]:
+    values = [comparison.left.options.get(option, MISSING_FACTOR),
+              comparison.right.options.get(option, MISSING_FACTOR)]
+    alternatives = [value for value in values if value != anchor]
+    return option_sort_value(alternatives[0] if alternatives else values[-1])
+
+
+def is_primary_polyak_iteration_series(comparison: Comparison) -> bool:
+    expected_options = {
+        "--hk-ascent": "polyak",
+        HK_NODE_ASCENT_OPTION: "polyak",
+        "--branch-edge-order": "weight",
+        HK_UPDATE_DEPTH_OPTION: "1",
+        HK_UPDATE_GAP_RATIO_OPTION: "0.02",
+        "--hk-update-min-gap-ratio": "0.0",
+        "--hk-update-budget": "0",
+    }
+    return all(
+        pair_option_is(comparison, option, expected)
+        for option, expected in expected_options.items()
+    )
+
+
+def comparison_sort_key(
+    comparison: Comparison, original_index: int,
+) -> tuple[Any, ...]:
+    """Order automatic pairs into the report's analysis-first presentation."""
+    group_id = comparison_group_id(comparison)
+    group_rank = COMPARISON_GROUP_ORDER[group_id]
+    if group_id == "polyak-iterations":
+        return (
+            group_rank,
+            0 if is_primary_polyak_iteration_series(comparison) else 1,
+            non_anchor_option_sort_value(
+                comparison, HK_UPDATE_ITERATIONS_OPTION, "32"),
+            original_index,
+        )
+    if group_id == "polyak-depth-iterations-32":
+        return (
+            group_rank,
+            option_sort_value(comparison.left.options.get(
+                HK_UPDATE_GAP_RATIO_OPTION, MISSING_FACTOR)),
+            non_anchor_option_sort_value(
+                comparison, HK_UPDATE_DEPTH_OPTION, "1"),
+            original_index,
+        )
+    if group_id == "polyak-ratio-iterations-32":
+        return (
+            group_rank,
+            option_sort_value(comparison.left.options.get(
+                HK_UPDATE_DEPTH_OPTION, MISSING_FACTOR)),
+            non_anchor_option_sort_value(
+                comparison, HK_UPDATE_GAP_RATIO_OPTION, "0.02"),
+            original_index,
+        )
+    if group_id == "node-ascent-strategy":
+        return (
+            group_rank,
+            option_sort_value(comparison.left.options.get(
+                HK_UPDATE_DEPTH_OPTION, MISSING_FACTOR)),
+            option_sort_value(comparison.left.options.get(
+                HK_UPDATE_ITERATIONS_OPTION, MISSING_FACTOR)),
+            option_sort_value(comparison.left.options.get(
+                HK_UPDATE_GAP_RATIO_OPTION, MISSING_FACTOR)),
+            original_index,
+        )
+    return (group_rank, original_index)
+
+
+def organize_comparisons(
+    comparisons_found: Sequence[Comparison],
+) -> list[Comparison]:
+    indexed = list(enumerate(comparisons_found))
+    return [
+        comparison
+        for original_index, comparison in sorted(
+            indexed,
+            key=lambda item: comparison_sort_key(item[1], item[0]),
+        )
+    ]
+
+
 def select_reference(runs: Sequence[Run], selector: str) -> tuple[Run | None, str | None]:
     if selector.lower() in {"", "none", "off"}:
         return None, None
@@ -585,7 +747,7 @@ def build_comparisons(
             comparison_from_pair(baseline, run, factor_keys)
             for run in comparison_runs[1:]
         ]
-    return output
+    return organize_comparisons(output)
 
 
 def metric_order(metrics: Iterable[str]) -> list[str]:
@@ -722,6 +884,51 @@ def coverage_statistics(comparison: Comparison) -> dict[str, Any]:
         "result_agreements": agreements,
         "result_mismatches": mismatches,
     }
+
+
+def iteration_comparison_verdict(comparison: Comparison) -> str | None:
+    """Explain which per-trigger iteration cap is preferable for one context."""
+    if comparison_group_id(comparison) != "polyak-iterations":
+        return None
+    left_value = comparison.left.options.get(
+        HK_UPDATE_ITERATIONS_OPTION, MISSING_FACTOR)
+    right_value = comparison.right.options.get(
+        HK_UPDATE_ITERATIONS_OPTION, MISSING_FACTOR)
+    coverage = coverage_statistics(comparison)
+    if coverage["left_ok"] != coverage["right_ok"]:
+        if coverage["left_ok"] > coverage["right_ok"]:
+            winner, winner_ok, loser_ok = (
+                left_value, coverage["left_ok"], coverage["right_ok"])
+        else:
+            winner, winner_ok, loser_ok = (
+                right_value, coverage["right_ok"], coverage["left_ok"])
+        return (
+            "结论：按成功实例数优先，"
+            f"hk-update-iterations={winner} 更优"
+            f"（成功 {winner_ok} 个，对侧 {loser_ok} 个）。"
+        )
+
+    timing = pair_metric_statistics(comparison, "wall_seconds")
+    left_total = timing["left_total"]
+    right_total = timing["right_total"]
+    if left_total is None or right_total is None:
+        return "结论：双方成功数相同，但运行时间数据不足，无法判定更优值。"
+    tolerance = 1e-12 * max(1.0, abs(left_total), abs(right_total))
+    if abs(left_total - right_total) <= tolerance:
+        return (
+            "结论：双方成功数和共同成功集总运行时间均持平，"
+            "没有明确更优的 hk-update-iterations。"
+        )
+    if left_total < right_total:
+        winner, winner_total, loser_total = left_value, left_total, right_total
+    else:
+        winner, winner_total, loser_total = right_value, right_total, left_total
+    return (
+        "结论：成功实例数相同，按共同成功集总运行时间判断，"
+        f"hk-update-iterations={winner} 更优"
+        f"（{format_metric('wall_seconds', winner_total)} 对 "
+        f"{format_metric('wall_seconds', loser_total)}）。"
+    )
 
 
 def all_metrics(runs: Sequence[Run]) -> list[str]:
@@ -1010,14 +1217,25 @@ def markdown_report(
         "",
     ])
 
+    previous_group_id: str | None = None
     for index, comparison in enumerate(comparisons_found, 1):
+        group_id = comparison_group_id(comparison)
+        if group_id != previous_group_id:
+            group_title, group_description = COMPARISON_GROUP_BY_ID[group_id]
+            lines.extend([
+                f"## {group_title}",
+                "",
+                group_description,
+                "",
+            ])
+            previous_group_id = group_id
         coverage = coverage_statistics(comparison)
         left_checked, left_reference_mismatches = reference_results(
             comparison.left, reference)
         right_checked, right_reference_mismatches = reference_results(
             comparison.right, reference)
         lines.extend([
-            f"## 对比 {index}：{comparison.left.label} → {comparison.right.label}",
+            f"### 对比 {index}：{comparison.left.label} → {comparison.right.label}",
             "",
             f"变化因素：**{comparison.factor}**（{comparison.left_value} → {comparison.right_value}）。",
             "",
@@ -1025,6 +1243,11 @@ def markdown_report(
             f"{comparison.right.label}={coverage['right_ok']}，共同成功={coverage['common_ok']}；"
             f"右侧新增={len(coverage['right_only'])}，右侧丢失={len(coverage['left_only'])}。",
             "",
+        ])
+        verdict = iteration_comparison_verdict(comparison)
+        if verdict:
+            lines.extend([f"**{verdict}**", ""])
+        lines.extend([
             "| 指标 | 配对数 | 左侧总量 | 右侧总量 | 右侧相对变化 | 右侧下降/持平/上升 |",
             "| --- | ---: | ---: | ---: | ---: | ---: |",
         ])
@@ -1096,7 +1319,19 @@ def html_report(
 
     sections: list[str] = []
     navigation: list[str] = []
+    previous_group_id: str | None = None
     for index, comparison in enumerate(comparisons_found, 1):
+        group_id = comparison_group_id(comparison)
+        if group_id != previous_group_id:
+            group_title, group_description = COMPARISON_GROUP_BY_ID[group_id]
+            navigation.append(
+                f'<a class="nav-group" href="#group-{group_id}">'
+                f'{html.escape(group_title)}</a>')
+            sections.append(
+                f'<section class="comparison-group" id="group-{group_id}">'
+                f'<h2>{html.escape(group_title)}</h2>'
+                f'<p>{html.escape(group_description)}</p></section>')
+            previous_group_id = group_id
         coverage = coverage_statistics(comparison)
         left_checked, left_reference_mismatches = reference_results(
             comparison.left, reference)
@@ -1259,14 +1494,20 @@ def html_report(
             f'展开跳过原因（{len(collapsible_metrics)} 列/侧）</button></div>'
             if collapsible_metrics else ""
         )
+        verdict = iteration_comparison_verdict(comparison)
+        verdict_html = (
+            f'<p class="verdict"><strong>{html.escape(verdict)}</strong></p>'
+            if verdict else ""
+        )
         sections.append(f"""
-<section id="comparison-{index}">
-  <h2>对比 {index}：{html.escape(comparison.left.label)} → {html.escape(comparison.right.label)}</h2>
+<section id="comparison-{index}" class="comparison">
+  <h3>对比 {index}：{html.escape(comparison.left.label)} → {html.escape(comparison.right.label)}</h3>
   <p>变化因素：<strong>{html.escape(comparison.factor)}</strong>；
   {html.escape(comparison.left_value)} → {html.escape(comparison.right_value)}。</p>
   <p>共同成功 {coverage['common_ok']}；右侧新增 {len(coverage['right_only'])}；
   右侧丢失 {len(coverage['left_only'])}；结果不一致
   {len(coverage['result_mismatches'])}{reference_summary}。</p>
+  {verdict_html}
   <div class="cards">{config_cards}</div>
   <div class="table-wrap"><table><thead><tr>
     <th>指标</th><th>配对数</th><th>左侧总量</th><th>右侧总量</th>
@@ -1295,6 +1536,9 @@ def html_report(
 main{{max-width:1900px;margin:24px auto;padding:0 18px 60px}} h1{{margin-bottom:4px}} h2{{margin-top:34px;border-bottom:2px solid #aab6c6;padding-bottom:6px}}
 .muted,p{{color:var(--muted)}} nav{{display:flex;flex-wrap:wrap;gap:8px;padding:12px;background:white;border:1px solid var(--line);border-radius:8px}}
 nav a{{color:#245b9e;text-decoration:none;padding:3px 8px}} .warnings{{background:#fff5da;border-left:4px solid #d39b22;padding:8px 14px}}
+.nav-group{{flex-basis:100%;font-weight:700;border-top:1px solid var(--line);margin-top:4px;padding-top:8px!important}} .nav-group:first-child{{border-top:0;margin-top:0;padding-top:3px!important}}
+.comparison-group h2{{margin-bottom:4px}} .comparison-group p{{margin-top:0}} .comparison{{scroll-margin-top:8px}}
+.comparison h3{{font-size:18px;margin:22px 0 6px;border-left:4px solid #7b8da5;padding-left:8px}} .verdict{{background:#eaf4ff;border-left:4px solid #3978b8;color:#193d66;padding:8px 10px}}
 .cards{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:10px 0}} .card{{background:white;border:1px solid var(--line);border-radius:8px;padding:10px}}
 .card h3{{margin:0 0 4px}} .card p{{margin:0 0 6px}} code{{white-space:pre-wrap;overflow-wrap:anywhere}}
 .table-wrap{{overflow:auto;background:white;border:1px solid var(--line);border-radius:8px;margin:8px 0 14px;max-height:680px}}

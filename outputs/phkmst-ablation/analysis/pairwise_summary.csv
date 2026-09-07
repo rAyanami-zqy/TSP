@@ -1,91 +1,91 @@
 ﻿comparison,factor,left,right,left_value,right_value,left_ok,right_ok,common_ok,left_only,right_only,result_agreements,result_mismatches,left_reference_checked,left_reference_mismatches,right_reference_checked,right_reference_mismatches,metric,paired_values,left_total,right_total,aggregate_relative_change,decreased,tied,increased
-1,branch edge order,P32,PAA,weight,root-alpha-global-desc,40,40,39,rat195.tsp,bier127.tsp,39,,40,,40,,wall_seconds,39,2510.055435532704,6831.542712833732,1.7216700540256746,12,0,27
-1,branch edge order,P32,PAA,weight,root-alpha-global-desc,40,40,39,rat195.tsp,bier127.tsp,39,,40,,40,,branches,39,4587826.0,18746801.0,3.086205754097911,10,12,17
-1,branch edge order,P32,PAA,weight,root-alpha-global-desc,40,40,39,rat195.tsp,bier127.tsp,39,,40,,40,,search_node_potential_updates_skipped_total,39,387490.0,403156.0,0.040429430436914604,11,20,8
-2,hk ascent,P16,hybrid,polyak,hybrid,38,40,38,,brg180.tsp;rat195.tsp,38,,38,,40,,wall_seconds,38,3061.1032163146883,3232.9683351833373,0.05614482973088375,17,0,21
-2,hk ascent,P16,hybrid,polyak,hybrid,38,40,38,,brg180.tsp;rat195.tsp,38,,38,,40,,branches,38,6205250.0,6488817.0,0.04569791708633808,4,32,2
-2,hk ascent,P16,hybrid,polyak,hybrid,38,40,38,,brg180.tsp;rat195.tsp,38,,38,,40,,search_node_potential_updates_skipped_total,38,378424.0,378034.0,-0.0010305900260025869,1,34,3
-3,hk ascent,PAA,hybrid32,polyak,hybrid,40,40,39,kroA150.tsp,brg180.tsp,39,,40,,40,,wall_seconds,39,6987.651360936463,5466.120486067608,-0.21774567680562473,22,0,17
-3,hk ascent,PAA,hybrid32,polyak,hybrid,40,40,39,kroA150.tsp,brg180.tsp,39,,40,,40,,branches,39,18962808.0,17511225.0,-0.07654894781405797,4,32,3
-3,hk ascent,PAA,hybrid32,polyak,hybrid,40,40,39,kroA150.tsp,brg180.tsp,39,,40,,40,,search_node_potential_updates_skipped_total,39,403161.0,402934.0,-0.00056305049347527,3,36,0
-4,重复运行,P128 [P128-ba5f558d610b],P64,相同配置,相同配置,40,40,40,,,40,,40,,40,,wall_seconds,40,4431.547651216388,4440.001659082249,0.0019076874562187207,11,0,29
-4,重复运行,P128 [P128-ba5f558d610b],P64,相同配置,相同配置,40,40,40,,,40,,40,,40,,branches,40,4370706.0,4370706.0,0.0,0,40,0
-4,重复运行,P128 [P128-ba5f558d610b],P64,相同配置,相同配置,40,40,40,,,40,,40,,40,,search_node_potential_updates_skipped_total,40,389711.0,389711.0,0.0,0,40,0
-5,hk node ascent,P128 [P128-ba5f558d610b],helsgaun64,polyak,helsgaun,40,37,37,pr144.tsp;pr76.tsp;rat195.tsp,,37,,40,,37,,wall_seconds,37,1362.4280970618129,4563.891177287325,2.349821680226449,2,0,35
-5,hk node ascent,P128 [P128-ba5f558d610b],helsgaun64,polyak,helsgaun,40,37,37,pr144.tsp;pr76.tsp;rat195.tsp,,37,,40,,37,,branches,37,1482729.0,2598756.0,0.7526844082769002,2,12,23
-5,hk node ascent,P128 [P128-ba5f558d610b],helsgaun64,polyak,helsgaun,40,37,37,pr144.tsp;pr76.tsp;rat195.tsp,,37,,40,,37,,search_node_potential_updates_skipped_total,37,156841.0,144009.0,-0.08181534165173643,5,27,5
-6,hk node ascent,P128 [P128-e0c758997a9b],helsgaun128,polyak,helsgaun,38,36,36,pr144.tsp;pr76.tsp,,36,,38,,36,,wall_seconds,36,1307.718746919185,2302.3761758562177,0.7606050087454326,20,0,16
-6,hk node ascent,P128 [P128-e0c758997a9b],helsgaun128,polyak,helsgaun,38,36,36,pr144.tsp;pr76.tsp,,36,,38,,36,,branches,36,1236980.0,1428123.0,0.15452392116283198,10,12,14
-6,hk node ascent,P128 [P128-e0c758997a9b],helsgaun128,polyak,helsgaun,38,36,36,pr144.tsp;pr76.tsp,,36,,38,,36,,search_node_potential_updates_skipped_total,36,156952.0,156405.0,-0.0034851419542279993,5,28,3
-7,hk node ascent,P32,helsgaun32,polyak,helsgaun,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,wall_seconds,38,2173.3040302377194,5867.558688133955,1.6998333442984284,5,0,33
-7,hk node ascent,P32,helsgaun32,polyak,helsgaun,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,branches,38,4412379.0,8047204.0,0.8237789636837634,3,12,23
-7,hk node ascent,P32,helsgaun32,polyak,helsgaun,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,search_node_potential_updates_skipped_total,38,387470.0,351755.0,-0.09217487805507518,3,28,7
-8,hk update budget,P16,D0,0,5000,38,32,32,ch130.tsp;ch150.tsp;kroA150.tsp;kroB100.tsp;kroE100.tsp;pr76.tsp,,32,,38,,32,,wall_seconds,32,792.7080301307142,2028.9078087676316,1.5594641805673062,11,0,21
-8,hk update budget,P16,D0,0,5000,38,32,32,ch130.tsp;ch150.tsp;kroA150.tsp;kroB100.tsp;kroE100.tsp;pr76.tsp,,32,,38,,32,,branches,32,1101653.0,289783265.0,262.0440483527935,0,22,10
-8,hk update budget,P16,D0,0,5000,38,32,32,ch130.tsp;ch150.tsp;kroA150.tsp;kroB100.tsp;kroE100.tsp;pr76.tsp,,32,,38,,32,,search_node_potential_updates_skipped_total,32,61999.0,214442132.0,3457.79985161051,0,22,10
-9,hk update depth,P16,H2,1,2,38,38,38,,,38,,38,,38,,wall_seconds,38,3061.1032163146883,3214.2789176423103,0.05003937812722059,13,0,25
-9,hk update depth,P16,H2,1,2,38,38,38,,,38,,38,,38,,branches,38,6205250.0,10846246.0,0.7479144272994642,4,10,24
-9,hk update depth,P16,H2,1,2,38,38,38,,,38,,38,,38,,search_node_potential_updates_skipped_total,38,378424.0,2918556.0,6.712396676743547,0,9,29
-10,hk update depth,P16,H3,1,3,38,37,37,ch130.tsp,,37,,38,,37,,wall_seconds,37,2196.647086760029,2710.5086095985025,0.2339299407427342,11,0,26
-10,hk update depth,P16,H3,1,3,38,37,37,ch130.tsp,,37,,38,,37,,branches,37,5301086.0,15607623.0,1.9442312386556262,1,11,25
-10,hk update depth,P16,H3,1,3,38,37,37,ch130.tsp,,37,,38,,37,,search_node_potential_updates_skipped_total,37,376719.0,5772378.0,14.322768429519085,0,9,28
-11,hk update depth,P16,H4,1,4,38,37,37,ch130.tsp,,37,,38,,37,,wall_seconds,37,2196.647086760029,4095.0377891026437,0.864221983487875,10,0,27
-11,hk update depth,P16,H4,1,4,38,37,37,ch130.tsp,,37,,38,,37,,branches,37,5301086.0,28094432.0,4.29975027758463,1,11,25
-11,hk update depth,P16,H4,1,4,38,37,37,ch130.tsp,,37,,38,,37,,search_node_potential_updates_skipped_total,37,376719.0,12222689.0,31.445108953888706,0,9,28
-12,hk update depth,P32,H232,1,2,40,40,40,,,40,,40,,40,,wall_seconds,40,3785.6563758030534,4970.461047993973,0.3129720594198373,19,0,21
-12,hk update depth,P32,H232,1,2,40,40,40,,,40,,40,,40,,branches,40,4903534.0,9622256.0,0.9623104479340818,2,12,26
-12,hk update depth,P32,H232,1,2,40,40,40,,,40,,40,,40,,search_node_potential_updates_skipped_total,40,387500.0,2656316.0,5.855009032258065,0,9,31
-13,hk update depth,P32,PH332,1,3,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,wall_seconds,38,2173.3040302377194,2306.9219604581594,0.061481471695345125,10,0,28
-13,hk update depth,P32,PH332,1,3,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,branches,38,4412379.0,10335592.0,1.342408029772601,2,10,26
-13,hk update depth,P32,PH332,1,3,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,search_node_potential_updates_skipped_total,38,387470.0,3610647.0,8.31852014349498,0,9,29
-14,hk update depth,P32,PH432,1,4,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,wall_seconds,38,2173.3040302377194,3707.8831443972886,0.7061042048459802,12,0,26
-14,hk update depth,P32,PH432,1,4,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,branches,38,4412379.0,18993922.0,3.304689601686528,2,10,26
-14,hk update depth,P32,PH432,1,4,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,search_node_potential_updates_skipped_total,38,387470.0,7826027.0,19.19776240741219,0,9,29
-15,hk update depth,P32r5h2,P32r5h1,2,1,39,40,39,,rat195.tsp,39,,39,,40,,wall_seconds,39,3737.0506731569767,1682.9944803025573,-0.5496463314261668,22,0,17
-15,hk update depth,P32r5h2,P32r5h1,2,1,39,40,39,,rat195.tsp,39,,39,,40,,branches,39,6905809.0,2341997.0,-0.6608656567246503,26,12,1
-15,hk update depth,P32r5h2,P32r5h1,2,1,39,40,39,,rat195.tsp,39,,39,,40,,search_node_potential_updates_skipped_total,39,2023884.0,15.0,-0.9999925885080371,30,9,0
-16,hk update gap ratio,H232,P32r5h2,0.02,0.05,40,39,39,rat195.tsp,,39,,40,,39,,wall_seconds,39,3446.2986664343625,3737.0506731569767,0.08436645655654518,11,0,28
-16,hk update gap ratio,H232,P32r5h2,0.02,0.05,40,39,39,rat195.tsp,,39,,40,,39,,branches,39,8665628.0,6905809.0,-0.20308037686362723,10,21,8
-16,hk update gap ratio,H232,P32r5h2,0.02,0.05,40,39,39,rat195.tsp,,39,,40,,39,,search_node_potential_updates_skipped_total,39,2363546.0,2023884.0,-0.14370864793830962,10,21,8
-17,hk update gap ratio,H232,PR1532,0.02,0.015,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,wall_seconds,38,1939.8074405360967,5260.200642254204,1.711712787739624,7,0,31
-17,hk update gap ratio,H232,PR1532,0.02,0.015,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,branches,38,6715970.0,22028173.0,2.2799689397064014,4,19,15
-17,hk update gap ratio,H232,PR1532,0.02,0.015,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,search_node_potential_updates_skipped_total,38,1696164.0,4916912.0,1.8988423289257406,3,19,16
-18,hk update gap ratio,HP1,hybrid,0.01,0.02,37,40,37,,ch130.tsp;ch150.tsp;pr76.tsp,37,,37,,40,,wall_seconds,37,2829.833897214383,1911.794546611607,-0.32441457129567586,25,0,12
-18,hk update gap ratio,HP1,hybrid,0.01,0.02,37,40,37,,ch130.tsp;ch150.tsp;pr76.tsp,37,,37,,40,,branches,37,9731540.0,2288314.0,-0.7648559220842744,18,17,2
-18,hk update gap ratio,HP1,hybrid,0.01,0.02,37,40,37,,ch130.tsp;ch150.tsp;pr76.tsp,37,,37,,40,,search_node_potential_updates_skipped_total,37,1979754.0,143492.0,-0.92752028787415,19,17,1
-19,hk update gap ratio,P32,P32r5h1,0.02,0.05,40,40,40,,,40,,40,,40,,wall_seconds,40,3785.6563758030534,2785.9835700131953,-0.2640685541824427,16,0,24
-19,hk update gap ratio,P32,P32r5h1,0.02,0.05,40,40,40,,,40,,40,,40,,branches,40,4903534.0,2618728.0,-0.46595088358722503,13,21,6
-19,hk update gap ratio,P32,P32r5h1,0.02,0.05,40,40,40,,,40,,40,,40,,search_node_potential_updates_skipped_total,40,387500.0,15.0,-0.9999612903225806,19,21,0
-20,hk update iterations,H232,H2,32,16,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,wall_seconds,38,1939.8074405360967,3214.2789176423103,0.6570092734328274,12,0,26
-20,hk update iterations,H232,H2,32,16,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,branches,38,6715970.0,10846246.0,0.6149932176588042,2,12,24
-20,hk update iterations,H232,H2,32,16,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,search_node_potential_updates_skipped_total,38,1696164.0,2918556.0,0.7206803115736451,1,13,24
-21,hk update iterations,H3,PH332,16,32,37,38,37,,ch130.tsp,37,,37,,38,,wall_seconds,37,2710.5086095985025,1878.9030177593231,-0.306807950690244,18,0,19
-21,hk update iterations,H3,PH332,16,32,37,38,37,,ch130.tsp,37,,37,,38,,branches,37,15607623.0,9272967.0,-0.40586936268258145,21,14,2
-21,hk update iterations,H3,PH332,16,32,37,38,37,,ch130.tsp,37,,37,,38,,search_node_potential_updates_skipped_total,37,5772378.0,3219333.0,-0.4422865238555064,22,15,0
-22,hk update iterations,H4,PH432,16,32,37,38,37,,ch130.tsp,37,,37,,38,,wall_seconds,37,4095.0377891026437,2548.825733775273,-0.3775818771299291,21,0,16
-22,hk update iterations,H4,PH432,16,32,37,38,37,,ch130.tsp,37,,37,,38,,branches,37,28094432.0,14736544.0,-0.4754638926318211,20,13,4
-22,hk update iterations,H4,PH432,16,32,37,38,37,,ch130.tsp,37,,37,,38,,search_node_potential_updates_skipped_total,37,12222689.0,6049533.0,-0.5050571114097724,20,14,3
-23,hk update iterations,HP1,HP132,16,32,37,37,37,,,37,,37,,37,,wall_seconds,37,2829.833897214383,2766.785933673382,-0.022279740023986583,15,0,22
-23,hk update iterations,HP1,HP132,16,32,37,37,37,,,37,,37,,37,,branches,37,9731540.0,9255767.0,-0.04888979544861349,20,13,4
-23,hk update iterations,HP1,HP132,16,32,37,37,37,,,37,,37,,37,,search_node_potential_updates_skipped_total,37,1979754.0,1990922.0,0.005641104904952732,5,21,11
-24,hk update iterations,HP25,HP2532,16,32,32,32,31,kroA100.tsp,u159.tsp,31,,32,,32,,wall_seconds,31,2276.001857224852,2315.4672369342297,0.017339783614016113,9,0,22
-24,hk update iterations,HP25,HP2532,16,32,32,32,31,kroA100.tsp,u159.tsp,31,,32,,32,,branches,31,538409991.0,582270490.0,0.08146301096407393,4,22,5
-24,hk update iterations,HP25,HP2532,16,32,32,32,31,kroA100.tsp,u159.tsp,31,,32,,32,,search_node_potential_updates_skipped_total,31,380589088.0,409423748.0,0.07576323365319393,2,24,5
-25,hk update iterations,P32,P128 [P128-ba5f558d610b],32,64,40,40,40,,,40,,40,,40,,wall_seconds,40,3785.6563758030534,4431.547651216388,0.17061539962837258,16,0,24
-25,hk update iterations,P32,P128 [P128-ba5f558d610b],32,64,40,40,40,,,40,,40,,40,,branches,40,4903534.0,4370706.0,-0.1086620384400312,25,11,4
-25,hk update iterations,P32,P128 [P128-ba5f558d610b],32,64,40,40,40,,,40,,40,,40,,search_node_potential_updates_skipped_total,40,387500.0,389711.0,0.005705806451612894,6,28,6
-26,hk update iterations,P32,P128 [P128-e0c758997a9b],32,128,40,38,38,rat195.tsp;u159.tsp,,38,,40,,38,,wall_seconds,38,2167.1095953639597,3511.352470157668,0.6202929827219683,2,0,36
-26,hk update iterations,P32,P128 [P128-e0c758997a9b],32,128,40,38,38,rat195.tsp;u159.tsp,,38,,40,,38,,branches,38,4396939.0,3787276.0,-0.13865623334779031,21,13,4
-26,hk update iterations,P32,P128 [P128-e0c758997a9b],32,128,40,38,38,rat195.tsp;u159.tsp,,38,,40,,38,,search_node_potential_updates_skipped_total,38,387460.0,389812.0,0.006070304031383866,5,27,6
-27,hk update iterations,P32,P16,32,16,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,wall_seconds,38,2173.3040302377194,3061.1032163146883,0.4085020658521763,17,0,21
-27,hk update iterations,P32,P16,32,16,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,branches,38,4412379.0,6205250.0,0.4063275162899651,3,11,24
-27,hk update iterations,P32,P16,32,16,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,search_node_potential_updates_skipped_total,38,387470.0,378424.0,-0.023346323586342144,6,25,7
-28,hk update iterations,P32,P64,32,64,40,40,40,,,40,,40,,40,,wall_seconds,40,3785.6563758030534,4440.001659082249,0.17284856794229997,13,0,27
-28,hk update iterations,P32,P64,32,64,40,40,40,,,40,,40,,40,,branches,40,4903534.0,4370706.0,-0.1086620384400312,25,11,4
-28,hk update iterations,P32,P64,32,64,40,40,40,,,40,,40,,40,,search_node_potential_updates_skipped_total,40,387500.0,389711.0,0.005705806451612894,6,28,6
-29,hk update iterations,P32,P8,32,8,40,37,37,ch130.tsp;pr144.tsp;rat195.tsp,,37,,40,,37,,wall_seconds,37,1857.7121122609824,3053.8392932489514,0.6438711214151409,9,0,28
-29,hk update iterations,P32,P8,32,8,40,37,37,ch130.tsp;pr144.tsp;rat195.tsp,,37,,40,,37,,branches,37,4206427.0,8284534.0,0.9694943000318323,2,10,25
-29,hk update iterations,P32,P8,32,8,40,37,37,ch130.tsp;pr144.tsp;rat195.tsp,,37,,40,,37,,search_node_potential_updates_skipped_total,37,385763.0,352221.0,-0.08694975930817628,2,25,10
+1,hk update iterations,P32,P8,32,8,40,37,37,ch130.tsp;pr144.tsp;rat195.tsp,,37,,40,,37,,wall_seconds,37,1857.7121122609824,3053.8392932489514,0.6438711214151409,9,0,28
+1,hk update iterations,P32,P8,32,8,40,37,37,ch130.tsp;pr144.tsp;rat195.tsp,,37,,40,,37,,branches,37,4206427.0,8284534.0,0.9694943000318323,2,10,25
+1,hk update iterations,P32,P8,32,8,40,37,37,ch130.tsp;pr144.tsp;rat195.tsp,,37,,40,,37,,search_node_potential_updates_skipped_total,37,385763.0,352221.0,-0.08694975930817628,2,25,10
+2,hk update iterations,P32,P16,32,16,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,wall_seconds,38,2173.3040302377194,3061.1032163146883,0.4085020658521763,17,0,21
+2,hk update iterations,P32,P16,32,16,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,branches,38,4412379.0,6205250.0,0.4063275162899651,3,11,24
+2,hk update iterations,P32,P16,32,16,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,search_node_potential_updates_skipped_total,38,387470.0,378424.0,-0.023346323586342144,6,25,7
+3,hk update iterations,P32,P128 [P128-ba5f558d610b],32,64,40,40,40,,,40,,40,,40,,wall_seconds,40,3785.6563758030534,4431.547651216388,0.17061539962837258,16,0,24
+3,hk update iterations,P32,P128 [P128-ba5f558d610b],32,64,40,40,40,,,40,,40,,40,,branches,40,4903534.0,4370706.0,-0.1086620384400312,25,11,4
+3,hk update iterations,P32,P128 [P128-ba5f558d610b],32,64,40,40,40,,,40,,40,,40,,search_node_potential_updates_skipped_total,40,387500.0,389711.0,0.005705806451612894,6,28,6
+4,hk update iterations,P32,P64,32,64,40,40,40,,,40,,40,,40,,wall_seconds,40,3785.6563758030534,4440.001659082249,0.17284856794229997,13,0,27
+4,hk update iterations,P32,P64,32,64,40,40,40,,,40,,40,,40,,branches,40,4903534.0,4370706.0,-0.1086620384400312,25,11,4
+4,hk update iterations,P32,P64,32,64,40,40,40,,,40,,40,,40,,search_node_potential_updates_skipped_total,40,387500.0,389711.0,0.005705806451612894,6,28,6
+5,hk update iterations,P32,P128 [P128-e0c758997a9b],32,128,40,38,38,rat195.tsp;u159.tsp,,38,,40,,38,,wall_seconds,38,2167.1095953639597,3511.352470157668,0.6202929827219683,2,0,36
+5,hk update iterations,P32,P128 [P128-e0c758997a9b],32,128,40,38,38,rat195.tsp;u159.tsp,,38,,40,,38,,branches,38,4396939.0,3787276.0,-0.13865623334779031,21,13,4
+5,hk update iterations,P32,P128 [P128-e0c758997a9b],32,128,40,38,38,rat195.tsp;u159.tsp,,38,,40,,38,,search_node_potential_updates_skipped_total,38,387460.0,389812.0,0.006070304031383866,5,27,6
+6,hk update iterations,H232,H2,32,16,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,wall_seconds,38,1939.8074405360967,3214.2789176423103,0.6570092734328274,12,0,26
+6,hk update iterations,H232,H2,32,16,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,branches,38,6715970.0,10846246.0,0.6149932176588042,2,12,24
+6,hk update iterations,H232,H2,32,16,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,search_node_potential_updates_skipped_total,38,1696164.0,2918556.0,0.7206803115736451,1,13,24
+7,hk update iterations,H3,PH332,16,32,37,38,37,,ch130.tsp,37,,37,,38,,wall_seconds,37,2710.5086095985025,1878.9030177593231,-0.306807950690244,18,0,19
+7,hk update iterations,H3,PH332,16,32,37,38,37,,ch130.tsp,37,,37,,38,,branches,37,15607623.0,9272967.0,-0.40586936268258145,21,14,2
+7,hk update iterations,H3,PH332,16,32,37,38,37,,ch130.tsp,37,,37,,38,,search_node_potential_updates_skipped_total,37,5772378.0,3219333.0,-0.4422865238555064,22,15,0
+8,hk update iterations,H4,PH432,16,32,37,38,37,,ch130.tsp,37,,37,,38,,wall_seconds,37,4095.0377891026437,2548.825733775273,-0.3775818771299291,21,0,16
+8,hk update iterations,H4,PH432,16,32,37,38,37,,ch130.tsp,37,,37,,38,,branches,37,28094432.0,14736544.0,-0.4754638926318211,20,13,4
+8,hk update iterations,H4,PH432,16,32,37,38,37,,ch130.tsp,37,,37,,38,,search_node_potential_updates_skipped_total,37,12222689.0,6049533.0,-0.5050571114097724,20,14,3
+9,hk update iterations,HP1,HP132,16,32,37,37,37,,,37,,37,,37,,wall_seconds,37,2829.833897214383,2766.785933673382,-0.022279740023986583,15,0,22
+9,hk update iterations,HP1,HP132,16,32,37,37,37,,,37,,37,,37,,branches,37,9731540.0,9255767.0,-0.04888979544861349,20,13,4
+9,hk update iterations,HP1,HP132,16,32,37,37,37,,,37,,37,,37,,search_node_potential_updates_skipped_total,37,1979754.0,1990922.0,0.005641104904952732,5,21,11
+10,hk update iterations,HP25,HP2532,16,32,32,32,31,kroA100.tsp,u159.tsp,31,,32,,32,,wall_seconds,31,2276.001857224852,2315.4672369342297,0.017339783614016113,9,0,22
+10,hk update iterations,HP25,HP2532,16,32,32,32,31,kroA100.tsp,u159.tsp,31,,32,,32,,branches,31,538409991.0,582270490.0,0.08146301096407393,4,22,5
+10,hk update iterations,HP25,HP2532,16,32,32,32,31,kroA100.tsp,u159.tsp,31,,32,,32,,search_node_potential_updates_skipped_total,31,380589088.0,409423748.0,0.07576323365319393,2,24,5
+11,hk update depth,P32,H232,1,2,40,40,40,,,40,,40,,40,,wall_seconds,40,3785.6563758030534,4970.461047993973,0.3129720594198373,19,0,21
+11,hk update depth,P32,H232,1,2,40,40,40,,,40,,40,,40,,branches,40,4903534.0,9622256.0,0.9623104479340818,2,12,26
+11,hk update depth,P32,H232,1,2,40,40,40,,,40,,40,,40,,search_node_potential_updates_skipped_total,40,387500.0,2656316.0,5.855009032258065,0,9,31
+12,hk update depth,P32,PH332,1,3,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,wall_seconds,38,2173.3040302377194,2306.9219604581594,0.061481471695345125,10,0,28
+12,hk update depth,P32,PH332,1,3,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,branches,38,4412379.0,10335592.0,1.342408029772601,2,10,26
+12,hk update depth,P32,PH332,1,3,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,search_node_potential_updates_skipped_total,38,387470.0,3610647.0,8.31852014349498,0,9,29
+13,hk update depth,P32,PH432,1,4,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,wall_seconds,38,2173.3040302377194,3707.8831443972886,0.7061042048459802,12,0,26
+13,hk update depth,P32,PH432,1,4,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,branches,38,4412379.0,18993922.0,3.304689601686528,2,10,26
+13,hk update depth,P32,PH432,1,4,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,search_node_potential_updates_skipped_total,38,387470.0,7826027.0,19.19776240741219,0,9,29
+14,hk update depth,P32r5h2,P32r5h1,2,1,39,40,39,,rat195.tsp,39,,39,,40,,wall_seconds,39,3737.0506731569767,1682.9944803025573,-0.5496463314261668,22,0,17
+14,hk update depth,P32r5h2,P32r5h1,2,1,39,40,39,,rat195.tsp,39,,39,,40,,branches,39,6905809.0,2341997.0,-0.6608656567246503,26,12,1
+14,hk update depth,P32r5h2,P32r5h1,2,1,39,40,39,,rat195.tsp,39,,39,,40,,search_node_potential_updates_skipped_total,39,2023884.0,15.0,-0.9999925885080371,30,9,0
+15,hk update gap ratio,P32,P32r5h1,0.02,0.05,40,40,40,,,40,,40,,40,,wall_seconds,40,3785.6563758030534,2785.9835700131953,-0.2640685541824427,16,0,24
+15,hk update gap ratio,P32,P32r5h1,0.02,0.05,40,40,40,,,40,,40,,40,,branches,40,4903534.0,2618728.0,-0.46595088358722503,13,21,6
+15,hk update gap ratio,P32,P32r5h1,0.02,0.05,40,40,40,,,40,,40,,40,,search_node_potential_updates_skipped_total,40,387500.0,15.0,-0.9999612903225806,19,21,0
+16,hk update gap ratio,H232,PR1532,0.02,0.015,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,wall_seconds,38,1939.8074405360967,5260.200642254204,1.711712787739624,7,0,31
+16,hk update gap ratio,H232,PR1532,0.02,0.015,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,branches,38,6715970.0,22028173.0,2.2799689397064014,4,19,15
+16,hk update gap ratio,H232,PR1532,0.02,0.015,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,search_node_potential_updates_skipped_total,38,1696164.0,4916912.0,1.8988423289257406,3,19,16
+17,hk update gap ratio,H232,P32r5h2,0.02,0.05,40,39,39,rat195.tsp,,39,,40,,39,,wall_seconds,39,3446.2986664343625,3737.0506731569767,0.08436645655654518,11,0,28
+17,hk update gap ratio,H232,P32r5h2,0.02,0.05,40,39,39,rat195.tsp,,39,,40,,39,,branches,39,8665628.0,6905809.0,-0.20308037686362723,10,21,8
+17,hk update gap ratio,H232,P32r5h2,0.02,0.05,40,39,39,rat195.tsp,,39,,40,,39,,search_node_potential_updates_skipped_total,39,2363546.0,2023884.0,-0.14370864793830962,10,21,8
+18,hk node ascent,P32,helsgaun32,polyak,helsgaun,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,wall_seconds,38,2173.3040302377194,5867.558688133955,1.6998333442984284,5,0,33
+18,hk node ascent,P32,helsgaun32,polyak,helsgaun,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,branches,38,4412379.0,8047204.0,0.8237789636837634,3,12,23
+18,hk node ascent,P32,helsgaun32,polyak,helsgaun,40,38,38,pr144.tsp;rat195.tsp,,38,,40,,38,,search_node_potential_updates_skipped_total,38,387470.0,351755.0,-0.09217487805507518,3,28,7
+19,hk node ascent,P128 [P128-ba5f558d610b],helsgaun64,polyak,helsgaun,40,37,37,pr144.tsp;pr76.tsp;rat195.tsp,,37,,40,,37,,wall_seconds,37,1362.4280970618129,4563.891177287325,2.349821680226449,2,0,35
+19,hk node ascent,P128 [P128-ba5f558d610b],helsgaun64,polyak,helsgaun,40,37,37,pr144.tsp;pr76.tsp;rat195.tsp,,37,,40,,37,,branches,37,1482729.0,2598756.0,0.7526844082769002,2,12,23
+19,hk node ascent,P128 [P128-ba5f558d610b],helsgaun64,polyak,helsgaun,40,37,37,pr144.tsp;pr76.tsp;rat195.tsp,,37,,40,,37,,search_node_potential_updates_skipped_total,37,156841.0,144009.0,-0.08181534165173643,5,27,5
+20,hk node ascent,P128 [P128-e0c758997a9b],helsgaun128,polyak,helsgaun,38,36,36,pr144.tsp;pr76.tsp,,36,,38,,36,,wall_seconds,36,1307.718746919185,2302.3761758562177,0.7606050087454326,20,0,16
+20,hk node ascent,P128 [P128-e0c758997a9b],helsgaun128,polyak,helsgaun,38,36,36,pr144.tsp;pr76.tsp,,36,,38,,36,,branches,36,1236980.0,1428123.0,0.15452392116283198,10,12,14
+20,hk node ascent,P128 [P128-e0c758997a9b],helsgaun128,polyak,helsgaun,38,36,36,pr144.tsp;pr76.tsp,,36,,38,,36,,search_node_potential_updates_skipped_total,36,156952.0,156405.0,-0.0034851419542279993,5,28,3
+21,branch edge order,P32,PAA,weight,root-alpha-global-desc,40,40,39,rat195.tsp,bier127.tsp,39,,40,,40,,wall_seconds,39,2510.055435532704,6831.542712833732,1.7216700540256746,12,0,27
+21,branch edge order,P32,PAA,weight,root-alpha-global-desc,40,40,39,rat195.tsp,bier127.tsp,39,,40,,40,,branches,39,4587826.0,18746801.0,3.086205754097911,10,12,17
+21,branch edge order,P32,PAA,weight,root-alpha-global-desc,40,40,39,rat195.tsp,bier127.tsp,39,,40,,40,,search_node_potential_updates_skipped_total,39,387490.0,403156.0,0.040429430436914604,11,20,8
+22,hk ascent,P16,hybrid,polyak,hybrid,38,40,38,,brg180.tsp;rat195.tsp,38,,38,,40,,wall_seconds,38,3061.1032163146883,3232.9683351833373,0.05614482973088375,17,0,21
+22,hk ascent,P16,hybrid,polyak,hybrid,38,40,38,,brg180.tsp;rat195.tsp,38,,38,,40,,branches,38,6205250.0,6488817.0,0.04569791708633808,4,32,2
+22,hk ascent,P16,hybrid,polyak,hybrid,38,40,38,,brg180.tsp;rat195.tsp,38,,38,,40,,search_node_potential_updates_skipped_total,38,378424.0,378034.0,-0.0010305900260025869,1,34,3
+23,hk ascent,PAA,hybrid32,polyak,hybrid,40,40,39,kroA150.tsp,brg180.tsp,39,,40,,40,,wall_seconds,39,6987.651360936463,5466.120486067608,-0.21774567680562473,22,0,17
+23,hk ascent,PAA,hybrid32,polyak,hybrid,40,40,39,kroA150.tsp,brg180.tsp,39,,40,,40,,branches,39,18962808.0,17511225.0,-0.07654894781405797,4,32,3
+23,hk ascent,PAA,hybrid32,polyak,hybrid,40,40,39,kroA150.tsp,brg180.tsp,39,,40,,40,,search_node_potential_updates_skipped_total,39,403161.0,402934.0,-0.00056305049347527,3,36,0
+24,重复运行,P128 [P128-ba5f558d610b],P64,相同配置,相同配置,40,40,40,,,40,,40,,40,,wall_seconds,40,4431.547651216388,4440.001659082249,0.0019076874562187207,11,0,29
+24,重复运行,P128 [P128-ba5f558d610b],P64,相同配置,相同配置,40,40,40,,,40,,40,,40,,branches,40,4370706.0,4370706.0,0.0,0,40,0
+24,重复运行,P128 [P128-ba5f558d610b],P64,相同配置,相同配置,40,40,40,,,40,,40,,40,,search_node_potential_updates_skipped_total,40,389711.0,389711.0,0.0,0,40,0
+25,hk update budget,P16,D0,0,5000,38,32,32,ch130.tsp;ch150.tsp;kroA150.tsp;kroB100.tsp;kroE100.tsp;pr76.tsp,,32,,38,,32,,wall_seconds,32,792.7080301307142,2028.9078087676316,1.5594641805673062,11,0,21
+25,hk update budget,P16,D0,0,5000,38,32,32,ch130.tsp;ch150.tsp;kroA150.tsp;kroB100.tsp;kroE100.tsp;pr76.tsp,,32,,38,,32,,branches,32,1101653.0,289783265.0,262.0440483527935,0,22,10
+25,hk update budget,P16,D0,0,5000,38,32,32,ch130.tsp;ch150.tsp;kroA150.tsp;kroB100.tsp;kroE100.tsp;pr76.tsp,,32,,38,,32,,search_node_potential_updates_skipped_total,32,61999.0,214442132.0,3457.79985161051,0,22,10
+26,hk update depth,P16,H2,1,2,38,38,38,,,38,,38,,38,,wall_seconds,38,3061.1032163146883,3214.2789176423103,0.05003937812722059,13,0,25
+26,hk update depth,P16,H2,1,2,38,38,38,,,38,,38,,38,,branches,38,6205250.0,10846246.0,0.7479144272994642,4,10,24
+26,hk update depth,P16,H2,1,2,38,38,38,,,38,,38,,38,,search_node_potential_updates_skipped_total,38,378424.0,2918556.0,6.712396676743547,0,9,29
+27,hk update depth,P16,H3,1,3,38,37,37,ch130.tsp,,37,,38,,37,,wall_seconds,37,2196.647086760029,2710.5086095985025,0.2339299407427342,11,0,26
+27,hk update depth,P16,H3,1,3,38,37,37,ch130.tsp,,37,,38,,37,,branches,37,5301086.0,15607623.0,1.9442312386556262,1,11,25
+27,hk update depth,P16,H3,1,3,38,37,37,ch130.tsp,,37,,38,,37,,search_node_potential_updates_skipped_total,37,376719.0,5772378.0,14.322768429519085,0,9,28
+28,hk update depth,P16,H4,1,4,38,37,37,ch130.tsp,,37,,38,,37,,wall_seconds,37,2196.647086760029,4095.0377891026437,0.864221983487875,10,0,27
+28,hk update depth,P16,H4,1,4,38,37,37,ch130.tsp,,37,,38,,37,,branches,37,5301086.0,28094432.0,4.29975027758463,1,11,25
+28,hk update depth,P16,H4,1,4,38,37,37,ch130.tsp,,37,,38,,37,,search_node_potential_updates_skipped_total,37,376719.0,12222689.0,31.445108953888706,0,9,28
+29,hk update gap ratio,HP1,hybrid,0.01,0.02,37,40,37,,ch130.tsp;ch150.tsp;pr76.tsp,37,,37,,40,,wall_seconds,37,2829.833897214383,1911.794546611607,-0.32441457129567586,25,0,12
+29,hk update gap ratio,HP1,hybrid,0.01,0.02,37,40,37,,ch130.tsp;ch150.tsp;pr76.tsp,37,,37,,40,,branches,37,9731540.0,2288314.0,-0.7648559220842744,18,17,2
+29,hk update gap ratio,HP1,hybrid,0.01,0.02,37,40,37,,ch130.tsp;ch150.tsp;pr76.tsp,37,,37,,40,,search_node_potential_updates_skipped_total,37,1979754.0,143492.0,-0.92752028787415,19,17,1
 30,hk update iterations,helsgaun64,helsgaun128,64,128,37,36,36,u159.tsp,,36,,37,,36,,wall_seconds,36,3617.9573953971267,2302.3761758562177,-0.3636254039958101,27,0,9
 30,hk update iterations,helsgaun64,helsgaun128,64,128,37,36,36,u159.tsp,,36,,37,,36,,branches,36,2248426.0,1428123.0,-0.36483433299561563,18,13,5
 30,hk update iterations,helsgaun64,helsgaun128,64,128,37,36,36,u159.tsp,,36,,37,,36,,search_node_potential_updates_skipped_total,36,143986.0,156405.0,0.0862514411123303,5,28,3

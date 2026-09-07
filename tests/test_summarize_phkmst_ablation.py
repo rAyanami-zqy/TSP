@@ -57,6 +57,24 @@ class AblationHtmlReportTests(unittest.TestCase):
             label=label,
         )
 
+    def configured_run(
+        self, label: str, value: float, **option_overrides: str,
+    ) -> summarizer.Run:
+        run = self.make_run(label, value)
+        run.options.update({
+            "--hk-ascent": "polyak",
+            "--hk-node-ascent": "polyak",
+            "--branch-edge-order": "weight",
+            "--hk-potential-update": "subtree-adaptive",
+            "--hk-update-depth": "1",
+            "--hk-update-gap-ratio": "0.02",
+            "--hk-update-min-gap-ratio": "0.0",
+            "--hk-update-iterations": "32",
+            "--hk-update-budget": "0",
+            **option_overrides,
+        })
+        return run
+
     def test_skip_reason_columns_are_collapsed_and_expandable(self) -> None:
         left = self.make_run("A", 1.0)
         right = self.make_run("B", 2.0)
@@ -82,6 +100,61 @@ class AblationHtmlReportTests(unittest.TestCase):
             ".detail-table .skip-reason-column{display:none}", report)
         self.assertIn(
             'table.classList.toggle("show-skip-reasons", expanded)', report)
+
+    def test_comparisons_follow_requested_group_order(self) -> None:
+        iteration = summarizer.Comparison(
+            self.configured_run("i32", 1.0),
+            self.configured_run("i8", 2.0,
+                                **{"--hk-update-iterations": "8"}),
+            "hk update iterations", "32", "8")
+        depth = summarizer.Comparison(
+            self.configured_run("d1", 1.0),
+            self.configured_run("d2", 2.0,
+                                **{"--hk-update-depth": "2"}),
+            "hk update depth", "1", "2")
+        ratio = summarizer.Comparison(
+            self.configured_run("r2", 1.0),
+            self.configured_run("r5", 2.0,
+                                **{"--hk-update-gap-ratio": "0.05"}),
+            "hk update gap ratio", "0.02", "0.05")
+        strategy = summarizer.Comparison(
+            self.configured_run("polyak", 1.0),
+            self.configured_run("helsgaun", 2.0,
+                                **{"--hk-node-ascent": "helsgaun"}),
+            "hk node ascent", "polyak", "helsgaun")
+        other = summarizer.Comparison(
+            self.configured_run("root-polyak", 1.0),
+            self.configured_run("root-hybrid", 2.0,
+                                **{"--hk-ascent": "hybrid"}),
+            "hk ascent", "polyak", "hybrid")
+
+        ordered = summarizer.organize_comparisons(
+            [other, strategy, ratio, depth, iteration])
+
+        self.assertEqual(
+            [summarizer.comparison_group_id(item) for item in ordered],
+            [
+                "polyak-iterations",
+                "polyak-depth-iterations-32",
+                "polyak-ratio-iterations-32",
+                "node-ascent-strategy",
+                "other",
+            ],
+        )
+
+    def test_iteration_comparison_names_the_better_setting(self) -> None:
+        comparison = summarizer.Comparison(
+            self.configured_run("i32", 1.0),
+            self.configured_run("i64", 2.0,
+                                **{"--hk-update-iterations": "64"}),
+            "hk update iterations", "32", "64")
+
+        verdict = summarizer.iteration_comparison_verdict(comparison)
+
+        self.assertIsNotNone(verdict)
+        assert verdict is not None
+        self.assertIn("hk-update-iterations=32 更优", verdict)
+        self.assertIn("1.000 s 对 2.000 s", verdict)
 
 
 if __name__ == "__main__":
