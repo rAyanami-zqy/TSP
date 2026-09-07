@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="7380" height="720" viewBox="0 0 7380 720">
+<title>dj38.tsp root potential ascent</title>
+<desc>Polyak, Helsgaun, and Hybrid root lower-bound trajectories; the dashed line is the Concorde optimum.</desc>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<style>text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;fill:#172033}.tick{font-size:13px;fill:#596579}.axis{stroke:#334155;stroke-width:1.4}.grid{stroke:#dbe2ea;stroke-width:1}.legend{font-size:14px}.title{font-size:23px;font-weight:600}.subtitle{font-size:13px;fill:#64748b}</style>
+<text class="title" x="800.0" y="33" text-anchor="middle">dj38.tsp — root potential ascent</text>
+<text class="subtitle" x="800.0" y="55" text-anchor="middle">Per-phase cap: 2000; 400 iterations per 1600px; thin = raw bound, bold = best-so-far</text>
+<line class="grid" x1="110.00" y1="75.0" x2="110.00" y2="615.0"/>
+<text class="tick" x="110.00" y="640.0" text-anchor="middle">0</text>
+<line class="grid" x1="1555.00" y1="75.0" x2="1555.00" y2="615.0"/>
+<text class="tick" x="1555.00" y="640.0" text-anchor="middle">400</text>
+<line class="grid" x1="3000.00" y1="75.0" x2="3000.00" y2="615.0"/>
+<text class="tick" x="3000.00" y="640.0" text-anchor="middle">800</text>
+<line class="grid" x1="4445.00" y1="75.0" x2="4445.00" y2="615.0"/>
+<text class="tick" x="4445.00" y="640.0" text-anchor="middle">1200</text>
+<line class="grid" x1="5890.00" y1="75.0" x2="5890.00" y2="615.0"/>
+<text class="tick" x="5890.00" y="640.0" text-anchor="middle">1600</text>
+<line class="grid" x1="7335.00" y1="75.0" x2="7335.00" y2="615.0"/>
+<text class="tick" x="7335.00" y="640.0" text-anchor="middle">2000</text>
+<line class="grid" x1="110.0" y1="615.00" x2="7335.0" y2="615.00"/>
+<text class="tick" x="96.0" y="619.00" text-anchor="end">6105.72</text>
+<line class="grid" x1="110.0" y1="507.00" x2="7335.0" y2="507.00"/>
+<text class="tick" x="96.0" y="511.00" text-anchor="end">6222.43</text>
+<line class="grid" x1="110.0" y1="399.00" x2="7335.0" y2="399.00"/>
+<text class="tick" x="96.0" y="403.00" text-anchor="end">6339.14</text>
+<line class="grid" x1="110.0" y1="291.00" x2="7335.0" y2="291.00"/>
+<text class="tick" x="96.0" y="295.00" text-anchor="end">6455.86</text>
+<line class="grid" x1="110.0" y1="183.00" x2="7335.0" y2="183.00"/>
+<text class="tick" x="96.0" y="187.00" text-anchor="end">6572.57</text>
+<line class="grid" x1="110.0" y1="75.00" x2="7335.0" y2="75.00"/>
+<text class="tick" x="96.0" y="79.00" text-anchor="end">6689.28</text>
+<line class="axis" x1="110.0" y1="615.0" x2="7335.0" y2="615.0"/>
+<line class="axis" x1="110.0" y1="75.0" x2="110.0" y2="615.0"/>
+<text x="3722.50" y="686" text-anchor="middle">Iteration</text>
+<text x="27" y="345.00" text-anchor="middle" transform="rotate(-90 27 345.00)">Root lower bound</text>
+<g data-series="concorde">
+<line x1="110.0" y1="105.80" x2="7335.0" y2="105.80" stroke="#111827" stroke-width="1.8" stroke-dasharray="8 6"/>
+<text class="tick" x="7331.0" y="97.80" text-anchor="end">Concorde optimum: 6656</text>
+</g>
+<g data-series="polyak">
+<polyline points="113.61,449.10 117.22,584.20 120.84,367.62 124.45,502.72 128.06,518.32 131.68,338.87 135.29,341.74 138.90,250.92 142.51,199.93 146.12,204.73 149.74,209.73 153.35,209.71 156.96,198.97 160.57,166.09 164.19,150.17 167.80,156.85 171.41,140.85 175.03,151.14 178.64,149.59 182.25,130.53 185.86,122.82 189.47,124.24 193.09,115.31 196.70,114.72 200.31,110.41 203.93,110.62 207.54,107.74 211.15,107.22 214.76,106.82 218.38,106.29 221.99,105.89 225.60,105.80" fill="none" stroke="#2563eb" stroke-width="1.2" stroke-opacity="0.28" stroke-linejoin="round"/>
+<polyline points="113.61,449.10 117.22,449.10 120.84,367.62 124.45,367.62 128.06,367.62 131.68,338.87 135.29,338.87 138.90,250.92 142.51,199.93 146.12,199.93 149.74,199.93 153.35,199.93 156.96,198.97 160.57,166.09 164.19,150.17 167.80,150.17 171.41,140.85 175.03,140.85 178.64,140.85 182.25,130.53 185.86,122.82 189.47,122.82 193.09,115.31 196.70,114.72 200.31,110.41 203.93,110.41 207.54,107.74 211.15,107.22 214.76,106.82 218.38,106.29 221.99,105.89 225.60,105.80 7335.00,105.80" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+</g>
+<g data-series="helsgaun">
+<polyline points="113.61,449.10 117.22,436.15 120.84,412.09 124.45,367.30 128.06,314.19 131.68,270.51 135.29,340.47 138.90,401.72 142.51,368.41 146.12,273.84 149.74,314.19 153.35,264.77 156.96,254.96 160.57,201.66 164.19,285.87 167.80,277.91 171.41,404.50 175.03,304.01 178.64,405.24 182.25,289.02 185.86,216.10 189.47,193.15 193.09,143.00 196.70,160.21 200.31,155.76 203.93,130.78 207.54,141.14 211.15,169.83 214.76,143.92 218.38,143.18 221.99,138.74 225.60,116.53 229.21,126.52 232.82,111.90 236.44,116.34 240.05,113.01 243.66,111.16 247.28,108.94 250.89,106.17 254.50,107.09 258.11,105.98" fill="none" stroke="#dc2626" stroke-width="1.2" stroke-opacity="0.28" stroke-linejoin="round"/>
+<polyline points="113.61,449.10 117.22,436.15 120.84,412.09 124.45,367.30 128.06,314.19 131.68,270.51 135.29,270.51 138.90,270.51 142.51,270.51 146.12,270.51 149.74,270.51 153.35,264.77 156.96,254.96 160.57,201.66 164.19,201.66 167.80,201.66 171.41,201.66 175.03,201.66 178.64,201.66 182.25,201.66 185.86,201.66 189.47,193.15 193.09,143.00 196.70,143.00 200.31,143.00 203.93,130.78 207.54,130.78 211.15,130.78 214.76,130.78 218.38,130.78 221.99,130.78 225.60,116.53 229.21,116.53 232.82,111.90 236.44,111.90 240.05,111.90 243.66,111.16 247.28,108.94 250.89,106.17 254.50,106.17 258.11,105.98 7335.00,105.98" fill="none" stroke="#dc2626" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+</g>
+<g data-series="hybrid">
+<polyline points="113.61,449.10 117.22,584.20 120.84,367.62 124.45,502.72 128.06,518.32 131.68,338.87 135.29,341.74 138.90,250.92 142.51,199.93 146.12,204.73 149.74,209.73 153.35,209.71 156.96,198.97 160.57,166.09 164.19,150.17 167.80,156.85 171.41,140.85 175.03,151.14 178.64,149.59 182.25,130.53 185.86,122.82 189.47,124.24 193.09,115.31 196.70,114.72 200.31,110.41 203.93,110.62 207.54,107.74 211.15,107.22 214.76,106.82 218.38,106.29 221.99,105.89 225.60,105.80 229.21,105.80" fill="none" stroke="#059669" stroke-width="1.2" stroke-opacity="0.28" stroke-linejoin="round"/>
+<polyline points="113.61,449.10 117.22,449.10 120.84,367.62 124.45,367.62 128.06,367.62 131.68,338.87 135.29,338.87 138.90,250.92 142.51,199.93 146.12,199.93 149.74,199.93 153.35,199.93 156.96,198.97 160.57,166.09 164.19,150.17 167.80,150.17 171.41,140.85 175.03,140.85 178.64,140.85 182.25,130.53 185.86,122.82 189.47,122.82 193.09,115.31 196.70,114.72 200.31,110.41 203.93,110.41 207.54,107.74 211.15,107.22 214.76,106.82 218.38,106.29 221.99,105.89 225.60,105.80 229.21,105.80 7335.00,105.80" fill="none" stroke="#059669" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+</g>
+<rect x="6920.0" y="528.0" width="410" height="82" rx="6" fill="#ffffff" fill-opacity="0.9"/>
+<g data-legend="polyak">
+<line x1="6930.0" y1="545.0" x2="6960.0" y2="545.0" stroke="#2563eb" stroke-width="3"/>
+<text class="legend" x="6969.0" y="550.0">Polyak (32 evals, best 6656)</text>
+</g>
+<g data-legend="helsgaun">
+<line x1="6930.0" y1="570.0" x2="6960.0" y2="570.0" stroke="#dc2626" stroke-width="3"/>
+<text class="legend" x="6969.0" y="575.0">Helsgaun (41 evals, best 6655.8)</text>
+</g>
+<g data-legend="hybrid">
+<line x1="6930.0" y1="595.0" x2="6960.0" y2="595.0" stroke="#059669" stroke-width="3"/>
+<text class="legend" x="6969.0" y="600.0">Hybrid (33 evals, best 6656)</text>
+</g>
+</svg>

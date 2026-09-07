@@ -1,0 +1,5033 @@
+{
+  "runs": {
+    "2523919b14d4": {
+      "identity": {
+        "executable": "/private/tmp/tsp-gap-probe-nine-build/tsp_bb",
+        "executable_sha256": "a759cf1206ef3ad12884823462214a83e820be3dd00040ce938f0a1f2244c1ee",
+        "format_version": 2,
+        "instances": [
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp"
+        ],
+        "kind": "tsp_bb",
+        "repeats": 5,
+        "solver_args": [
+          "--hk-ascent",
+          "polyak",
+          "--hk-node-ascent",
+          "polyak",
+          "--branch-edge-order",
+          "weight",
+          "--hk-potential-update",
+          "subtree-adaptive",
+          "--hk-update-depth",
+          "2",
+          "--hk-update-gap-ratio",
+          "0.05",
+          "--hk-update-iterations",
+          "16",
+          "--hk-update-budget",
+          "5000",
+          "--hk-update-probe-updates",
+          "2",
+          "--hk-update-probe-min-gap-ratio",
+          "0.02",
+          "--hk-update-probe-min-coverage",
+          "0.05",
+          "--exact-max-n",
+          "130",
+          "--debug",
+          "--debug-interval",
+          "5000000"
+        ],
+        "strategy": "Probe5",
+        "timeout_seconds": 120.0,
+        "workers": 1
+      },
+      "results": {
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 1,
+          "result": 10628.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.011242125183343887
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 1,
+          "result": 1610.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.005183166824281216
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 1,
+          "result": 2020.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.005622833035886288
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 1,
+          "result": 699.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.007619916461408138
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 169007,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 1,
+          "result": 629.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.5664014993235469
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 1,
+          "result": 538.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.07219749968498945
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 1,
+          "result": 937.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.004488916136324406
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 1,
+          "result": 1211.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.11896300036460161
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 1,
+          "result": 675.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.3713853331282735
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 2,
+          "result": 10628.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.011482041329145432
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 2,
+          "result": 1610.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.004737792536616325
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 2,
+          "result": 2020.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.005022999830543995
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 2,
+          "result": 699.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.008148000575602055
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 169007,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 2,
+          "result": 629.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.5752069586887956
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 2,
+          "result": 538.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.07042837515473366
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 2,
+          "result": 937.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.003621624782681465
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 2,
+          "result": 1211.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.11842391639947891
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 2,
+          "result": 675.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.36705854162573814
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 3,
+          "result": 10628.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.011100292205810547
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 3,
+          "result": 1610.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.004596833139657974
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 3,
+          "result": 2020.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.005805040709674358
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 3,
+          "result": 699.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.0076577914878726006
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 169007,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 3,
+          "result": 629.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.578144209459424
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 3,
+          "result": 538.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.0697954585775733
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 3,
+          "result": 937.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.0041191671043634415
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 3,
+          "result": 1211.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.11238529067486525
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 3,
+          "result": 675.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.3579374998807907
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 4,
+          "result": 10628.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.011391709558665752
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 4,
+          "result": 1610.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.004754999652504921
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 4,
+          "result": 2020.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.005306250415742397
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 4,
+          "result": 699.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.008478833362460136
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 169007,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 4,
+          "result": 629.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.5648248754441738
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 4,
+          "result": 538.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.06918616592884064
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 4,
+          "result": 937.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.005235250107944012
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 4,
+          "result": 1211.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.1136419577524066
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 4,
+          "result": 675.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.36111345794051886
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 5,
+          "result": 10628.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.011374208144843578
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 5,
+          "result": 1610.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.0049238745123147964
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 5,
+          "result": 2020.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.004786624573171139
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 5,
+          "result": 699.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.007849374786019325
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 169007,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 5,
+          "result": 629.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.5687071662396193
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 5,
+          "result": 538.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.07003316655755043
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 5,
+          "result": 937.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.0035979170352220535
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 5,
+          "result": 1211.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.11484874971210957
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 5,
+          "result": 675.0,
+          "run_id": "Probe5-2523919b14d4",
+          "status": "ok",
+          "strategy": "Probe5",
+          "wall_seconds": 0.3703555418178439
+        }
+      }
+    },
+    "351d05c0828e": {
+      "identity": {
+        "executable": "/private/tmp/tsp-gap-probe-nine-build/tsp_bb",
+        "executable_sha256": "a759cf1206ef3ad12884823462214a83e820be3dd00040ce938f0a1f2244c1ee",
+        "format_version": 2,
+        "instances": [
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp"
+        ],
+        "kind": "tsp_bb",
+        "repeats": 5,
+        "solver_args": [
+          "--hk-ascent",
+          "polyak",
+          "--hk-node-ascent",
+          "polyak",
+          "--branch-edge-order",
+          "weight",
+          "--hk-potential-update",
+          "subtree-adaptive",
+          "--hk-update-depth",
+          "2",
+          "--hk-update-gap-ratio",
+          "0.05",
+          "--hk-update-iterations",
+          "16",
+          "--hk-update-budget",
+          "5000",
+          "--exact-max-n",
+          "130",
+          "--debug",
+          "--debug-interval",
+          "5000000"
+        ],
+        "strategy": "Gap5",
+        "timeout_seconds": 120.0,
+        "workers": 1
+      },
+      "results": {
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 1,
+          "result": 10628.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.010829624719917774
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 1,
+          "result": 1610.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.004675958305597305
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 1,
+          "result": 2020.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.004937208257615566
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 1,
+          "result": 699.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.007425208576023579
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 146493,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 1,
+          "result": 629.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.6314959172159433
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 1,
+          "result": 538.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.07211333326995373
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 1,
+          "result": 937.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.0039090001955628395
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 1,
+          "result": 1211.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.11787662468850613
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 157720,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 1,
+          "result": 675.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.3670695833861828
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 2,
+          "result": 10628.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.011234584264457226
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 2,
+          "result": 1610.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.005175832659006119
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 2,
+          "result": 2020.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.005554959177970886
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 2,
+          "result": 699.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.007661208510398865
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 146493,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 2,
+          "result": 629.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.6322786249220371
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 2,
+          "result": 538.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.06934862490743399
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 2,
+          "result": 937.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.004300042055547237
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 2,
+          "result": 1211.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.11347441654652357
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 157720,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 2,
+          "result": 675.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.36453791707754135
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 3,
+          "result": 10628.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.011280874721705914
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 3,
+          "result": 1610.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.0061417073011398315
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 3,
+          "result": 2020.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.005855457857251167
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 3,
+          "result": 699.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.007821666076779366
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 146493,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 3,
+          "result": 629.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.6543587492778897
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 3,
+          "result": 538.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.06934529077261686
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 3,
+          "result": 937.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.004203749820590019
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 3,
+          "result": 1211.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.11315708328038454
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 157720,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 3,
+          "result": 675.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.3533580834046006
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 4,
+          "result": 10628.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.011551416479051113
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 4,
+          "result": 1610.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.005558834411203861
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 4,
+          "result": 2020.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.005476166494190693
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 4,
+          "result": 699.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.007883958518505096
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 146493,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 4,
+          "result": 629.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.6547097079455853
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 4,
+          "result": 538.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.07053583301603794
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 4,
+          "result": 937.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.004008874297142029
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 4,
+          "result": 1211.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.11216079164296389
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 157720,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 4,
+          "result": 675.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.3538782922551036
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 5,
+          "result": 10628.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.012335250154137611
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 5,
+          "result": 1610.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.005165415816009045
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 5,
+          "result": 2020.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.005100749433040619
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 5,
+          "result": 699.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.008126875385642052
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 146493,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 5,
+          "result": 629.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.6338909585028887
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 5,
+          "result": 538.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.0700654573738575
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 5,
+          "result": 937.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.004074959084391594
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 5,
+          "result": 1211.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.11435841675847769
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 157720,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 5,
+          "result": 675.0,
+          "run_id": "Gap5-351d05c0828e",
+          "status": "ok",
+          "strategy": "Gap5",
+          "wall_seconds": 0.35605483315885067
+        }
+      }
+    },
+    "40333440517b": {
+      "identity": {
+        "executable": "/private/tmp/tsp-gap-probe-nine-build/tsp_bb",
+        "executable_sha256": "a759cf1206ef3ad12884823462214a83e820be3dd00040ce938f0a1f2244c1ee",
+        "format_version": 2,
+        "instances": [
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp"
+        ],
+        "kind": "tsp_bb",
+        "repeats": 5,
+        "solver_args": [
+          "--hk-ascent",
+          "polyak",
+          "--hk-node-ascent",
+          "polyak",
+          "--branch-edge-order",
+          "weight",
+          "--hk-potential-update",
+          "subtree-adaptive",
+          "--hk-update-depth",
+          "2",
+          "--hk-update-gap-ratio",
+          "0.05",
+          "--hk-update-iterations",
+          "16",
+          "--hk-update-budget",
+          "5000",
+          "--hk-update-probe-updates",
+          "1",
+          "--hk-update-probe-min-gap-ratio",
+          "0.02",
+          "--hk-update-probe-min-coverage",
+          "0.01",
+          "--exact-max-n",
+          "130",
+          "--debug",
+          "--debug-interval",
+          "5000000"
+        ],
+        "strategy": "Probe1_1",
+        "timeout_seconds": 120.0,
+        "workers": 1
+      },
+      "results": {
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 1,
+          "result": 10628.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.011551625095307827
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 1,
+          "result": 1610.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.005408916622400284
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 1,
+          "result": 2020.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.005211625248193741
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 1,
+          "result": 699.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.009015582501888275
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 163848,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 1,
+          "result": 629.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.5177614577114582
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 1,
+          "result": 538.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.06802737433463335
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 1,
+          "result": 937.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.004351957701146603
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 1,
+          "result": 1211.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.11866237502545118
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 1,
+          "result": 675.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.34693375043570995
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 2,
+          "result": 10628.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.010834874585270882
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 2,
+          "result": 1610.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.004478083923459053
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 2,
+          "result": 2020.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.004945957101881504
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 2,
+          "result": 699.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.007963915355503559
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 163848,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 2,
+          "result": 629.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.54033612459898
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 2,
+          "result": 538.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.06824270728975534
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 2,
+          "result": 937.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.0042898328974843025
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 2,
+          "result": 1211.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.11121454183012247
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 2,
+          "result": 675.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.348212874494493
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 3,
+          "result": 10628.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.011226666159927845
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 3,
+          "result": 1610.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.004773290827870369
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 3,
+          "result": 2020.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.004842666909098625
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 3,
+          "result": 699.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.007757208310067654
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 163848,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 3,
+          "result": 629.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.5269210003316402
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 3,
+          "result": 538.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.06781025044620037
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 3,
+          "result": 937.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.0038184160366654396
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 3,
+          "result": 1211.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.11144600063562393
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 3,
+          "result": 675.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.3502429584041238
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 4,
+          "result": 10628.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.01207912527024746
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 4,
+          "result": 1610.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.0046775005757808685
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 4,
+          "result": 2020.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.00478195957839489
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 4,
+          "result": 699.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.007987875491380692
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 163848,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 4,
+          "result": 629.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.5290459161624312
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 4,
+          "result": 538.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.06837720796465874
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 4,
+          "result": 937.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.0036521246656775475
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 4,
+          "result": 1211.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.11104958225041628
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 4,
+          "result": 675.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.353752083145082
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 5,
+          "result": 10628.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.010860375128686428
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 5,
+          "result": 1610.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.004486999474465847
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 5,
+          "result": 2020.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.004885666072368622
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 5,
+          "result": 699.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.008095167577266693
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 163848,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 5,
+          "result": 629.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.5436427919194102
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 5,
+          "result": 538.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.06859604083001614
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 5,
+          "result": 937.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.00460437498986721
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 5,
+          "result": 1211.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.11212195828557014
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 5,
+          "result": 675.0,
+          "run_id": "Probe1_1-40333440517b",
+          "status": "ok",
+          "strategy": "Probe1_1",
+          "wall_seconds": 0.3535037087276578
+        }
+      }
+    },
+    "4d4686be557a": {
+      "identity": {
+        "executable": "/private/tmp/tsp-gap-probe-nine-build/tsp_bb",
+        "executable_sha256": "a759cf1206ef3ad12884823462214a83e820be3dd00040ce938f0a1f2244c1ee",
+        "format_version": 2,
+        "instances": [
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp"
+        ],
+        "kind": "tsp_bb",
+        "repeats": 5,
+        "solver_args": [
+          "--hk-ascent",
+          "polyak",
+          "--hk-node-ascent",
+          "polyak",
+          "--branch-edge-order",
+          "weight",
+          "--hk-potential-update",
+          "subtree-adaptive",
+          "--hk-update-depth",
+          "2",
+          "--hk-update-gap-ratio",
+          "0.05",
+          "--hk-update-iterations",
+          "16",
+          "--hk-update-budget",
+          "5000",
+          "--hk-update-probe-updates",
+          "1",
+          "--hk-update-probe-min-gap-ratio",
+          "0.02",
+          "--hk-update-probe-min-coverage",
+          "0.25",
+          "--exact-max-n",
+          "130",
+          "--debug",
+          "--debug-interval",
+          "5000000"
+        ],
+        "strategy": "Probe1_25",
+        "timeout_seconds": 120.0,
+        "workers": 1
+      },
+      "results": {
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 1,
+          "result": 10628.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.011482832953333855
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 1,
+          "result": 1610.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.004850416444242001
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 1,
+          "result": 2020.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.00483445730060339
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 1,
+          "result": 699.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.007738792337477207
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 163604,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 1,
+          "result": 629.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.546316041611135
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 1,
+          "result": 538.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.07022629119455814
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 1,
+          "result": 937.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.003661917522549629
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 1,
+          "result": 1211.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.11815362516790628
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 1,
+          "result": 675.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.3558232504874468
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 2,
+          "result": 10628.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.01128925010561943
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 2,
+          "result": 1610.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.004627665504813194
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 2,
+          "result": 2020.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.004803375340998173
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 2,
+          "result": 699.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.007951040752232075
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 163604,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 2,
+          "result": 629.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.5368732921779156
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 2,
+          "result": 538.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.07001504208892584
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 2,
+          "result": 937.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.0037506669759750366
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 2,
+          "result": 1211.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.11286712531000376
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 2,
+          "result": 675.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.35767575073987246
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 3,
+          "result": 10628.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.012028167024254799
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 3,
+          "result": 1610.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.005049583502113819
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 3,
+          "result": 2020.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.00507141649723053
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 3,
+          "result": 699.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.008353499695658684
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 163604,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 3,
+          "result": 629.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.5507691670209169
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 3,
+          "result": 538.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.0691614169627428
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 3,
+          "result": 937.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.003899333067238331
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 3,
+          "result": 1211.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.1137835830450058
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 3,
+          "result": 675.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.3580690426751971
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 4,
+          "result": 10628.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.011679875664412975
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 4,
+          "result": 1610.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.004644374363124371
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 4,
+          "result": 2020.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.005166375078260899
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 4,
+          "result": 699.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.007795167155563831
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 163604,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 4,
+          "result": 629.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.5367554165422916
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 4,
+          "result": 538.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.07106795813888311
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 4,
+          "result": 937.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.004081124439835548
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 4,
+          "result": 1211.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.11412554234266281
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 4,
+          "result": 675.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.37320725060999393
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 5,
+          "result": 10628.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.011877707205712795
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 5,
+          "result": 1610.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.005051916465163231
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 5,
+          "result": 2020.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.0050688330084085464
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 5,
+          "result": 699.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.007696541026234627
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 163604,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 5,
+          "result": 629.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.5447582500055432
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 5,
+          "result": 538.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.07016904186457396
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 5,
+          "result": 937.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.00374549999833107
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 5,
+          "result": 1211.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.11355570890009403
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 5,
+          "result": 675.0,
+          "run_id": "Probe1_25-4d4686be557a",
+          "status": "ok",
+          "strategy": "Probe1_25",
+          "wall_seconds": 0.3577625835314393
+        }
+      }
+    },
+    "51ec268f58e0": {
+      "identity": {
+        "executable": "/private/tmp/tsp-gap-probe-nine-build/tsp_bb",
+        "executable_sha256": "a759cf1206ef3ad12884823462214a83e820be3dd00040ce938f0a1f2244c1ee",
+        "format_version": 2,
+        "instances": [
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp"
+        ],
+        "kind": "tsp_bb",
+        "repeats": 5,
+        "solver_args": [
+          "--hk-ascent",
+          "polyak",
+          "--hk-node-ascent",
+          "polyak",
+          "--branch-edge-order",
+          "weight",
+          "--hk-potential-update",
+          "subtree-adaptive",
+          "--hk-update-depth",
+          "2",
+          "--hk-update-gap-ratio",
+          "0.05",
+          "--hk-update-iterations",
+          "16",
+          "--hk-update-budget",
+          "5000",
+          "--hk-update-probe-updates",
+          "1",
+          "--hk-update-probe-min-gap-ratio",
+          "0.02",
+          "--hk-update-probe-min-coverage",
+          "0.05",
+          "--exact-max-n",
+          "130",
+          "--debug",
+          "--debug-interval",
+          "5000000"
+        ],
+        "strategy": "Probe1_5",
+        "timeout_seconds": 120.0,
+        "workers": 1
+      },
+      "results": {
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 1,
+          "result": 10628.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.010875167325139046
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 1,
+          "result": 1610.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.00476429145783186
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 1,
+          "result": 2020.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.004951666109263897
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 1,
+          "result": 699.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.00885720830410719
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 163848,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 1,
+          "result": 629.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.518557833507657
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 1,
+          "result": 538.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.06886595860123634
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 1,
+          "result": 937.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.0042782919481396675
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 1,
+          "result": 1211.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.11968441680073738
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 1,
+          "result": 675.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.35648316610604525
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 2,
+          "result": 10628.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.010949292220175266
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 2,
+          "result": 1610.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.004974999465048313
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 2,
+          "result": 2020.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.004615209065377712
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 2,
+          "result": 699.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.007766291499137878
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 163848,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 2,
+          "result": 629.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.5244415001943707
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 2,
+          "result": 538.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.06741120759397745
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 2,
+          "result": 937.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.0034889159724116325
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 2,
+          "result": 1211.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.11088970769196749
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 2,
+          "result": 675.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.35127016715705395
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 3,
+          "result": 10628.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.011438957415521145
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 3,
+          "result": 1610.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.004435832612216473
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 3,
+          "result": 2020.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.0047773327678442
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 3,
+          "result": 699.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.008079665713012218
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 163848,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 3,
+          "result": 629.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.5408961251378059
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 3,
+          "result": 538.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.06783645786345005
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 3,
+          "result": 937.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.003788999281823635
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 3,
+          "result": 1211.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.11082991678267717
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 3,
+          "result": 675.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.36631870828568935
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 4,
+          "result": 10628.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.011123625561594963
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 4,
+          "result": 1610.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.004628583788871765
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 4,
+          "result": 2020.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.005057916976511478
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 4,
+          "result": 699.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.00773816742002964
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 163848,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 4,
+          "result": 629.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.5264544170349836
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 4,
+          "result": 538.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.06876800023019314
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 4,
+          "result": 937.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.003780834376811981
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 4,
+          "result": 1211.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.11177904158830643
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 4,
+          "result": 675.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.35355374962091446
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 5,
+          "result": 10628.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.011696083471179008
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 5,
+          "result": 1610.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.005107874982059002
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 5,
+          "result": 2020.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.004969417117536068
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 5,
+          "result": 699.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.007937583141028881
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 163848,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 5,
+          "result": 629.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.5286871660500765
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 5,
+          "result": 538.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.06808812450617552
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 5,
+          "result": 937.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.0037735411897301674
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 5,
+          "result": 1211.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.1107524586841464
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 5,
+          "result": 675.0,
+          "run_id": "Probe1_5-51ec268f58e0",
+          "status": "ok",
+          "strategy": "Probe1_5",
+          "wall_seconds": 0.35497016552835703
+        }
+      }
+    },
+    "6e45fe722b0b": {
+      "identity": {
+        "executable": "/private/tmp/tsp-gap-probe-nine-build/tsp_bb",
+        "executable_sha256": "a759cf1206ef3ad12884823462214a83e820be3dd00040ce938f0a1f2244c1ee",
+        "format_version": 2,
+        "instances": [
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp"
+        ],
+        "kind": "tsp_bb",
+        "repeats": 5,
+        "solver_args": [
+          "--hk-ascent",
+          "polyak",
+          "--hk-node-ascent",
+          "polyak",
+          "--branch-edge-order",
+          "weight",
+          "--hk-potential-update",
+          "subtree-adaptive",
+          "--hk-update-depth",
+          "2",
+          "--hk-update-gap-ratio",
+          "0.02",
+          "--hk-update-iterations",
+          "16",
+          "--hk-update-budget",
+          "5000",
+          "--exact-max-n",
+          "130",
+          "--debug",
+          "--debug-interval",
+          "5000000"
+        ],
+        "strategy": "Gap2",
+        "timeout_seconds": 120.0,
+        "workers": 1
+      },
+      "results": {
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 1,
+          "result": 10628.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.01128925010561943
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 1,
+          "result": 1610.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.004833834245800972
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 1,
+          "result": 2020.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.005168958567082882
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 1,
+          "result": 699.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.009315875358879566
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 156412,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 1,
+          "result": 629.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.526588125154376
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 1,
+          "result": 538.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.06773666664958
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 1,
+          "result": 937.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.003922209143638611
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 1,
+          "result": 1211.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.12128541711717844
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135216,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 1,
+          "result": 675.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.35583079140633345
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 2,
+          "result": 10628.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.01163950003683567
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 2,
+          "result": 1610.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.004999000579118729
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 2,
+          "result": 2020.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.005174458026885986
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 2,
+          "result": 699.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.007861542515456676
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 156412,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 2,
+          "result": 629.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.5330348750576377
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 2,
+          "result": 538.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.06788370758295059
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 2,
+          "result": 937.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.0038294168189167976
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 2,
+          "result": 1211.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.12472770735621452
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135216,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 2,
+          "result": 675.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.34817591682076454
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 3,
+          "result": 10628.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.011272124946117401
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 3,
+          "result": 1610.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.004999999888241291
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 3,
+          "result": 2020.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.004718291573226452
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 3,
+          "result": 699.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.007563458755612373
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 156412,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 3,
+          "result": 629.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.531672541052103
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 3,
+          "result": 538.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.06786404177546501
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 3,
+          "result": 937.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.0034886253997683525
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 3,
+          "result": 1211.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.11114045884460211
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135216,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 3,
+          "result": 675.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.3551928326487541
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 4,
+          "result": 10628.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.011070999316871166
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 4,
+          "result": 1610.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.004672541283071041
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 4,
+          "result": 2020.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.004688874818384647
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 4,
+          "result": 699.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.0077545419335365295
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 156412,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 4,
+          "result": 629.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.5359948324039578
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 4,
+          "result": 538.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.06785129196941853
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 4,
+          "result": 937.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.003961707465350628
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 4,
+          "result": 1211.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.12225591577589512
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135216,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 4,
+          "result": 675.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.3520851656794548
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 5,
+          "result": 10628.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.011180125176906586
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 5,
+          "result": 1610.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.004696166142821312
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 5,
+          "result": 2020.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.004837167449295521
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 5,
+          "result": 699.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.007981542497873306
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 156412,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 5,
+          "result": 629.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.5351434592157602
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 5,
+          "result": 538.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.0685054175555706
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 5,
+          "result": 937.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.003843707963824272
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 5,
+          "result": 1211.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.11148437485098839
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135216,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 5,
+          "result": 675.0,
+          "run_id": "Gap2-6e45fe722b0b",
+          "status": "ok",
+          "strategy": "Gap2",
+          "wall_seconds": 0.3538706246763468
+        }
+      }
+    },
+    "8a119b40f128": {
+      "identity": {
+        "executable": "/private/tmp/tsp-gap-probe-nine-build/tsp_bb",
+        "executable_sha256": "a759cf1206ef3ad12884823462214a83e820be3dd00040ce938f0a1f2244c1ee",
+        "format_version": 2,
+        "instances": [
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp"
+        ],
+        "kind": "tsp_bb",
+        "repeats": 5,
+        "solver_args": [
+          "--hk-ascent",
+          "polyak",
+          "--hk-node-ascent",
+          "polyak",
+          "--branch-edge-order",
+          "weight",
+          "--hk-potential-update",
+          "subtree-adaptive",
+          "--hk-update-depth",
+          "2",
+          "--hk-update-gap-ratio",
+          "0.05",
+          "--hk-update-iterations",
+          "16",
+          "--hk-update-budget",
+          "5000",
+          "--hk-update-probe-updates",
+          "2",
+          "--hk-update-probe-min-gap-ratio",
+          "0.02",
+          "--hk-update-probe-min-coverage",
+          "0.125",
+          "--exact-max-n",
+          "130",
+          "--debug",
+          "--debug-interval",
+          "5000000"
+        ],
+        "strategy": "Probe12_5",
+        "timeout_seconds": 120.0,
+        "workers": 1
+      },
+      "results": {
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 1,
+          "result": 10628.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.011555333621799946
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 1,
+          "result": 1610.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.00471595861017704
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 1,
+          "result": 2020.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.004828374832868576
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 1,
+          "result": 699.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.007704541087150574
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 161253,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 1,
+          "result": 629.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.549241041764617
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 1,
+          "result": 538.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.07113816682249308
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 1,
+          "result": 937.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.0037253331393003464
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 1,
+          "result": 1211.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.13154104258865118
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 1,
+          "result": 675.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.3596185827627778
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 2,
+          "result": 10628.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.01159933302551508
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 2,
+          "result": 1610.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.005034958012402058
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 2,
+          "result": 2020.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.004755416885018349
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 2,
+          "result": 699.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.008099042810499668
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 161253,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 2,
+          "result": 629.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.5632689576596022
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 2,
+          "result": 538.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.07046074979007244
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 2,
+          "result": 937.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.003723708912730217
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 2,
+          "result": 1211.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.1146994587033987
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 2,
+          "result": 675.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.360511458478868
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 3,
+          "result": 10628.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.014243166893720627
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 3,
+          "result": 1610.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.008172291330993176
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 3,
+          "result": 2020.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.0068131666630506516
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 3,
+          "result": 699.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.007734624668955803
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 161253,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 3,
+          "result": 629.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.552889958024025
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 3,
+          "result": 538.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.07055795844644308
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 3,
+          "result": 937.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.005773291923105717
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 3,
+          "result": 1211.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.11411712504923344
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 3,
+          "result": 675.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.36078674998134375
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 4,
+          "result": 10628.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.011179165914654732
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 4,
+          "result": 1610.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.004868374206125736
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 4,
+          "result": 2020.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.004779917187988758
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 4,
+          "result": 699.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.007997624576091766
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 161253,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 4,
+          "result": 629.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.551344083622098
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 4,
+          "result": 538.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.06976141687482595
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 4,
+          "result": 937.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.004031958058476448
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 4,
+          "result": 1211.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.11407883372157812
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 4,
+          "result": 675.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.37289199978113174
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 5,
+          "result": 10628.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.011023582890629768
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 5,
+          "result": 1610.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.004853292368352413
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 5,
+          "result": 2020.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.004840167239308357
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 5,
+          "result": 699.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.008351082913577557
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 161253,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 5,
+          "result": 629.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.5681453328579664
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 5,
+          "result": 538.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.07038091588765383
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 5,
+          "result": 937.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.0037869587540626526
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 5,
+          "result": 1211.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.11467524990439415
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 5,
+          "result": 675.0,
+          "run_id": "Probe12_5-8a119b40f128",
+          "status": "ok",
+          "strategy": "Probe12_5",
+          "wall_seconds": 0.3600744167342782
+        }
+      }
+    },
+    "975fe10462f2": {
+      "identity": {
+        "executable": "/private/tmp/tsp-gap-probe-nine-build/tsp_bb",
+        "executable_sha256": "a759cf1206ef3ad12884823462214a83e820be3dd00040ce938f0a1f2244c1ee",
+        "format_version": 2,
+        "instances": [
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp"
+        ],
+        "kind": "tsp_bb",
+        "repeats": 5,
+        "solver_args": [
+          "--hk-ascent",
+          "polyak",
+          "--hk-node-ascent",
+          "polyak",
+          "--branch-edge-order",
+          "weight",
+          "--hk-potential-update",
+          "subtree-adaptive",
+          "--hk-update-depth",
+          "2",
+          "--hk-update-gap-ratio",
+          "0.05",
+          "--hk-update-iterations",
+          "16",
+          "--hk-update-budget",
+          "5000",
+          "--hk-update-probe-updates",
+          "2",
+          "--hk-update-probe-min-gap-ratio",
+          "0.02",
+          "--hk-update-probe-min-coverage",
+          "0.25",
+          "--exact-max-n",
+          "130",
+          "--debug",
+          "--debug-interval",
+          "5000000"
+        ],
+        "strategy": "Probe25",
+        "timeout_seconds": 120.0,
+        "workers": 1
+      },
+      "results": {
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 1,
+          "result": 10628.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.01115016732364893
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 1,
+          "result": 1610.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.004597625695168972
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 1,
+          "result": 2020.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.004768666811287403
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 1,
+          "result": 699.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.007833541370928288
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 154093,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 1,
+          "result": 629.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.570527333766222
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 1,
+          "result": 538.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.07105304207652807
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 1,
+          "result": 937.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.003774290904402733
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 1,
+          "result": 1211.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.12043229211121798
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 1,
+          "result": 675.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.3608230846002698
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 2,
+          "result": 10628.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.012058417312800884
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 2,
+          "result": 1610.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.005162958055734634
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 2,
+          "result": 2020.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.005077500827610493
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 2,
+          "result": 699.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.007992999628186226
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 154093,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 2,
+          "result": 629.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.5603883750736713
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 2,
+          "result": 538.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.07041666749864817
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 2,
+          "result": 937.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.004213542677462101
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 2,
+          "result": 1211.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.11603516712784767
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 2,
+          "result": 675.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.3619500417262316
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 3,
+          "result": 10628.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.011381999589502811
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 3,
+          "result": 1610.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.005227625370025635
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 3,
+          "result": 2020.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.004970374517142773
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 3,
+          "result": 699.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.008383084088563919
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 154093,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 3,
+          "result": 629.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.5562943331897259
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 3,
+          "result": 538.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.07051537465304136
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 3,
+          "result": 937.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.003773542121052742
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 3,
+          "result": 1211.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.11484220810234547
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 3,
+          "result": 675.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.36151654087007046
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 4,
+          "result": 10628.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.011488291434943676
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 4,
+          "result": 1610.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.0051472922787070274
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 4,
+          "result": 2020.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.004960250109434128
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 4,
+          "result": 699.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.007791957817971706
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 154093,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 4,
+          "result": 629.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.5565927503630519
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 4,
+          "result": 538.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.07094404194504023
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 4,
+          "result": 937.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.003907958045601845
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 4,
+          "result": 1211.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.12403854168951511
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 4,
+          "result": 675.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.36072183307260275
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 5,
+          "result": 10628.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.011613750830292702
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 5,
+          "result": 1610.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.005039124749600887
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 5,
+          "result": 2020.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.005576292052865028
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 5,
+          "result": 699.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.007911833934485912
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 154093,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 5,
+          "result": 629.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.5540625005960464
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 5,
+          "result": 538.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.07066845893859863
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 5,
+          "result": 937.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.00397895835340023
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 5,
+          "result": 1211.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.1148400828242302
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 5,
+          "result": 675.0,
+          "run_id": "Probe25-975fe10462f2",
+          "status": "ok",
+          "strategy": "Probe25",
+          "wall_seconds": 0.36044566612690687
+        }
+      }
+    },
+    "aa3d36655292": {
+      "identity": {
+        "executable": "/private/tmp/tsp-gap-probe-nine-build/tsp_bb",
+        "executable_sha256": "a759cf1206ef3ad12884823462214a83e820be3dd00040ce938f0a1f2244c1ee",
+        "format_version": 2,
+        "instances": [
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp"
+        ],
+        "kind": "tsp_bb",
+        "repeats": 5,
+        "solver_args": [
+          "--hk-ascent",
+          "polyak",
+          "--hk-node-ascent",
+          "polyak",
+          "--branch-edge-order",
+          "weight",
+          "--hk-potential-update",
+          "subtree-adaptive",
+          "--hk-update-depth",
+          "2",
+          "--hk-update-gap-ratio",
+          "0.05",
+          "--hk-update-iterations",
+          "16",
+          "--hk-update-budget",
+          "5000",
+          "--hk-update-probe-updates",
+          "1",
+          "--hk-update-probe-min-gap-ratio",
+          "0.02",
+          "--hk-update-probe-min-coverage",
+          "0.125",
+          "--exact-max-n",
+          "130",
+          "--debug",
+          "--debug-interval",
+          "5000000"
+        ],
+        "strategy": "Probe1_12_5",
+        "timeout_seconds": 120.0,
+        "workers": 1
+      },
+      "results": {
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 1,
+          "result": 10628.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.011321917176246643
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 1,
+          "result": 1610.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.004842332564294338
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 1,
+          "result": 2020.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.005021458491683006
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 1,
+          "result": 699.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.007629916071891785
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 163604,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 1,
+          "result": 629.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.5411555832251906
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 1,
+          "result": 538.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.07146933302283287
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 1,
+          "result": 937.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.00445137545466423
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 1,
+          "result": 1211.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.1198030412197113
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 1,
+          "result": 675.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.3573727924376726
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 2,
+          "result": 10628.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.011195958591997623
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 2,
+          "result": 1610.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.004746457561850548
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 2,
+          "result": 2020.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.004879624582827091
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 2,
+          "result": 699.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.007791000418365002
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 163604,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 2,
+          "result": 629.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.5301028341054916
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 2,
+          "result": 538.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.06847679149359465
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 2,
+          "result": 937.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.0037548746913671494
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 2,
+          "result": 1211.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.11335458420217037
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 2,
+          "result": 675.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.3557357080280781
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 3,
+          "result": 10628.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.011477749794721603
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 3,
+          "result": 1610.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.005310999229550362
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 3,
+          "result": 2020.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.004753082990646362
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 3,
+          "result": 699.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.007558874785900116
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 163604,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 3,
+          "result": 629.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.5322422087192535
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 3,
+          "result": 538.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.06886045914143324
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 3,
+          "result": 937.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.003924291580915451
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 3,
+          "result": 1211.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.11349537502974272
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 3,
+          "result": 675.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.35858083330094814
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 4,
+          "result": 10628.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.011162791401147842
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 4,
+          "result": 1610.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.004817124456167221
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 4,
+          "result": 2020.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.005042041651904583
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 4,
+          "result": 699.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.007685917429625988
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 163604,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 4,
+          "result": 629.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.5302969161421061
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 4,
+          "result": 538.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.06959349941462278
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 4,
+          "result": 937.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.0038319993764162064
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 4,
+          "result": 1211.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.11256837472319603
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 4,
+          "result": 675.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.36773587483912706
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 5,
+          "result": 10628.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.011471082456409931
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 5,
+          "result": 1610.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.005453292280435562
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 5,
+          "result": 2020.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.005162540823221207
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 5,
+          "result": 699.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.007909041829407215
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 163604,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 5,
+          "result": 629.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.5339644998311996
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 5,
+          "result": 538.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.06919241696596146
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 5,
+          "result": 937.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.0049322908744215965
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 5,
+          "result": 1211.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.11282170843333006
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 5,
+          "result": 675.0,
+          "run_id": "Probe1_12_5-aa3d36655292",
+          "status": "ok",
+          "strategy": "Probe1_12_5",
+          "wall_seconds": 0.3566639591008425
+        }
+      }
+    },
+    "bc52e2bbeef4": {
+      "identity": {
+        "executable": "/private/tmp/tsp-gap-probe-nine-build/tsp_bb",
+        "executable_sha256": "a759cf1206ef3ad12884823462214a83e820be3dd00040ce938f0a1f2244c1ee",
+        "format_version": 2,
+        "instances": [
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp"
+        ],
+        "kind": "tsp_bb",
+        "repeats": 5,
+        "solver_args": [
+          "--hk-ascent",
+          "polyak",
+          "--hk-node-ascent",
+          "polyak",
+          "--branch-edge-order",
+          "weight",
+          "--hk-potential-update",
+          "subtree-adaptive",
+          "--hk-update-depth",
+          "2",
+          "--hk-update-gap-ratio",
+          "0.05",
+          "--hk-update-iterations",
+          "16",
+          "--hk-update-budget",
+          "5000",
+          "--hk-update-probe-updates",
+          "1",
+          "--hk-update-probe-min-gap-ratio",
+          "0.02",
+          "--hk-update-probe-min-coverage",
+          "0.025",
+          "--exact-max-n",
+          "130",
+          "--debug",
+          "--debug-interval",
+          "5000000"
+        ],
+        "strategy": "Probe1_2_5",
+        "timeout_seconds": 120.0,
+        "workers": 1
+      },
+      "results": {
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 1,
+          "result": 10628.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.011670124717056751
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 1,
+          "result": 1610.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.004716625437140465
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 1,
+          "result": 2020.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.005097166635096073
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 1,
+          "result": 699.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.007569459266960621
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 163848,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 1,
+          "result": 629.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.5342155415564775
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 1,
+          "result": 538.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.07053808402270079
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 1,
+          "result": 937.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.004246625117957592
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 1,
+          "result": 1211.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.11935883294790983
+        },
+        "1:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 1,
+          "result": 675.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.3580513335764408
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 2,
+          "result": 10628.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.011068416759371758
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 2,
+          "result": 1610.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.005370832979679108
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 2,
+          "result": 2020.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.005182458087801933
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 2,
+          "result": 699.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.007751124911010265
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 163848,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 2,
+          "result": 629.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.5440260414034128
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 2,
+          "result": 538.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.06879345793277025
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 2,
+          "result": 937.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.0038248328492045403
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 2,
+          "result": 1211.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.11408312525600195
+        },
+        "2:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 2,
+          "result": 675.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.3567485837265849
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 3,
+          "result": 10628.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.011166166514158249
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 3,
+          "result": 1610.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.00488550029695034
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 3,
+          "result": 2020.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.005041709169745445
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 3,
+          "result": 699.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.007766292430460453
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 163848,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 3,
+          "result": 629.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.5328290835022926
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 3,
+          "result": 538.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.0683915838599205
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 3,
+          "result": 937.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.003925959579646587
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 3,
+          "result": 1211.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.11369941662997007
+        },
+        "3:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 3,
+          "result": 675.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.37259187549352646
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 4,
+          "result": 10628.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.017266917042434216
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 4,
+          "result": 1610.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.006688750348985195
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 4,
+          "result": 2020.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.006988707929849625
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 4,
+          "result": 699.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.009435208514332771
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 163848,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 4,
+          "result": 629.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.5324956672266126
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 4,
+          "result": 538.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.0692080007866025
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 4,
+          "result": 937.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.004694291390478611
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 4,
+          "result": 1211.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.11307487450540066
+        },
+        "4:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 4,
+          "result": 675.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.3578447923064232
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp": {
+          "branches": 48,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+          "repeat": 5,
+          "result": 10628.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.01120083313435316
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp": {
+          "branches": 3,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+          "repeat": 5,
+          "result": 1610.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.005202542059123516
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp": {
+          "branches": 12,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+          "repeat": 5,
+          "result": 2020.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.004899292252957821
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp": {
+          "branches": 7,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+          "repeat": 5,
+          "result": 699.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.00795000046491623
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp": {
+          "branches": 163848,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp",
+          "repeat": 5,
+          "result": 629.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.5330425826832652
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp": {
+          "branches": 617,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+          "repeat": 5,
+          "result": 538.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.06969208363443613
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp": {
+          "branches": 1,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+          "repeat": 5,
+          "result": 937.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.0037208758294582367
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp": {
+          "branches": 624,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+          "repeat": 5,
+          "result": 1211.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.11306291539222002
+        },
+        "5:/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp": {
+          "branches": 135214,
+          "instance": "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+          "repeat": 5,
+          "result": 675.0,
+          "run_id": "Probe1_2_5-bc52e2bbeef4",
+          "status": "ok",
+          "strategy": "Probe1_2_5",
+          "wall_seconds": 0.3709980007261038
+        }
+      }
+    }
+  },
+  "schema": 2
+}

@@ -282,6 +282,25 @@ void BranchBoundSolver::setRootAscentStrategy(RootAscentStrategy strategy)
     root_ascent_strategy_ = strategy;
 }
 
+void BranchBoundSolver::setRootAscentIterationLimit(std::size_t iterations)
+{
+    if (iterations == 0) {
+        throw std::invalid_argument(
+            "root ascent iteration limit must be positive");
+    }
+    root_ascent_iteration_limit_ = iterations;
+}
+
+void BranchBoundSolver::setRootAscentTraceOutput(std::ostream& output)
+{
+    root_ascent_trace_output_ = &output;
+}
+
+void BranchBoundSolver::disableRootAscentTraceOutput()
+{
+    root_ascent_trace_output_ = nullptr;
+}
+
 void BranchBoundSolver::setNodeAscentStrategy(NodeAscentStrategy strategy)
 {
     node_ascent_strategy_ = strategy;
@@ -505,13 +524,12 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
         return "unknown";
     };
     auto write_summary = [&](const std::string& selected,
-                             int polyak_iterations,
-                             int helsgaun_iterations,
+                             std::size_t polyak_iterations,
+                             std::size_t helsgaun_iterations,
                              double polyak_bound,
                              double helsgaun_bound) {
         result_.stats.root_potential_iterations +=
-            static_cast<std::size_t>(polyak_iterations)
-            + static_cast<std::size_t>(helsgaun_iterations);
+            polyak_iterations + helsgaun_iterations;
         if (debug_.output == nullptr) return;
         const double seconds = std::chrono::duration<double>(
             std::chrono::steady_clock::now() - started_at).count();
@@ -646,7 +664,7 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
         std::vector<double> potentials;
         double bound = -std::numeric_limits<double>::infinity();
         // 实际完成的 1-tree 评估次数，用于实验统计。
-        int iterations = 0;
+        std::size_t iterations = 0;
         // 与本策略所有可行评估同步累计的选边次数；只在 frequency-middle
         // 模式分配，选中 Polyak/Helsgaun 后直接安装对应一份统计。
         std::vector<std::uint32_t> edge_counts;
@@ -678,7 +696,22 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
         return false;
     };
 
-    constexpr int kMaxIterations = 400;
+    // 跨阶段的轨迹轮次只用于把 Hybrid 的两个阶段连接到同一横轴。各阶段
+    // 内部的停止条件和势更新公式保持原实现不变。
+    std::size_t trace_iteration = 0;
+    auto write_trace = [&](const char* phase,
+                           std::size_t phase_iteration,
+                           double bound,
+                           double best_bound) {
+        ++trace_iteration;
+        if (root_ascent_trace_output_ == nullptr) return;
+        *root_ascent_trace_output_
+            << strategy_name(root_ascent_strategy_) << ','
+            << trace_iteration << ',' << phase << ',' << phase_iteration << ','
+            << std::setprecision(std::numeric_limits<double>::max_digits10)
+            << bound << ',' << best_bound << '\n';
+    };
+
     auto run_polyak = [&](const std::vector<double>& initial) {
         // potentials 是正在迭代的工作势；best 单独保存历史最好证书。
         std::vector<double> potentials = initial;
@@ -691,7 +724,8 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
         constexpr int kStagnationIterations = 12;
         constexpr int kMinIterationsBeforeGapStop = 100;
 
-        for (int iteration = 0; iteration < kMaxIterations; ++iteration) {
+        for (std::size_t iteration = 0;
+             iteration < root_ascent_iteration_limit_; ++iteration) {
             const OneTreeEvaluation evaluation = evaluate(potentials);
             ++best.iterations;
             if (!evaluation.feasible) break;
@@ -702,6 +736,7 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
             } else {
                 ++no_improvement;
             }
+            write_trace("polyak", best.iterations, bound, best.bound);
 
             double subgradient_norm = 0.0;
             for (const int value : evaluation.degree) {
@@ -755,7 +790,7 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
         AscentCandidate best;
         best.potentials = initial;
 
-        while (best.iterations < kMaxIterations
+        while (best.iterations < root_ascent_iteration_limit_
                && period > 0 && step > 0.0 && isFinite(step)) {
             const OneTreeEvaluation evaluation = evaluate(potentials);
             ++best.iterations;
@@ -764,6 +799,7 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
 
             const double bound = evaluation.bound;
             const bool improved_best = save_if_better(best, potentials, bound);
+            write_trace("helsgaun", best.iterations, bound, best.bound);
             double subgradient_norm = 0.0;
             std::vector<double> subgradient(static_cast<std::size_t>(n_), 0.0);
             for (int vertex = 0; vertex < n_; ++vertex) {

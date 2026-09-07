@@ -1,0 +1,2 @@
+run_id,strategy,status,rows,successful,timeouts,errors,total_wall_seconds,median_wall_seconds,total_branches,median_branches
+Tier2_S4_D1-40fbff230df1,Tier2_S4_D1,complete,9,9,0,0,3.962660958059132,0.012447084300220013,2042768,110

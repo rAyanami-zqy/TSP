@@ -1,0 +1,2 @@
+run_id,strategy,status,rows,successful,timeouts,errors,total_wall_seconds,median_wall_seconds,total_branches,median_branches
+Tier6_S16L32_D1-8fa4e736accc,Tier6_S16L32_D1,complete,9,9,0,0,1.0712596662342548,0.011133582331240177,137276,37

@@ -1351,6 +1351,67 @@ void testRootAscentStrategies()
     }
 }
 
+void testRootAscentTraceAndIterationLimit()
+{
+    const auto matrix = replacementMatrix();
+    tsp::BranchBoundSolver solver(matrix);
+    solver.setRootAscentStrategy(tsp::RootAscentStrategy::Polyak);
+    solver.setRootAscentIterationLimit(3);
+    solver.setRootBoundOnly(true);
+    std::ostringstream trace;
+    solver.setRootAscentTraceOutput(trace);
+    const tsp::SolveResult result = solver.solve();
+
+    if (!result.feasible || result.stats.nodes_expanded != 0) {
+        throw std::runtime_error(
+            "root ascent trace did not stay in root-bound-only mode");
+    }
+    std::istringstream rows(trace.str());
+    std::string row;
+    std::size_t row_count = 0;
+    double previous_best = -std::numeric_limits<double>::infinity();
+    while (std::getline(rows, row)) {
+        if (row.empty()) continue;
+        std::istringstream fields(row);
+        std::vector<std::string> values;
+        std::string value;
+        while (std::getline(fields, value, ',')) values.push_back(value);
+        if (values.size() != 6 || values[0] != "polyak"
+            || values[2] != "polyak") {
+            throw std::runtime_error(
+                "root ascent trace row has an unexpected schema");
+        }
+        ++row_count;
+        if (std::stoull(values[1]) != row_count
+            || std::stoull(values[3]) != row_count) {
+            throw std::runtime_error(
+                "root ascent trace iterations are not contiguous");
+        }
+        const double best = std::stod(values[5]);
+        if (!std::isfinite(std::stod(values[4]))
+            || !std::isfinite(best) || best + 1e-9 < previous_best) {
+            throw std::runtime_error(
+                "root ascent trace contains an invalid lower bound");
+        }
+        previous_best = best;
+    }
+    if (row_count == 0 || row_count > 3
+        || row_count != result.stats.root_potential_iterations) {
+        throw std::runtime_error(
+            "root ascent trace does not match the configured iteration limit");
+    }
+
+    bool rejected_zero_limit = false;
+    try {
+        solver.setRootAscentIterationLimit(0);
+    } catch (const std::invalid_argument&) {
+        rejected_zero_limit = true;
+    }
+    if (!rejected_zero_limit) {
+        throw std::runtime_error("zero root ascent iteration limit was accepted");
+    }
+}
+
 void testSearchNodePotentialUpdates()
 {
     std::ifstream input(
@@ -1598,6 +1659,7 @@ int main()
         testDistanceMatrixSymmetryIsExact();
         testExactIntegerPruningDomain();
         testRootAscentStrategies();
+        testRootAscentTraceAndIterationLimit();
         testSearchNodePotentialUpdates();
         testDiversifiedInitialTourPool();
         testRootReducedCostFixing();

@@ -1,0 +1,10 @@
+run_id,strategy,repeat,instance,status,wall_seconds,result,branches
+Large5_D1-f1f4add44812,Large5_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp,ok,0.007773416116833687,699.0,11
+Large5_D1-f1f4add44812,Large5_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp,ok,0.01050783321261406,10628.0,538
+Large5_D1-f1f4add44812,Large5_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp,ok,0.004454250447452068,1610.0,3
+Large5_D1-f1f4add44812,Large5_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp,ok,0.004848457872867584,2020.0,15
+Large5_D1-f1f4add44812,Large5_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp,ok,0.003998999483883381,937.0,1
+Large5_D1-f1f4add44812,Large5_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp,ok,0.2834578324109316,675.0,176651
+Large5_D1-f1f4add44812,Large5_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp,ok,0.2812391249462962,538.0,162489
+Large5_D1-f1f4add44812,Large5_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp,ok,0.1408536247909069,1211.0,49944
+Large5_D1-f1f4add44812,Large5_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp,ok,3.145631792023778,629.0,2210554

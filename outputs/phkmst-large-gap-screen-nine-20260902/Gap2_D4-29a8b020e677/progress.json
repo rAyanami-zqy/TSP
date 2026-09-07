@@ -1,0 +1,50 @@
+{
+  "run_id": "Gap2_D4-29a8b020e677",
+  "run": {
+    "format_version": 2,
+    "strategy": "Gap2_D4",
+    "kind": "tsp_bb",
+    "executable": "/private/tmp/tsp-gap-probe-nine-build/tsp_bb",
+    "executable_sha256": "60b0210129220def0d8d014057f531c75dbeb60a5c970c9a66463609487672ad",
+    "solver_args": [
+      "--hk-ascent",
+      "polyak",
+      "--hk-node-ascent",
+      "polyak",
+      "--branch-edge-order",
+      "weight",
+      "--hk-potential-update",
+      "subtree-adaptive",
+      "--hk-update-depth",
+      "4",
+      "--hk-update-gap-ratio",
+      "0.02",
+      "--hk-update-iterations",
+      "16",
+      "--hk-update-budget",
+      "5000",
+      "--exact-max-n",
+      "130",
+      "--debug",
+      "--debug-interval",
+      "5000000"
+    ],
+    "timeout_seconds": 10.0,
+    "workers": 1,
+    "repeats": 1,
+    "instances": [
+      "/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp",
+      "/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp",
+      "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp",
+      "/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp",
+      "/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp",
+      "/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp",
+      "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp",
+      "/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp",
+      "/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp"
+    ]
+  },
+  "status": "complete",
+  "completed_rows": 9,
+  "total_rows": 9
+}

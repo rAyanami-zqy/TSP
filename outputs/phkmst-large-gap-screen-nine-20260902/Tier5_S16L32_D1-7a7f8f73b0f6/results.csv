@@ -1,0 +1,10 @@
+run_id,strategy,repeat,instance,status,wall_seconds,result,branches
+Tier5_S16L32_D1-7a7f8f73b0f6,Tier5_S16L32_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp,ok,0.007848666980862617,699.0,4
+Tier5_S16L32_D1-7a7f8f73b0f6,Tier5_S16L32_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp,ok,0.011335458606481552,10628.0,37
+Tier5_S16L32_D1-7a7f8f73b0f6,Tier5_S16L32_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp,ok,0.004777709022164345,1610.0,3
+Tier5_S16L32_D1-7a7f8f73b0f6,Tier5_S16L32_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp,ok,0.0054259588941931725,2020.0,9
+Tier5_S16L32_D1-7a7f8f73b0f6,Tier5_S16L32_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp,ok,0.0045424168929457664,937.0,1
+Tier5_S16L32_D1-7a7f8f73b0f6,Tier5_S16L32_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp,ok,0.10822095908224583,675.0,690
+Tier5_S16L32_D1-7a7f8f73b0f6,Tier5_S16L32_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp,ok,0.06857774965465069,538.0,319
+Tier5_S16L32_D1-7a7f8f73b0f6,Tier5_S16L32_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp,ok,0.13844762556254864,1211.0,427
+Tier5_S16L32_D1-7a7f8f73b0f6,Tier5_S16L32_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp,ok,0.7437878753989935,629.0,135786

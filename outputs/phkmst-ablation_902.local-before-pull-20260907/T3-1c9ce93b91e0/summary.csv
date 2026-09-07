@@ -1,2 +1,0 @@
-run_id,strategy,status,rows,successful,timeouts,errors,total_wall_seconds,median_wall_seconds,total_branches,median_branches
-T3-1c9ce93b91e0,T3,complete,50,30,20,0,1594.9346205014735,0.07779923640191555,351741071,66.5

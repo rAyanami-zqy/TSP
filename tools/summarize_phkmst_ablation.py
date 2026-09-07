@@ -85,6 +85,18 @@ METRIC_LABELS = {
     "search_node_potential_updates_skipped_gap_below_minimum": "跳过：gap 低于下限",
     "search_node_potential_updates_skipped_gap_above_maximum": "跳过：gap 高于上限",
 }
+COLLAPSIBLE_SKIP_REASON_FIELDS = frozenset({
+    "search_node_potential_updates_skipped_budget_exhausted",
+    "search_node_potential_updates_skipped_depth_interval",
+    "search_node_potential_updates_skipped_gap_above_maximum",
+    "search_node_potential_updates_skipped_gap_below_minimum",
+    "search_node_potential_updates_skipped_invalid_state",
+    "search_node_potential_updates_skipped_numerically_unsafe",
+    "search_node_potential_updates_skipped_strategy_none",
+    "search_node_potential_updates_skipped_update_depth_zero",
+    "search_node_potential_updates_skipped_zero_iteration_limit",
+    "search_node_potential_updates_skipped_zero_violation",
+})
 MISSING_FACTOR = "<未设置>"
 
 
@@ -511,13 +523,21 @@ def automatic_comparisons(runs: Sequence[Run]) -> list[Comparison]:
             key=lambda run: order[run.run_id],
         )
         for right in others:
-            comparisons_found.append(Comparison(
-                baseline,
-                right,
-                factor_label(factor),
-                shortened_factor_value(factor, factors[baseline.run_id][factor]),
-                shortened_factor_value(factor, factors[right.run_id][factor]),
-            ))
+            # A factor group can contain multiple runs at the same level.  Keep
+            # them as reproducibility comparisons, but do not mislabel an
+            # identical configuration as a one-factor change.
+            if not differences(baseline, right, factor_keys):
+                comparisons_found.append(
+                    comparison_from_pair(baseline, right, factor_keys))
+            else:
+                comparisons_found.append(Comparison(
+                    baseline,
+                    right,
+                    factor_label(factor),
+                    shortened_factor_value(
+                        factor, factors[baseline.run_id][factor]),
+                    shortened_factor_value(factor, factors[right.run_id][factor]),
+                ))
     return comparisons_found
 
 
@@ -574,30 +594,13 @@ def metric_order(metrics: Iterable[str]) -> list[str]:
     return preferred + sorted(unique - set(preferred))
 
 
-def symmetric_change(left: float | None, right: float | None) -> float | None:
-    """Return a signed, reciprocal-symmetric fold change.
-
-    Doubling is ``+1`` (+100%), while halving is ``-1`` (-100%).  Reversing
-    the comparison therefore only changes the sign.  A one-sided zero has no
-    finite fold change; two zeros are treated as unchanged.
-    """
+def relative_change(left: float | None, right: float | None) -> float | None:
+    """Return the conventional right-versus-left relative change."""
     if left is None or right is None or left < 0 or right < 0:
         return None
-    if left == right == 0:
-        return 0.0
-    if left == 0 or right == 0:
-        return None
-    if right >= left:
-        return right / left - 1.0
-    return -(left / right - 1.0)
-
-
-def geometric_symmetric_change(ratios: Sequence[float]) -> float | None:
-    usable = [ratio for ratio in ratios if ratio > 0.0]
-    if not usable:
-        return None
-    geometric_ratio = math.exp(statistics.fmean(math.log(ratio) for ratio in usable))
-    return symmetric_change(1.0, geometric_ratio)
+    if left == 0:
+        return 0.0 if right == 0 else None
+    return right / left - 1.0
 
 
 def result_agreement(left: InstanceResult, right: InstanceResult) -> bool | None:
@@ -662,7 +665,7 @@ def comparable_change(
     metric: str,
 ) -> float | None:
     """Return a change only when both participating runs completed successfully."""
-    return symmetric_change(instance_metric(left, metric), instance_metric(right, metric))
+    return relative_change(instance_metric(left, metric), instance_metric(right, metric))
 
 
 def csv_value(value: Any) -> Any:
@@ -671,8 +674,6 @@ def csv_value(value: Any) -> Any:
 
 def pair_metric_statistics(comparison: Comparison, metric: str) -> dict[str, Any]:
     pairs: list[tuple[str, float, float]] = []
-    raw_ratios: list[float] = []
-    changes: list[float] = []
     for name in pair_instances(comparison):
         left = comparison.left.instances.get(name)
         right = comparison.right.instances.get(name)
@@ -683,25 +684,17 @@ def pair_metric_statistics(comparison: Comparison, metric: str) -> dict[str, Any
         if left_value is None or right_value is None:
             continue
         pairs.append((name, left_value, right_value))
-        change = symmetric_change(left_value, right_value)
-        if change is not None:
-            changes.append(change)
-        if left_value > 0 and right_value > 0:
-            raw_ratios.append(right_value / left_value)
     epsilon = 1e-12
-    left_total = sum(left for _, left, _ in pairs)
-    right_total = sum(right for _, _, right in pairs)
+    left_total = sum(left for _, left, _ in pairs) if pairs else None
+    right_total = sum(right for _, _, right in pairs) if pairs else None
     return {
         "paired_values": len(pairs),
-        "left_median": median(left for _, left, _ in pairs),
-        "right_median": median(right for _, _, right in pairs),
-        "median_symmetric_change": statistics.median(changes) if changes else None,
-        "geometric_symmetric_change": geometric_symmetric_change(raw_ratios),
-        "aggregate_symmetric_change": (
-            symmetric_change(left_total, right_total) if pairs else None),
-        "decreased": sum(change < -epsilon for change in changes),
-        "tied": sum(abs(change) <= epsilon for change in changes),
-        "increased": sum(change > epsilon for change in changes),
+        "left_total": left_total,
+        "right_total": right_total,
+        "aggregate_relative_change": relative_change(left_total, right_total),
+        "decreased": sum(right < left - epsilon for _, left, right in pairs),
+        "tied": sum(abs(right - left) <= epsilon for _, left, right in pairs),
+        "increased": sum(right > left + epsilon for _, left, right in pairs),
     }
 
 
@@ -861,9 +854,9 @@ def pair_detail_rows(
                 f"{comparison.right.label}:matches_reference": (
                     result_agreement(right, expected)
                     if right and expected and right.status == expected.status == "ok" else ""),
-                f"{comparison.left.label}:wall_vs_{reference.label}_symmetric_change": (
+                f"{comparison.left.label}:wall_vs_{reference.label}_relative_change": (
                     csv_value(comparable_change(expected, left, "wall_seconds"))),
-                f"{comparison.right.label}:wall_vs_{reference.label}_symmetric_change": (
+                f"{comparison.right.label}:wall_vs_{reference.label}_relative_change": (
                     csv_value(comparable_change(expected, right, "wall_seconds"))),
             })
         for metric in available:
@@ -872,8 +865,8 @@ def pair_detail_rows(
             row[f"{comparison.left.label}:{metric}"] = left_value if left_value is not None else ""
             row[f"{comparison.right.label}:{metric}"] = right_value if right_value is not None else ""
             if metric in {"wall_seconds", "branches", SKIPPED_TOTAL_FIELD}:
-                row[f"symmetric_change:{metric}"] = csv_value(
-                    symmetric_change(left_value, right_value))
+                row[f"relative_change:{metric}"] = csv_value(
+                    relative_change(left_value, right_value))
         rows.append(row)
     return rows
 
@@ -988,10 +981,17 @@ def markdown_report(
             f"{statuses['ok']} | {statuses['timeout']} | {other} | {run.repeats} |"
         )
     lines.extend(["", "## 自动化口径", ""])
+    if all(run.repeats == 1 for run in runs):
+        lines.append(
+            "- 当前每个配置、每个实例只有一次观测；不计算跨实例中位数，也不把单次差异解释为统计优势。")
+    else:
+        lines.append(
+            "- 同一实例的多次成功运行先取中位数；重复缺失或状态不一致时标记为部分/混合，不进入成对性能统计。")
     lines.extend([
-        "- 多次重复按实例取成功运行的中位数；只要重复缺失或状态不一致，该实例会标记为部分/混合，不进入成对性能统计。",
-        "- 默认只生成单因素对比。同一因素有多个水平时，以连接其他配置最多的运行作为基线，避免输出所有冗余组合。",
-        "- 百分比采用对称倍数变化：右侧不小时为 `右/左-1`，右侧更小时为 `-(左/右-1)`；2 倍记 `+100%`，一半记 `-100%`，交换方向只改变符号。",
+        "- 默认生成单因素对比；参数完全相同的运行保留为重复性对比。同一因素有多个水平时，以连接其他配置最多的运行作为基线。",
+        "- 性能总量只统计双方共同成功且该指标都有记录的实例；先比较成功数，再解释共同成功集合的总量。",
+        "- 右侧相对变化采用 `右侧总量/左侧总量-1`；负数表示右侧减少，正数表示右侧增加。",
+        "- 下降/持平/上升按每个共同成功实例的原始单次观测计数。",
         "- 新增的数值型 results.csv 列会自动进入明细和成对汇总 CSV，无需修改本脚本。",
     ])
     if reference:
@@ -1025,8 +1025,8 @@ def markdown_report(
             f"{comparison.right.label}={coverage['right_ok']}，共同成功={coverage['common_ok']}；"
             f"右侧新增={len(coverage['right_only'])}，右侧丢失={len(coverage['left_only'])}。",
             "",
-            "| 指标 | 配对数 | 左侧中位数 | 右侧中位数 | 对称变化中位数 | 几何平均对称变化 | 总量对称变化 | 下降/持平/上升 |",
-            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            "| 指标 | 配对数 | 左侧总量 | 右侧总量 | 右侧相对变化 | 右侧下降/持平/上升 |",
+            "| --- | ---: | ---: | ---: | ---: | ---: |",
         ])
         available = set(comparison.left.numeric_fields) & set(comparison.right.numeric_fields)
         for metric in metrics:
@@ -1035,11 +1035,9 @@ def markdown_report(
             item = pair_metric_statistics(comparison, metric)
             lines.append(
                 f"| {metric_label(metric)} | {item['paired_values']} | "
-                f"{format_metric(metric, item['left_median'])} | "
-                f"{format_metric(metric, item['right_median'])} | "
-                f"{format_change(item['median_symmetric_change'])} | "
-                f"{format_change(item['geometric_symmetric_change'])} | "
-                f"{format_change(item['aggregate_symmetric_change'])} | "
+                f"{format_metric(metric, item['left_total'])} | "
+                f"{format_metric(metric, item['right_total'])} | "
+                f"{format_change(item['aggregate_relative_change'])} | "
                 f"{item['decreased']}/{item['tied']}/{item['increased']} |"
             )
         mismatches = coverage["result_mismatches"]
@@ -1077,6 +1075,11 @@ def html_report(
     reference: Run | None,
     warnings: Sequence[str],
 ) -> str:
+    observation_note = (
+        "当前每个配置、每个实例只有一次观测；不计算跨实例中位数。"
+        if all(run.repeats == 1 for run in runs)
+        else "同一实例的多次成功运行先取中位数；报告不计算跨实例中位数。"
+    )
     overview_rows: list[str] = []
     for run in runs:
         statuses = Counter(item.status for item in run.instances.values())
@@ -1120,43 +1123,58 @@ def html_report(
             if metric not in available:
                 continue
             item = pair_metric_statistics(comparison, metric)
-            change = item["aggregate_symmetric_change"]
+            change = item["aggregate_relative_change"]
             metric_rows.append("<tr>" + "".join([
                 html_cell(metric_label(metric)),
                 html_cell(str(item["paired_values"]), "num"),
-                html_cell(format_metric(metric, item["left_median"]), "num"),
-                html_cell(format_metric(metric, item["right_median"]), "num"),
-                html_cell(format_change(item["median_symmetric_change"]), "num"),
-                html_cell(format_change(item["geometric_symmetric_change"]), "num"),
+                html_cell(format_metric(metric, item["left_total"]), "num"),
+                html_cell(format_metric(metric, item["right_total"]), "num"),
                 html_cell(format_change(change), f"num {change_class(change)}"),
                 html_cell(f"{item['decreased']}/{item['tied']}/{item['increased']}", "num"),
             ]) + "</tr>")
 
         first_header = ['<th rowspan="2">实例</th>']
-        second_header: list[str] = []
+        second_header: list[tuple[str, bool]] = []
         if reference:
             first_header.append(
                 f'<th colspan="3" class="reference-head">{html.escape(reference.label)}</th>')
-            second_header.extend(["运行时间", "求解结果", "分支数"])
+            second_header.extend(
+                (label, False) for label in ("运行时间", "求解结果", "分支数"))
+        collapsible_metrics = [
+            metric for metric in raw_metrics
+            if metric in COLLAPSIBLE_SKIP_REASON_FIELDS
+        ]
         side_columns = (4 if reference else 3) + len(raw_metrics)
+        collapsed_side_columns = side_columns - len(collapsible_metrics)
         first_header.extend([
-            f'<th colspan="{side_columns}" class="left-head">配置 A：'
+            f'<th colspan="{collapsed_side_columns}" '
+            f'data-collapsed-colspan="{collapsed_side_columns}" '
+            f'data-expanded-colspan="{side_columns}" class="left-head">配置 A：'
             f'{html.escape(comparison.left.label)}</th>',
-            f'<th colspan="{side_columns}" class="right-head">配置 B：'
+            f'<th colspan="{collapsed_side_columns}" '
+            f'data-collapsed-colspan="{collapsed_side_columns}" '
+            f'data-expanded-colspan="{side_columns}" class="right-head">配置 B：'
             f'{html.escape(comparison.right.label)}</th>',
             '<th colspan="3" class="ratio-head">配置 B 相对配置 A</th>',
         ])
-        second_header.append("运行时间")
+        second_header.append(("运行时间", False))
         if reference:
-            second_header.append(f"时间相对 {reference.label}")
+            second_header.append((f"时间相对 {reference.label}", False))
         second_header.extend(
-            ["求解结果", "分支数", *(metric_label(metric) for metric in raw_metrics)])
-        second_header.append("运行时间")
+            [("求解结果", False), ("分支数", False), *(
+                (metric_label(metric), metric in COLLAPSIBLE_SKIP_REASON_FIELDS)
+                for metric in raw_metrics
+            )])
+        second_header.append(("运行时间", False))
         if reference:
-            second_header.append(f"时间相对 {reference.label}")
+            second_header.append((f"时间相对 {reference.label}", False))
         second_header.extend(
-            ["求解结果", "分支数", *(metric_label(metric) for metric in raw_metrics)])
-        second_header.extend(["时间变化", "分支数变化", "跳过总数变化"])
+            [("求解结果", False), ("分支数", False), *(
+                (metric_label(metric), metric in COLLAPSIBLE_SKIP_REASON_FIELDS)
+                for metric in raw_metrics
+            )])
+        second_header.extend(
+            (label, False) for label in ("时间变化", "分支数变化", "跳过总数变化"))
 
         detail_rows: list[str] = []
         for name in ordered_pair_instances(comparison, reference):
@@ -1189,7 +1207,9 @@ def html_report(
             ])
             cells.extend(
                 html_cell(
-                    format_metric(metric, instance_metric(left, metric)), "num")
+                    format_metric(metric, instance_metric(left, metric)),
+                    "num skip-reason-column"
+                    if metric in COLLAPSIBLE_SKIP_REASON_FIELDS else "num")
                 for metric in raw_metrics
             )
             cells.append(html_cell(runtime_text(right), "num"))
@@ -1203,7 +1223,9 @@ def html_report(
             ])
             cells.extend(
                 html_cell(
-                    format_metric(metric, instance_metric(right, metric)), "num")
+                    format_metric(metric, instance_metric(right, metric)),
+                    "num skip-reason-column"
+                    if metric in COLLAPSIBLE_SKIP_REASON_FIELDS else "num")
                 for metric in raw_metrics
             )
             cells.extend([
@@ -1228,6 +1250,15 @@ def html_report(
             "</article>"
             for title, run in (("左侧", comparison.left), ("右侧", comparison.right))
         )
+        detail_table_id = f"detail-table-{index}"
+        skip_columns_toggle = (
+            '<div class="detail-toolbar">'
+            f'<button type="button" class="skip-columns-toggle" '
+            f'aria-expanded="false" aria-controls="{detail_table_id}" '
+            f'data-column-count="{len(collapsible_metrics)}">'
+            f'展开跳过原因（{len(collapsible_metrics)} 列/侧）</button></div>'
+            if collapsible_metrics else ""
+        )
         sections.append(f"""
 <section id="comparison-{index}">
   <h2>对比 {index}：{html.escape(comparison.left.label)} → {html.escape(comparison.right.label)}</h2>
@@ -1238,13 +1269,17 @@ def html_report(
   {len(coverage['result_mismatches'])}{reference_summary}。</p>
   <div class="cards">{config_cards}</div>
   <div class="table-wrap"><table><thead><tr>
-    <th>指标</th><th>配对数</th><th>左侧中位数</th><th>右侧中位数</th>
-    <th>对称变化中位数</th><th>几何平均对称变化</th><th>总量对称变化</th><th>下降/持平/上升</th>
+    <th>指标</th><th>配对数</th><th>左侧总量</th><th>右侧总量</th>
+    <th>右侧相对变化</th><th>右侧下降/持平/上升</th>
   </tr></thead><tbody>{''.join(metric_rows)}</tbody></table></div>
-  <details open><summary>逐实例明细（A/B 原始统计全部展示，仅时间与分支数计算变化）</summary>
-  <div class="table-wrap detail"><table><thead>
+  <details open><summary>逐实例明细（A/B 原始统计全部展示，变化列为右侧相对左侧）</summary>
+  {skip_columns_toggle}
+  <div class="table-wrap detail"><table id="{detail_table_id}" class="detail-table"><thead>
   <tr>{''.join(first_header)}</tr>
-  <tr>{''.join(f'<th>{html.escape(value)}</th>' for value in second_header)}</tr></thead>
+  <tr>{''.join(
+      f'<th class="skip-reason-column">{html.escape(value)}</th>'
+      if collapsible else f'<th>{html.escape(value)}</th>'
+      for value, collapsible in second_header)}</tr></thead>
   <tbody>{''.join(detail_rows)}</tbody></table></div></details>
 </section>""")
 
@@ -1269,11 +1304,16 @@ th{{position:sticky;top:0;background:var(--navy);color:white;z-index:1}} thead t
 .num{{text-align:right;font-variant-numeric:tabular-nums}} .up{{background:#ffc7ce;color:#9c0006}} .down{{background:#c6efce;color:#006100}} .tie{{background:#eef1f5;color:#59616d}} .missing{{background:#f7f8fa;color:#8a93a0}}
 .timeout-row td:first-child{{color:#9a5b00;font-weight:700}}
 details summary{{cursor:pointer;font-weight:700;margin:10px 0}} .detail table{{min-width:1200px}} section{{scroll-margin-top:8px}}
+.detail-toolbar{{display:flex;justify-content:flex-end;margin:8px 0}}
+.skip-columns-toggle{{border:1px solid #8ca0b8;border-radius:6px;background:white;color:#245b9e;padding:5px 10px;cursor:pointer;font:inherit;font-weight:700}}
+.skip-columns-toggle:hover{{background:#eef4fb}} .skip-columns-toggle:focus-visible{{outline:2px solid #245b9e;outline-offset:2px}}
+.detail-table .skip-reason-column{{display:none}} .detail-table.show-skip-reasons .skip-reason-column{{display:table-cell}}
 @media(max-width:900px){{.cards{{grid-template-columns:1fr}}}}
 </style></head><body><main>
 <h1>PHKMST 消融实验汇总</h1>
 <div class="muted">数据源：{html.escape(str(input_root))}；发现 {len(runs)} 个运行，{len(comparisons_found)} 组对比。</div>
-<div class="muted">百分比采用对称倍数变化：2 倍为 +100%，一半为 -100%；交换比较方向只改变符号。</div>
+<div class="muted">{html.escape(observation_note)}性能总量只统计双方共同成功实例。</div>
+<div class="muted">右侧相对变化 = 右侧总量 / 左侧总量 - 1；负数表示减少，正数表示增加。</div>
 {f'<ul class="warnings">{warning_html}</ul>' if warnings else ''}
 <h2>运行概览</h2><div class="table-wrap"><table><thead><tr>
 <th>配置</th><th>run_id</th><th>类型</th><th>实例</th><th>成功</th><th>超时</th><th>其他</th><th>描述</th>
@@ -1288,7 +1328,24 @@ details summary{{cursor:pointer;font-weight:700;margin:10px 0}} .detail table{{m
 </ul>
 <h2>对比导航</h2><nav>{navigation_html}</nav>
 {''.join(sections)}
-</main></body></html>"""
+</main><script>
+document.addEventListener("click", function (event) {{
+  const button = event.target.closest(".skip-columns-toggle");
+  if (!button) return;
+  const table = document.getElementById(button.getAttribute("aria-controls"));
+  if (!table) return;
+  const expanded = button.getAttribute("aria-expanded") !== "true";
+  button.setAttribute("aria-expanded", String(expanded));
+  table.classList.toggle("show-skip-reasons", expanded);
+  table.querySelectorAll("[data-collapsed-colspan]").forEach(function (header) {{
+    header.colSpan = Number(header.dataset[
+      expanded ? "expandedColspan" : "collapsedColspan"
+    ]);
+  }});
+  button.textContent = (expanded ? "折叠" : "展开") + "跳过原因（" +
+    button.dataset.columnCount + " 列/侧）";
+}});
+</script></body></html>"""
 
 
 def safe_slug(value: str) -> str:
@@ -1339,8 +1396,7 @@ def write_outputs(
         "left_reference_checked", "left_reference_mismatches",
         "right_reference_checked", "right_reference_mismatches",
         "metric", "paired_values",
-        "left_median", "right_median", "median_symmetric_change",
-        "geometric_symmetric_change", "aggregate_symmetric_change",
+        "left_total", "right_total", "aggregate_relative_change",
         "decreased", "tied", "increased",
     ]
     write_csv(output_dir / "pairwise_summary.csv", summary, summary_fields)

@@ -1,0 +1,39 @@
+{
+  "instance": "/Users/a/Ayanami/code/TSP/data/classic/national/wi29.tsp",
+  "iteration_limit_per_phase": 2000,
+  "chart_width_px": 1600,
+  "iterations_per_chart_width": 400,
+  "root_bound_only": true,
+  "concorde": {
+    "reused": true,
+    "source_results": "/Users/a/Ayanami/code/TSP/outputs/phkmst-ablation_902/Concorde-7c32cb4cd69e/results.csv",
+    "optimum": 27603.0
+  },
+  "solver": "/Users/a/Ayanami/code/TSP/build/tsp_bb",
+  "strategies": {
+    "polyak": {
+      "command": "/Users/a/Ayanami/code/TSP/build/tsp_bb --root-bound-only --hk-ascent polyak --root-ascent-iterations 2000 --root-ascent-trace /Users/a/Ayanami/code/TSP/outputs/root-ascent-trends-902/wi29/polyak.csv --exact-max-n 10000 /Users/a/Ayanami/code/TSP/data/classic/national/wi29.tsp",
+      "dimension": 29,
+      "nodes_expanded": 0,
+      "evaluations": 58,
+      "root_lower_bound": 27602.999999944037,
+      "final_best_lower_bound": 27602.999999999996
+    },
+    "helsgaun": {
+      "command": "/Users/a/Ayanami/code/TSP/build/tsp_bb --root-bound-only --hk-ascent helsgaun --root-ascent-iterations 2000 --root-ascent-trace /Users/a/Ayanami/code/TSP/outputs/root-ascent-trends-902/wi29/helsgaun.csv --exact-max-n 10000 /Users/a/Ayanami/code/TSP/data/classic/national/wi29.tsp",
+      "dimension": 29,
+      "nodes_expanded": 0,
+      "evaluations": 25,
+      "root_lower_bound": 26727.599999943573,
+      "final_best_lower_bound": 26727.600000000002
+    },
+    "hybrid": {
+      "command": "/Users/a/Ayanami/code/TSP/build/tsp_bb --root-bound-only --hk-ascent hybrid --root-ascent-iterations 2000 --root-ascent-trace /Users/a/Ayanami/code/TSP/outputs/root-ascent-trends-902/wi29/hybrid.csv --exact-max-n 10000 /Users/a/Ayanami/code/TSP/data/classic/national/wi29.tsp",
+      "dimension": 29,
+      "nodes_expanded": 0,
+      "evaluations": 59,
+      "root_lower_bound": 27602.999999944037,
+      "final_best_lower_bound": 27602.999999999996
+    }
+  }
+}

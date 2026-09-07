@@ -151,6 +151,81 @@ debug 信息写到标准错误，不会破坏批处理模式的 CSV 标准输出
 最优证明。完整实验与结论见
 [`docs/HKMST-LKH-1tree-experiment-2026-08-06.md`](docs/HKMST-LKH-1tree-experiment-2026-08-06.md)。
 
+#### 根势逐轮趋势图
+
+`tools/plot_root_ascent.py` 对每个选中的实例分别运行现有的 `polyak`、
+`helsgaun` 和 `hybrid` 三种根势实现，并把三种逐轮下界轨迹画在同一张二维图
+中：浅色细线显示每次 1-tree 评估的原始下界，粗实线显示历史最佳下界。
+横轴是根势评估轮次，纵轴是根 1-tree 下界；Concorde 的精确最优值作为水平
+参考线。三次 `tsp_bb` 调用都强制使用 `--root-bound-only`，脚本还会检查
+`Nodes expanded` 必须为 0，因此不会进入分支定界递归。
+
+直接选择一个或多个实例：
+
+```bash
+python3 tools/plot_root_ascent.py \
+  data/classic/tsplib/eil51.tsp \
+  data/classic/tsplib/berlin52.tsp
+```
+
+也可用清单配置实例（空行和以 `#` 开头的行会忽略）：
+
+```bash
+python3 tools/plot_root_ascent.py \
+  --batch-list data/classic/batch-hk-ascent.txt
+```
+
+若已有消融实验的 Concorde `results.csv`，可直接复用其中所有成功实例及其
+精确最优值，不会再次启动 Concorde；目录和 CSV 文件路径都可接受。可用
+`--workers` 并发处理不同实例：
+
+```bash
+python3 tools/plot_root_ascent.py \
+  --concorde-results outputs/phkmst-ablation_902/Concorde-7c32cb4cd69e \
+  --workers 8
+```
+
+默认每个上升阶段最多评估 2000 轮，可随时调整；求解器原有的收敛停止条件仍
+然生效，所以实际轮数可能少于上限。为严格保持现有 Hybrid 语义，Polyak 和
+后续 Helsgaun 精修阶段分别使用该上限，图上的 Hybrid 横轴把两个阶段顺序
+连接。默认每 400 轮展开为一段 1600 像素宽的横轴，因此 0--2000 轮会连续
+展开为五段；总览页每行显示一个实例，并允许横向滚动查看完整长图。可用
+`--chart-width` 调整每段宽度，用 `--iterations-per-width` 调整每段覆盖的
+轮数，二者都不会改变势优化过程：
+
+```bash
+python3 tools/plot_root_ascent.py \
+  --iterations 4000 \
+  --chart-width 1800 \
+  --iterations-per-width 400 \
+  --solver build/tsp_bb \
+  --concorde /path/to/native/concorde \
+  --output-root outputs/root-ascent-trends \
+  data/classic/tsplib/eil101.tsp
+```
+
+每个实例有独立目录，包含：
+
+- `root-ascent-trends.svg`：三策略曲线与 Concorde 参考线，无需 matplotlib；
+- `root-ascent-trends.csv`：合并后的逐轮原始下界、历史最佳下界及最优值；
+- `polyak.csv`、`helsgaun.csv`、`hybrid.csv`：求解器直接记录的原始轨迹；
+- `metadata.json`：轮数配置、实际评估数、命令和可执行文件路径。
+
+多实例运行还会在输出根目录生成 `index.html` 图表总览和 `summary.csv` 实例级
+汇总；汇总中包含各策略的最终根下界、相对 Concorde gap 和实际评估轮数。
+总览中每个实例的表格下方提供 Polyak、Helsgaun、Hybrid 和 Concorde 开关，
+可独立显示或隐藏对应曲线；关闭某个策略时，其原始下界细线和历史最优粗线会
+一起隐藏。
+
+也可以绕过绘图器，直接记录单次根势轨迹：
+
+```bash
+./build/tsp_bb --root-bound-only --hk-ascent polyak \
+  --root-ascent-iterations 2000 \
+  --root-ascent-trace /tmp/eil51-polyak.csv \
+  data/classic/tsplib/eil51.tsp
+```
+
 ### 根 α-nearness 分支顺序
 
 局部策略保持原 BP 规则：先固定一个最大度违规顶点，再用根静态 α 排序其

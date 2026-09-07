@@ -1,0 +1,10 @@
+run_id,strategy,repeat,instance,status,wall_seconds,result,branches
+Tier2_S4_D1-40fbff230df1,Tier2_S4_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/dantzig42.tsp,ok,0.0076982080936431885,699.0,7
+Tier2_S4_D1-40fbff230df1,Tier2_S4_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/att48.tsp,ok,0.012447084300220013,10628.0,110
+Tier2_S4_D1-40fbff230df1,Tier2_S4_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/bayg29.tsp,ok,0.004645499400794506,1610.0,3
+Tier2_S4_D1-40fbff230df1,Tier2_S4_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/bays29.tsp,ok,0.004765374585986137,2020.0,10
+Tier2_S4_D1-40fbff230df1,Tier2_S4_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/fri26.tsp,ok,0.004081541672348976,937.0,1
+Tier2_S4_D1-40fbff230df1,Tier2_S4_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/st70.tsp,ok,0.48109699971973896,675.0,146002
+Tier2_S4_D1-40fbff230df1,Tier2_S4_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil76.tsp,ok,0.3191177500411868,538.0,144987
+Tier2_S4_D1-40fbff230df1,Tier2_S4_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/rat99.tsp,ok,0.1765915835276246,1211.0,10867
+Tier2_S4_D1-40fbff230df1,Tier2_S4_D1,1,/Users/a/Ayanami/code/TSP/data/classic/tsplib/eil101.tsp,ok,2.952216916717589,629.0,1740781

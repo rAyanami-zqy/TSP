@@ -24,6 +24,10 @@ struct CliOptions {
     std::size_t exact_max_n = 10000;
     // 根节点 Held-Karp 势的上升算法；不影响问题可行域，只影响下界强度。
     tsp::RootAscentStrategy root_ascent = tsp::RootAscentStrategy::Polyak;
+    // 每个根势阶段的最大评估轮数；默认保持求解器原有的 400。
+    std::size_t root_ascent_iterations = 400;
+    // 可选逐轮 CSV。只允许与 root-bound-only 的单实例模式一起使用。
+    std::string root_ascent_trace_path;
     // 搜索节点一次势更新内部的步长调度；触发和 epoch 语义由下方策略控制。
     tsp::NodeAscentStrategy node_ascent = tsp::NodeAscentStrategy::Polyak;
     // 默认沿用调整权重排序；实验策略只切换 BP 内部的分支边优先级，
@@ -169,6 +173,7 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
     auto distance = problem.toDenseMatrix(options.exact_max_n);
     tsp::BranchBoundSolver solver(std::move(distance));
     solver.setRootAscentStrategy(options.root_ascent);
+    solver.setRootAscentIterationLimit(options.root_ascent_iterations);
     solver.setNodeAscentStrategy(options.node_ascent);
     // 分支顺序与势更新策略是两个正交开关，便于分别评估搜索树形状和下界质量。
     solver.setBranchEdgeOrder(options.branch_edge_order);
@@ -187,10 +192,31 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
         options.potential_update_probe_min_gap_ratio,
         options.potential_update_probe_min_coverage);
     solver.setRootBoundOnly(options.root_bound_only);
+    std::ofstream root_ascent_trace;
+    if (!options.root_ascent_trace_path.empty()) {
+        root_ascent_trace.open(options.root_ascent_trace_path);
+        if (!root_ascent_trace) {
+            throw std::runtime_error(
+                "failed to open root ascent trace: "
+                + options.root_ascent_trace_path);
+        }
+        root_ascent_trace
+            << "strategy,iteration,phase,phase_iteration,"
+               "lower_bound,best_lower_bound\n";
+        solver.setRootAscentTraceOutput(root_ascent_trace);
+    }
     if (options.debug) {
         solver.setDebugOutput(std::cerr, options.debug_interval);
     }
     output.result = solver.solve();
+    if (root_ascent_trace.is_open()) {
+        root_ascent_trace.flush();
+        if (!root_ascent_trace) {
+            throw std::runtime_error(
+                "failed to write root ascent trace: "
+                + options.root_ascent_trace_path);
+        }
+    }
     output.instance_wall_seconds = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - started_at).count();
     return output;
@@ -461,6 +487,8 @@ void printUsage(const char* program)
               << "\nOptions:\n"
               << "  --exact-max-n <n>\n"
               << "  --hk-ascent <none|polyak|helsgaun|hybrid>\n"
+              << "  --root-ascent-iterations <n>\n"
+              << "  --root-ascent-trace <csv-path> (root-bound-only, single instance)\n"
               << "  --hk-node-ascent <polyak|helsgaun>\n"
               << "  --branch-edge-order <weight|root-alpha-asc|root-alpha-desc|"
                  "root-alpha-global-asc|root-alpha-global-desc|"
@@ -653,6 +681,14 @@ CliOptions parseArgs(int argc, char** argv)
             }
         } else if (arg == "--hk-ascent") {
             options.root_ascent = parseRootAscentStrategy(require_value(arg));
+        } else if (arg == "--root-ascent-iterations") {
+            options.root_ascent_iterations = parseSizeOption(require_value(arg), arg);
+            if (options.root_ascent_iterations == 0) {
+                throw std::runtime_error(
+                    "--root-ascent-iterations must be greater than zero");
+            }
+        } else if (arg == "--root-ascent-trace") {
+            options.root_ascent_trace_path = require_value(arg);
         } else if (arg == "--hk-node-ascent") {
             options.node_ascent = parseNodeAscentStrategy(require_value(arg));
         } else if (arg == "--branch-edge-order") {
@@ -737,6 +773,14 @@ CliOptions parseArgs(int argc, char** argv)
         throw std::runtime_error(
             "--hk-update-large-gap-ratio and "
             "--hk-update-large-gap-iterations must be used together");
+    }
+    if (!options.root_ascent_trace_path.empty() && !options.root_bound_only) {
+        throw std::runtime_error(
+            "--root-ascent-trace requires --root-bound-only");
+    }
+    if (!options.root_ascent_trace_path.empty() && !options.batch_path.empty()) {
+        throw std::runtime_error(
+            "--root-ascent-trace only supports a single instance");
     }
     return options;
 }

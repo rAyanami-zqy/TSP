@@ -271,6 +271,14 @@ public:
     void disableDebugOutput();
     // 设置根节点 Held-Karp 势上升算法；应在 solve() 前调用。
     void setRootAscentStrategy(RootAscentStrategy strategy);
+    // 设置每个根势上升阶段允许的最大 1-tree 评估轮数。默认 400 保持既有
+    // 求解行为；Hybrid 的 Polyak 与 Helsgaun 两阶段分别使用该上限。
+    void setRootAscentIterationLimit(std::size_t iterations);
+    // 把根势上升的逐轮原始下界与历史最佳下界写到 output。调用方拥有流并
+    // 须保证其在 solve() 返回前有效；CSV 表头由调用方写入。
+    void setRootAscentTraceOutput(std::ostream& output);
+    // 关闭逐轮根势轨迹输出。
+    void disableRootAscentTraceOutput();
     // 设置搜索节点一次势更新尝试所用的上升算法；不改变触发机制或 epoch 语义。
     void setNodeAscentStrategy(NodeAscentStrategy strategy);
     // 设置 BP 在违规顶点内部选择分支边的比较顺序；不改变下界算法。
@@ -793,6 +801,11 @@ private:
     double potential_roundoff_guard_ = 0.0;
     // 下一次根搜索使用的根势上升算法配置。
     RootAscentStrategy root_ascent_strategy_ = RootAscentStrategy::Polyak;
+    // 每个根势阶段最多执行的 1-tree/次梯度评估数。Hybrid 有两个阶段；
+    // 保持“每阶段同一上限”的现有 kMaxIterations 语义。
+    std::size_t root_ascent_iteration_limit_ = 400;
+    // 非拥有指针；nullptr 表示不记录逐轮根下界。
+    std::ostream* root_ascent_trace_output_ = nullptr;
     // 搜索节点一次有限轮势更新内部使用的步长调度；默认保持原 Polyak 行为。
     NodeAscentStrategy node_ascent_strategy_ = NodeAscentStrategy::Polyak;
     // BP 在最高度违规顶点上比较未决树边的策略。
