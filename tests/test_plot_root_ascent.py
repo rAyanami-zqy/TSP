@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
 import csv
+import io
 import sys
 import tempfile
 import unittest
@@ -35,7 +37,7 @@ class RootAscentPlotTests(unittest.TestCase):
         self.assertIn("Helsgaun", content)
         self.assertIn("Hybrid P→H", content)
         self.assertIn("Hybrid H→P", content)
-        self.assertIn("Polyak + H direction 0.7/0.3", content)
+        self.assertIn("Polyak + H direction fixed", content)
         self.assertIn("Polyak + H direction dynamic", content)
         self.assertIn("Concorde optimum: 12", content)
         self.assertIn("Per-phase cap: 2000", content)
@@ -84,6 +86,28 @@ class RootAscentPlotTests(unittest.TestCase):
             cached = plotter.load_cached_concorde_results(source)
         self.assertEqual(cached.instances, (instance.resolve(),))
         self.assertEqual(cached.optimum_by_instance[instance.resolve()], 26.0)
+
+    def test_direction_smoothing_arguments_are_configurable(self) -> None:
+        args = plotter.parse_args([
+            "--root-ascent-smoothing-current-weight", "0.65",
+            "--root-ascent-dynamic-cosine-scale", "0.15",
+            "--root-ascent-dynamic-min-current-weight", "0.4",
+            "--root-ascent-dynamic-max-current-weight", "0.85",
+            "sample.tsp",
+        ])
+        self.assertEqual(args.root_ascent_smoothing_current_weight, 0.65)
+        self.assertEqual(args.root_ascent_dynamic_cosine_scale, 0.15)
+        self.assertEqual(args.root_ascent_dynamic_min_current_weight, 0.4)
+        self.assertEqual(args.root_ascent_dynamic_max_current_weight, 0.85)
+
+    def test_direction_smoothing_arguments_reject_invalid_order(self) -> None:
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                plotter.parse_args([
+                    "--root-ascent-smoothing-current-weight", "0.4",
+                    "--root-ascent-dynamic-min-current-weight", "0.5",
+                    "sample.tsp",
+                ])
 
 
 if __name__ == "__main__":

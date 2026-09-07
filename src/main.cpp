@@ -26,6 +26,12 @@ struct CliOptions {
     tsp::RootAscentStrategy root_ascent = tsp::RootAscentStrategy::Polyak;
     // 每个根势阶段的最大评估轮数；默认保持求解器原有的 400。
     std::size_t root_ascent_iterations = 400;
+    // Polyak 方向平滑中当前次梯度的固定/正交基准权重。
+    double root_ascent_smoothing_current_weight = 0.7;
+    // 动态方向平滑的余弦缩放以及最终当前次梯度权重上下限。
+    double root_ascent_dynamic_cosine_scale = 0.2;
+    double root_ascent_dynamic_min_current_weight = 0.5;
+    double root_ascent_dynamic_max_current_weight = 0.9;
     // 可选逐轮 CSV。只允许与 root-bound-only 的单实例模式一起使用。
     std::string root_ascent_trace_path;
     // 搜索节点一次势更新内部的步长调度；触发和 epoch 语义由下方策略控制。
@@ -174,6 +180,11 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
     tsp::BranchBoundSolver solver(std::move(distance));
     solver.setRootAscentStrategy(options.root_ascent);
     solver.setRootAscentIterationLimit(options.root_ascent_iterations);
+    solver.setRootAscentDirectionSmoothing(
+        options.root_ascent_smoothing_current_weight,
+        options.root_ascent_dynamic_cosine_scale,
+        options.root_ascent_dynamic_min_current_weight,
+        options.root_ascent_dynamic_max_current_weight);
     solver.setNodeAscentStrategy(options.node_ascent);
     // 分支顺序与势更新策略是两个正交开关，便于分别评估搜索树形状和下界质量。
     solver.setBranchEdgeOrder(options.branch_edge_order);
@@ -489,6 +500,10 @@ void printUsage(const char* program)
               << "  --hk-ascent <none|polyak|helsgaun|hybrid|hybrid-reverse|"
                  "polyak-smoothed|polyak-smoothed-dynamic>\n"
               << "  --root-ascent-iterations <n>\n"
+              << "  --root-ascent-smoothing-current-weight <x in [0,1]>\n"
+              << "  --root-ascent-dynamic-cosine-scale <x >= 0>\n"
+              << "  --root-ascent-dynamic-min-current-weight <x in [0,1]>\n"
+              << "  --root-ascent-dynamic-max-current-weight <x in [0,1]>\n"
               << "  --root-ascent-trace <csv-path> (root-bound-only, single instance)\n"
               << "  --hk-node-ascent <polyak|helsgaun>\n"
               << "  --branch-edge-order <weight|root-alpha-asc|root-alpha-desc|"
@@ -698,6 +713,22 @@ CliOptions parseArgs(int argc, char** argv)
                 throw std::runtime_error(
                     "--root-ascent-iterations must be greater than zero");
             }
+        } else if (arg == "--root-ascent-smoothing-current-weight") {
+            options.root_ascent_smoothing_current_weight =
+                parseDoubleOption(require_value(arg), arg);
+        } else if (arg == "--root-ascent-dynamic-cosine-scale") {
+            options.root_ascent_dynamic_cosine_scale =
+                parseDoubleOption(require_value(arg), arg);
+            if (options.root_ascent_dynamic_cosine_scale < 0.0) {
+                throw std::runtime_error(
+                    "--root-ascent-dynamic-cosine-scale must be non-negative");
+            }
+        } else if (arg == "--root-ascent-dynamic-min-current-weight") {
+            options.root_ascent_dynamic_min_current_weight =
+                parseDoubleOption(require_value(arg), arg);
+        } else if (arg == "--root-ascent-dynamic-max-current-weight") {
+            options.root_ascent_dynamic_max_current_weight =
+                parseDoubleOption(require_value(arg), arg);
         } else if (arg == "--root-ascent-trace") {
             options.root_ascent_trace_path = require_value(arg);
         } else if (arg == "--hk-node-ascent") {
@@ -784,6 +815,16 @@ CliOptions parseArgs(int argc, char** argv)
         throw std::runtime_error(
             "--hk-update-large-gap-ratio and "
             "--hk-update-large-gap-iterations must be used together");
+    }
+    if (options.root_ascent_dynamic_min_current_weight < 0.0
+        || options.root_ascent_dynamic_min_current_weight
+            > options.root_ascent_smoothing_current_weight
+        || options.root_ascent_smoothing_current_weight
+            > options.root_ascent_dynamic_max_current_weight
+        || options.root_ascent_dynamic_max_current_weight > 1.0) {
+        throw std::runtime_error(
+            "root ascent direction weights must satisfy "
+            "0 <= dynamic minimum <= fixed <= dynamic maximum <= 1");
     }
     if (!options.root_ascent_trace_path.empty() && !options.root_bound_only) {
         throw std::runtime_error(

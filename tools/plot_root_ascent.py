@@ -50,6 +50,10 @@ DEFAULT_CHART_WIDTH = 1600
 DEFAULT_ITERATIONS_PER_WIDTH = 400
 DEFAULT_TIMEOUT = 1800.0
 DEFAULT_CONCORDE_SEED = 123
+DEFAULT_SMOOTHING_CURRENT_WEIGHT = 0.7
+DEFAULT_DYNAMIC_COSINE_SCALE = 0.2
+DEFAULT_DYNAMIC_MIN_CURRENT_WEIGHT = 0.5
+DEFAULT_DYNAMIC_MAX_CURRENT_WEIGHT = 0.9
 STRATEGIES = (
     "polyak",
     "helsgaun",
@@ -63,7 +67,7 @@ STRATEGY_LABELS = {
     "helsgaun": "Helsgaun",
     "hybrid": "Hybrid P→H",
     "hybrid-reverse": "Hybrid H→P",
-    "polyak-smoothed": "Polyak + H direction 0.7/0.3",
+    "polyak-smoothed": "Polyak + H direction fixed",
     "polyak-smoothed-dynamic": "Polyak + H direction dynamic",
 }
 STRATEGY_COLORS = {
@@ -112,6 +116,34 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             f"(default: {DEFAULT_ITERATIONS})"
         ))
     parser.add_argument(
+        "--root-ascent-smoothing-current-weight", type=float,
+        default=DEFAULT_SMOOTHING_CURRENT_WEIGHT,
+        help=(
+            "current-subgradient weight for fixed smoothing and the dynamic "
+            f"orthogonal baseline (default: {DEFAULT_SMOOTHING_CURRENT_WEIGHT:g})"
+        ))
+    parser.add_argument(
+        "--root-ascent-dynamic-cosine-scale", type=float,
+        default=DEFAULT_DYNAMIC_COSINE_SCALE,
+        help=(
+            "cosine multiplier for dynamic current-subgradient weighting "
+            f"(default: {DEFAULT_DYNAMIC_COSINE_SCALE:g})"
+        ))
+    parser.add_argument(
+        "--root-ascent-dynamic-min-current-weight", type=float,
+        default=DEFAULT_DYNAMIC_MIN_CURRENT_WEIGHT,
+        help=(
+            "lower clamp for the dynamic current-subgradient weight "
+            f"(default: {DEFAULT_DYNAMIC_MIN_CURRENT_WEIGHT:g})"
+        ))
+    parser.add_argument(
+        "--root-ascent-dynamic-max-current-weight", type=float,
+        default=DEFAULT_DYNAMIC_MAX_CURRENT_WEIGHT,
+        help=(
+            "upper clamp for the dynamic current-subgradient weight "
+            f"(default: {DEFAULT_DYNAMIC_MAX_CURRENT_WEIGHT:g})"
+        ))
+    parser.add_argument(
         "--chart-width", type=int, default=DEFAULT_CHART_WIDTH,
         help=(
             "SVG width allocated to each iteration span "
@@ -155,6 +187,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     if args.iterations <= 0:
         parser.error("--iterations must be greater than zero")
+    direction_weights = (
+        args.root_ascent_dynamic_min_current_weight,
+        args.root_ascent_smoothing_current_weight,
+        args.root_ascent_dynamic_max_current_weight,
+    )
+    if (not math.isfinite(args.root_ascent_dynamic_cosine_scale)
+            or args.root_ascent_dynamic_cosine_scale < 0.0):
+        parser.error(
+            "--root-ascent-dynamic-cosine-scale must be finite and non-negative")
+    if (not all(math.isfinite(weight) for weight in direction_weights)
+            or not 0.0 <= direction_weights[0] <= direction_weights[1]
+            <= direction_weights[2] <= 1.0):
+        parser.error(
+            "root ascent direction weights must satisfy "
+            "0 <= dynamic minimum <= fixed <= dynamic maximum <= 1")
     if args.chart_width < 800:
         parser.error("--chart-width must be at least 800 pixels")
     if args.iterations_per_width <= 0:
@@ -377,6 +424,10 @@ def run_strategy(
     strategy: str,
     executable: Path,
     iterations: int,
+    smoothing_current_weight: float,
+    dynamic_cosine_scale: float,
+    dynamic_min_current_weight: float,
+    dynamic_max_current_weight: float,
     exact_max_n: int,
     timeout: float,
     trace_path: Path,
@@ -386,6 +437,14 @@ def run_strategy(
         "--root-bound-only",
         "--hk-ascent", strategy,
         "--root-ascent-iterations", str(iterations),
+        "--root-ascent-smoothing-current-weight",
+        str(smoothing_current_weight),
+        "--root-ascent-dynamic-cosine-scale",
+        str(dynamic_cosine_scale),
+        "--root-ascent-dynamic-min-current-weight",
+        str(dynamic_min_current_weight),
+        "--root-ascent-dynamic-max-current-weight",
+        str(dynamic_max_current_weight),
         "--root-ascent-trace", str(trace_path),
         "--exact-max-n", str(exact_max_n),
         str(instance),
@@ -766,6 +825,10 @@ def process_instance(
     concorde: Path | None,
     cached_concorde: CachedConcordeResults | None,
     iterations: int,
+    smoothing_current_weight: float,
+    dynamic_cosine_scale: float,
+    dynamic_min_current_weight: float,
+    dynamic_max_current_weight: float,
     chart_width: int,
     iterations_per_width: int,
     exact_max_n: int,
@@ -800,8 +863,10 @@ def process_instance(
     for strategy in STRATEGIES:
         trace_path = output_directory / f"{strategy}.csv"
         points, metadata = run_strategy(
-            instance, strategy, solver, iterations, exact_max_n, timeout,
-            trace_path)
+            instance, strategy, solver, iterations, smoothing_current_weight,
+            dynamic_cosine_scale, dynamic_min_current_weight,
+            dynamic_max_current_weight,
+            exact_max_n, timeout, trace_path)
         traces[strategy] = points
         strategy_metadata[strategy] = metadata
 
@@ -814,6 +879,12 @@ def process_instance(
     metadata = {
         "instance": str(instance),
         "iteration_limit_per_phase": iterations,
+        "direction_smoothing": {
+            "fixed_current_weight": smoothing_current_weight,
+            "dynamic_cosine_scale": dynamic_cosine_scale,
+            "dynamic_min_current_weight": dynamic_min_current_weight,
+            "dynamic_max_current_weight": dynamic_max_current_weight,
+        },
         "chart_width_px": chart_width,
         "iterations_per_chart_width": iterations_per_width,
         "root_bound_only": True,
@@ -874,7 +945,12 @@ def main(argv: list[str] | None = None) -> int:
             executor.submit(
                 process_instance,
                 instance, destination, solver, concorde, cached_concorde,
-                args.iterations, args.chart_width, args.iterations_per_width,
+                args.iterations,
+                args.root_ascent_smoothing_current_weight,
+                args.root_ascent_dynamic_cosine_scale,
+                args.root_ascent_dynamic_min_current_weight,
+                args.root_ascent_dynamic_max_current_weight,
+                args.chart_width, args.iterations_per_width,
                 args.exact_max_n, args.timeout, args.concorde_seed,
             ): (index, instance)
             for index, instance, destination in jobs

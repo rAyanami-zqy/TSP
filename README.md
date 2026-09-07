@@ -149,6 +149,23 @@ debug 信息写到标准错误，不会破坏批处理模式的 CSV 标准输出
 - `polyak-smoothed-dynamic`：保持 Polyak 其余行为，按相邻次梯度的余弦相似度将
   当前方向权重动态限制在 `0.5--0.9`；正交时为 `0.7/0.3`。
 
+两个平滑策略的当前次梯度权重可通过以下参数控制：
+
+```bash
+./build/tsp_bb --hk-ascent polyak-smoothed-dynamic \
+  --root-ascent-smoothing-current-weight 0.65 \
+  --root-ascent-dynamic-cosine-scale 0.15 \
+  --root-ascent-dynamic-min-current-weight 0.4 \
+  --root-ascent-dynamic-max-current-weight 0.85 \
+  data/classic/tsplib/eil101.tsp
+```
+
+`--root-ascent-smoothing-current-weight` 是固定策略的当前方向权重，也是动态策略
+在余弦相似度为 `0` 时的基准；动态策略先计算“基准 + 余弦缩放 × 相似度”，
+再限制到配置的最小值和最大值。三个权重必须满足
+`0 <= 最小值 <= 基准值 <= 最大值 <= 1`，余弦缩放必须非负；未指定时采用
+基准 `0.7`、缩放 `0.2`、范围 `0.5--0.9`，与原实验实现一致。
+
 只比较根下界而不进入精确搜索：
 
 ```bash
@@ -166,7 +183,7 @@ debug 信息写到标准错误，不会破坏批处理模式的 CSV 标准输出
 并把六种逐轮下界轨迹画在同一张二维图
 中：浅色细线显示每次 1-tree 评估的原始下界，粗实线显示历史最佳下界。
 横轴是根势评估轮次，纵轴是根 1-tree 下界；Concorde 的精确最优值作为水平
-参考线。三次 `tsp_bb` 调用都强制使用 `--root-bound-only`，脚本还会检查
+参考线。六次 `tsp_bb` 调用都强制使用 `--root-bound-only`，脚本还会检查
 `Nodes expanded` 必须为 0，因此不会进入分支定界递归。
 
 直接选择一个或多个实例：
@@ -205,6 +222,10 @@ python3 tools/plot_root_ascent.py \
 ```bash
 python3 tools/plot_root_ascent.py \
   --iterations 4000 \
+  --root-ascent-smoothing-current-weight 0.65 \
+  --root-ascent-dynamic-cosine-scale 0.15 \
+  --root-ascent-dynamic-min-current-weight 0.4 \
+  --root-ascent-dynamic-max-current-weight 0.85 \
   --chart-width 1800 \
   --iterations-per-width 400 \
   --solver build/tsp_bb \
@@ -215,10 +236,10 @@ python3 tools/plot_root_ascent.py \
 
 每个实例有独立目录，包含：
 
-- `root-ascent-trends.svg`：三策略曲线与 Concorde 参考线，无需 matplotlib；
+- `root-ascent-trends.svg`：六策略曲线与 Concorde 参考线，无需 matplotlib；
 - `root-ascent-trends.csv`：合并后的逐轮原始下界、历史最佳下界及最优值；
 - `<strategy>.csv`：六种策略各自由求解器直接记录的原始轨迹；
-- `metadata.json`：轮数配置、实际评估数、命令和可执行文件路径。
+- `metadata.json`：轮数及方向权重配置、实际评估数、命令和可执行文件路径。
 
 多实例运行还会在输出根目录生成 `index.html` 图表总览和 `summary.csv` 实例级
 汇总；汇总中包含各策略的最终根下界、相对 Concorde gap 和实际评估轮数。

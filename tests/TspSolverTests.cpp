@@ -1423,6 +1423,44 @@ void testRootAscentTraceAndIterationLimit()
         throw std::runtime_error("zero root ascent iteration limit was accepted");
     }
 
+    for (const tsp::RootAscentStrategy strategy : {
+             tsp::RootAscentStrategy::PolyakSmoothed,
+             tsp::RootAscentStrategy::PolyakSmoothedDynamic}) {
+        tsp::BranchBoundSolver configured_solver(matrix);
+        configured_solver.setRootAscentStrategy(strategy);
+        configured_solver.setRootAscentIterationLimit(20);
+        configured_solver.setRootAscentDirectionSmoothing(
+            0.65, 0.15, 0.4, 0.85);
+        configured_solver.setRootBoundOnly(true);
+        const tsp::SolveResult configured_result = configured_solver.solve();
+        if (!configured_result.feasible
+            || !std::isfinite(configured_result.stats.root_lower_bound)) {
+            throw std::runtime_error(
+                "configured root direction smoothing produced an invalid bound");
+        }
+    }
+
+    auto rejects_direction_weights = [&](double fixed_weight,
+                                         double cosine_scale,
+                                         double minimum_weight,
+                                         double maximum_weight) {
+        try {
+            solver.setRootAscentDirectionSmoothing(
+                fixed_weight, cosine_scale, minimum_weight, maximum_weight);
+        } catch (const std::invalid_argument&) {
+            return true;
+        }
+        return false;
+    };
+    if (!rejects_direction_weights(0.4, 0.2, 0.5, 0.9)
+        || !rejects_direction_weights(0.8, 0.2, 0.5, 0.7)
+        || !rejects_direction_weights(0.7, -0.1, 0.5, 0.9)
+        || !rejects_direction_weights(
+            std::numeric_limits<double>::quiet_NaN(), 0.2, 0.5, 0.9)) {
+        throw std::runtime_error(
+            "invalid root direction smoothing weights were accepted");
+    }
+
     auto phase_order = [&](tsp::RootAscentStrategy strategy,
                            const std::string& expected_strategy) {
         tsp::BranchBoundSolver phase_solver(matrix);

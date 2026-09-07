@@ -291,6 +291,33 @@ void BranchBoundSolver::setRootAscentIterationLimit(std::size_t iterations)
     root_ascent_iteration_limit_ = iterations;
 }
 
+void BranchBoundSolver::setRootAscentDirectionSmoothing(
+    double fixed_current_weight,
+    double cosine_scale,
+    double dynamic_min_current_weight,
+    double dynamic_max_current_weight)
+{
+    if (!std::isfinite(cosine_scale) || cosine_scale < 0.0) {
+        throw std::invalid_argument(
+            "root ascent dynamic cosine scale must be finite and non-negative");
+    }
+    if (!std::isfinite(fixed_current_weight)
+        || !std::isfinite(dynamic_min_current_weight)
+        || !std::isfinite(dynamic_max_current_weight)
+        || dynamic_min_current_weight < 0.0
+        || dynamic_min_current_weight > fixed_current_weight
+        || fixed_current_weight > dynamic_max_current_weight
+        || dynamic_max_current_weight > 1.0) {
+        throw std::invalid_argument(
+            "root ascent direction weights must satisfy "
+            "0 <= dynamic minimum <= fixed <= dynamic maximum <= 1");
+    }
+    root_ascent_smoothing_current_weight_ = fixed_current_weight;
+    root_ascent_dynamic_cosine_scale_ = cosine_scale;
+    root_ascent_dynamic_min_current_weight_ = dynamic_min_current_weight;
+    root_ascent_dynamic_max_current_weight_ = dynamic_max_current_weight;
+}
+
 void BranchBoundSolver::setRootAscentTraceOutput(std::ostream& output)
 {
     root_ascent_trace_output_ = &output;
@@ -789,7 +816,8 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
                         evaluation.degree[index] - 2);
                 }
 
-                double current_weight = 0.7;
+                double current_weight =
+                    root_ascent_smoothing_current_weight_;
                 if (direction_mode
                         == PolyakDirectionMode::DynamicHelsgaunSmoothing
                     && have_previous_subgradient) {
@@ -807,10 +835,13 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
                             dot_product
                                 / std::sqrt(subgradient_norm * previous_norm),
                             -1.0, 1.0);
-                        // 同向时更信任当前方向，振荡或反向时增加历史
-                        // 方向的阻尼；正交时恢复固定 0.7/0.3 基准。
+                        // 正交时恢复固定/基准权重；余弦缩放与上下限均可配置。
+                        // 默认值保留原有运算公式及浮点求值顺序。
                         current_weight = std::clamp(
-                            0.7 + 0.2 * cosine, 0.5, 0.9);
+                            current_weight
+                                + root_ascent_dynamic_cosine_scale_ * cosine,
+                            root_ascent_dynamic_min_current_weight_,
+                            root_ascent_dynamic_max_current_weight_);
                     }
                 }
                 const double previous_weight = 1.0 - current_weight;

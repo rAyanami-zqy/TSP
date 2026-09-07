@@ -280,6 +280,15 @@ public:
     // 设置每个根势上升阶段允许的最大 1-tree 评估轮数。默认 400 保持既有
     // 求解行为；两种 Hybrid 的 Polyak 与 Helsgaun 阶段分别使用该上限。
     void setRootAscentIterationLimit(std::size_t iterations);
+    // 配置 Polyak 方向平滑中“当前次梯度”的权重。fixed_current_weight 用于
+    // 固定平滑，也作为动态平滑在正交方向时的基准；动态策略加上相邻次梯度
+    // 余弦相似度乘 cosine_scale，再限制到 min/max。权重须满足
+    // 0<=min<=fixed<=max<=1，cosine_scale 须为非负有限数。
+    void setRootAscentDirectionSmoothing(
+        double fixed_current_weight,
+        double cosine_scale,
+        double dynamic_min_current_weight,
+        double dynamic_max_current_weight);
     // 把根势上升的逐轮原始下界与历史最佳下界写到 output。调用方拥有流并
     // 须保证其在 solve() 返回前有效；CSV 表头由调用方写入。
     void setRootAscentTraceOutput(std::ostream& output);
@@ -810,6 +819,12 @@ private:
     // 每个根势阶段最多执行的 1-tree/次梯度评估数。两种 Hybrid 有两个阶段；
     // 保持“每阶段同一上限”的现有 kMaxIterations 语义。
     std::size_t root_ascent_iteration_limit_ = 400;
+    // PolyakSmoothed 使用的当前次梯度权重；剩余权重分配给前一次次梯度。
+    double root_ascent_smoothing_current_weight_ = 0.7;
+    // PolyakSmoothedDynamic 的余弦缩放以及最终当前次梯度权重上下限。
+    double root_ascent_dynamic_cosine_scale_ = 0.2;
+    double root_ascent_dynamic_min_current_weight_ = 0.5;
+    double root_ascent_dynamic_max_current_weight_ = 0.9;
     // 非拥有指针；nullptr 表示不记录逐轮根下界。
     std::ostream* root_ascent_trace_output_ = nullptr;
     // 搜索节点一次有限轮势更新内部使用的步长调度；默认保持原 Polyak 行为。
