@@ -13,7 +13,7 @@
 - 默认 `deg` 策略从当前 1-tree 的度数违规顶点选择未决边；`min_edge` 策略从整个 1-tree 选择最轻未决边。
 - 下界使用受约束 `1-tree`：在顶点 `1..n-1` 上构造 MST，再给顶点 `0` 加两条可用的最短关联边。
 - 根节点默认用 Polyak 次梯度优化 Held-Karp 顶点势，随后在整轮 DFS 中固定
-  势和边权；也可切换到论文式 Helsgaun 调度或 Polyak 后精修的组合策略。
+  势和边权；也可切换到 Helsgaun、两种先后组合或 Polyak 方向平滑实验策略。
 - 根 1-tree 建立后使用 Held–Karp reduced cost 检查所有边：若强制一条
   非树边的下界已不能改善 incumbent，就永久停用该边；若禁止一条树边的
   replacement 下界已不能改善 incumbent，就将其强制为 `x_e=1` 并重建根树。
@@ -131,6 +131,9 @@ debug 信息写到标准错误，不会破坏批处理模式的 CSV 标准输出
 ./build/tsp_bb --hk-ascent polyak data/classic/tsplib/eil101.tsp
 ./build/tsp_bb --hk-ascent helsgaun data/classic/tsplib/eil101.tsp
 ./build/tsp_bb --hk-ascent hybrid data/classic/tsplib/eil101.tsp
+./build/tsp_bb --hk-ascent hybrid-reverse data/classic/tsplib/eil101.tsp
+./build/tsp_bb --hk-ascent polyak-smoothed data/classic/tsplib/eil101.tsp
+./build/tsp_bb --hk-ascent polyak-smoothed-dynamic data/classic/tsplib/eil101.tsp
 ./build/tsp_bb --hk-ascent none data/classic/tsplib/eil101.tsp
 ```
 
@@ -139,6 +142,12 @@ debug 信息写到标准错误，不会破坏批处理模式的 CSV 标准输出
 - `helsgaun`：使用论文的 period/步长减半和 `0.7/0.3` 平滑次梯度；
 - `hybrid`：先执行 Polyak，再从其最佳势出发用 Helsgaun 调度精修，并保留
   固定根下界更强的势。
+- `hybrid-reverse`：先执行 Helsgaun，再从其最佳势出发用 Polyak 精修，同样
+  保留两阶段中更强的势；
+- `polyak-smoothed`：保持 Polyak 步长、停滞折半和停止条件，仅把更新方向改为
+  `0.7 * 当前次梯度 + 0.3 * 上一次梯度`；
+- `polyak-smoothed-dynamic`：保持 Polyak 其余行为，按相邻次梯度的余弦相似度将
+  当前方向权重动态限制在 `0.5--0.9`；正交时为 `0.7/0.3`。
 
 只比较根下界而不进入精确搜索：
 
@@ -153,8 +162,8 @@ debug 信息写到标准错误，不会破坏批处理模式的 CSV 标准输出
 
 #### 根势逐轮趋势图
 
-`tools/plot_root_ascent.py` 对每个选中的实例分别运行现有的 `polyak`、
-`helsgaun` 和 `hybrid` 三种根势实现，并把三种逐轮下界轨迹画在同一张二维图
+`tools/plot_root_ascent.py` 对每个选中的实例分别运行上述六种根势实现，
+并把六种逐轮下界轨迹画在同一张二维图
 中：浅色细线显示每次 1-tree 评估的原始下界，粗实线显示历史最佳下界。
 横轴是根势评估轮次，纵轴是根 1-tree 下界；Concorde 的精确最优值作为水平
 参考线。三次 `tsp_bb` 调用都强制使用 `--root-bound-only`，脚本还会检查
@@ -186,9 +195,9 @@ python3 tools/plot_root_ascent.py \
 ```
 
 默认每个上升阶段最多评估 2000 轮，可随时调整；求解器原有的收敛停止条件仍
-然生效，所以实际轮数可能少于上限。为严格保持现有 Hybrid 语义，Polyak 和
-后续 Helsgaun 精修阶段分别使用该上限，图上的 Hybrid 横轴把两个阶段顺序
-连接。默认每 400 轮展开为一段 1600 像素宽的横轴，因此 0--2000 轮会连续
+然生效，所以实际轮数可能少于上限。两种 Hybrid 的 Polyak 和 Helsgaun 阶段
+分别使用该上限，图上横轴按实际先后顺序连接两个阶段。默认每 400 轮展开为
+一段 1600 像素宽的横轴，因此 0--2000 轮会连续
 展开为五段；总览页每行显示一个实例，并允许横向滚动查看完整长图。可用
 `--chart-width` 调整每段宽度，用 `--iterations-per-width` 调整每段覆盖的
 轮数，二者都不会改变势优化过程：
@@ -208,12 +217,12 @@ python3 tools/plot_root_ascent.py \
 
 - `root-ascent-trends.svg`：三策略曲线与 Concorde 参考线，无需 matplotlib；
 - `root-ascent-trends.csv`：合并后的逐轮原始下界、历史最佳下界及最优值；
-- `polyak.csv`、`helsgaun.csv`、`hybrid.csv`：求解器直接记录的原始轨迹；
+- `<strategy>.csv`：六种策略各自由求解器直接记录的原始轨迹；
 - `metadata.json`：轮数配置、实际评估数、命令和可执行文件路径。
 
 多实例运行还会在输出根目录生成 `index.html` 图表总览和 `summary.csv` 实例级
 汇总；汇总中包含各策略的最终根下界、相对 Concorde gap 和实际评估轮数。
-总览中每个实例的表格下方提供 Polyak、Helsgaun、Hybrid 和 Concorde 开关，
+总览中每个实例的表格下方提供六种根势策略和 Concorde 开关，
 可独立显示或隐藏对应曲线；关闭某个策略时，其原始下界细线和历史最优粗线会
 一起隐藏。
 

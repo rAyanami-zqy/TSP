@@ -1334,15 +1334,27 @@ void testRootAscentStrategies()
     const double polyak = root_bound(tsp::RootAscentStrategy::Polyak);
     const double helsgaun = root_bound(tsp::RootAscentStrategy::Helsgaun);
     const double hybrid = root_bound(tsp::RootAscentStrategy::Hybrid);
+    const double hybrid_reverse = root_bound(
+        tsp::RootAscentStrategy::HybridReverse);
+    const double polyak_smoothed = root_bound(
+        tsp::RootAscentStrategy::PolyakSmoothed);
+    const double polyak_smoothed_dynamic = root_bound(
+        tsp::RootAscentStrategy::PolyakSmoothedDynamic);
     if (polyak + 1e-8 < none || helsgaun + 1e-8 < none
-        || hybrid + 1e-8 < polyak) {
+        || hybrid + 1e-8 < polyak
+        || hybrid_reverse + 1e-8 < helsgaun
+        || polyak_smoothed + 1e-8 < none
+        || polyak_smoothed_dynamic + 1e-8 < none) {
         throw std::runtime_error(
             "an ascent strategy discarded its zero/warm-start lower bound");
     }
 
     for (const tsp::RootAscentStrategy strategy : {
              tsp::RootAscentStrategy::Helsgaun,
-             tsp::RootAscentStrategy::Hybrid}) {
+             tsp::RootAscentStrategy::Hybrid,
+             tsp::RootAscentStrategy::HybridReverse,
+             tsp::RootAscentStrategy::PolyakSmoothed,
+             tsp::RootAscentStrategy::PolyakSmoothedDynamic}) {
         tsp::BranchBoundSolver solver(matrix);
         solver.setRootAscentStrategy(strategy);
         const tsp::SolveResult result = solver.solve();
@@ -1409,6 +1421,55 @@ void testRootAscentTraceAndIterationLimit()
     }
     if (!rejected_zero_limit) {
         throw std::runtime_error("zero root ascent iteration limit was accepted");
+    }
+
+    auto phase_order = [&](tsp::RootAscentStrategy strategy,
+                           const std::string& expected_strategy) {
+        tsp::BranchBoundSolver phase_solver(matrix);
+        phase_solver.setRootAscentStrategy(strategy);
+        phase_solver.setRootAscentIterationLimit(3);
+        phase_solver.setRootBoundOnly(true);
+        std::ostringstream phase_trace;
+        phase_solver.setRootAscentTraceOutput(phase_trace);
+        const tsp::SolveResult phase_result = phase_solver.solve();
+        if (!phase_result.feasible) {
+            throw std::runtime_error(
+                "root ascent phase-order strategy lost its incumbent");
+        }
+        std::vector<std::string> phases;
+        std::istringstream phase_rows(phase_trace.str());
+        std::string phase_row;
+        while (std::getline(phase_rows, phase_row)) {
+            if (phase_row.empty()) continue;
+            std::istringstream fields(phase_row);
+            std::vector<std::string> values;
+            std::string value;
+            while (std::getline(fields, value, ',')) values.push_back(value);
+            if (values.size() != 6 || values[0] != expected_strategy) {
+                throw std::runtime_error(
+                    "root ascent phase-order trace has an unexpected schema");
+            }
+            phases.push_back(values[2]);
+        }
+        return phases;
+    };
+
+    const std::vector<std::string> forward_phases = phase_order(
+        tsp::RootAscentStrategy::Hybrid, "hybrid");
+    const auto forward_switch = std::find(
+        forward_phases.begin(), forward_phases.end(), "helsgaun");
+    if (forward_phases.empty() || forward_phases.front() != "polyak"
+        || forward_switch == forward_phases.end()) {
+        throw std::runtime_error("hybrid trace is not ordered Polyak then Helsgaun");
+    }
+
+    const std::vector<std::string> reverse_phases = phase_order(
+        tsp::RootAscentStrategy::HybridReverse, "hybrid-reverse");
+    const auto reverse_switch = std::find(
+        reverse_phases.begin(), reverse_phases.end(), "polyak");
+    if (reverse_phases.empty() || reverse_phases.front() != "helsgaun"
+        || reverse_switch == reverse_phases.end()) {
+        throw std::runtime_error("reverse hybrid trace is not ordered Helsgaun then Polyak");
     }
 }
 

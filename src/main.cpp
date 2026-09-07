@@ -486,7 +486,8 @@ void printUsage(const char* program)
               << "  " << program << " [options] --batch <list-file>\n"
               << "\nOptions:\n"
               << "  --exact-max-n <n>\n"
-              << "  --hk-ascent <none|polyak|helsgaun|hybrid>\n"
+              << "  --hk-ascent <none|polyak|helsgaun|hybrid|hybrid-reverse|"
+                 "polyak-smoothed|polyak-smoothed-dynamic>\n"
               << "  --root-ascent-iterations <n>\n"
               << "  --root-ascent-trace <csv-path> (root-bound-only, single instance)\n"
               << "  --hk-node-ascent <polyak|helsgaun>\n"
@@ -520,9 +521,19 @@ tsp::RootAscentStrategy parseRootAscentStrategy(const std::string& value)
     if (value == "polyak") return tsp::RootAscentStrategy::Polyak;
     if (value == "helsgaun") return tsp::RootAscentStrategy::Helsgaun;
     if (value == "hybrid") return tsp::RootAscentStrategy::Hybrid;
+    if (value == "hybrid-reverse") {
+        return tsp::RootAscentStrategy::HybridReverse;
+    }
+    if (value == "polyak-smoothed") {
+        return tsp::RootAscentStrategy::PolyakSmoothed;
+    }
+    if (value == "polyak-smoothed-dynamic") {
+        return tsp::RootAscentStrategy::PolyakSmoothedDynamic;
+    }
     throw std::runtime_error(
         "invalid value for --hk-ascent: " + value
-        + " (expected none, polyak, helsgaun, or hybrid)");
+        + " (expected none, polyak, helsgaun, hybrid, hybrid-reverse, "
+          "polyak-smoothed, or polyak-smoothed-dynamic)");
 }
 
 tsp::NodeAscentStrategy parseNodeAscentStrategy(const std::string& value)

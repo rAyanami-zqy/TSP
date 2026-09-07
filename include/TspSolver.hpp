@@ -105,8 +105,8 @@ struct DebugOptions {
 };
 
 // 根节点 Held-Karp 势的上升策略。Polyak 是当前 HKMST 基线；Helsgaun
-// 复现论文中的 period/步长与平滑次梯度思想；Hybrid 先运行 Polyak，再
-// 从其最佳势出发执行 Helsgaun 精修，并保留实际固定根下界更强的一组势。
+// 复现论文中的 period/步长与平滑次梯度思想；其余策略用于对照
+// 两阶段先后顺序，或仅在 Polyak 步长上引入 Helsgaun 式方向平滑。
 enum class RootAscentStrategy {
     // 不改变顶点势，根下界使用原始边权上的最小 1-tree。
     None,
@@ -116,6 +116,12 @@ enum class RootAscentStrategy {
     Helsgaun,
     // 先执行 Polyak，再从其最优点做 Helsgaun 精修并保留更强结果。
     Hybrid,
+    // 先执行 Helsgaun，再从其最优点做 Polyak 精修并保留更强结果。
+    HybridReverse,
+    // 保持 Polyak 步长与停止条件，方向改为 0.7 当前次梯度 + 0.3 上一次梯度。
+    PolyakSmoothed,
+    // 保持 Polyak 其余逻辑，根据相邻次梯度的方向一致性动态调整平滑比例。
+    PolyakSmoothedDynamic,
 };
 
 // 搜索节点内部的有限轮势上升算法。触发位置和势的作用范围由
@@ -272,7 +278,7 @@ public:
     // 设置根节点 Held-Karp 势上升算法；应在 solve() 前调用。
     void setRootAscentStrategy(RootAscentStrategy strategy);
     // 设置每个根势上升阶段允许的最大 1-tree 评估轮数。默认 400 保持既有
-    // 求解行为；Hybrid 的 Polyak 与 Helsgaun 两阶段分别使用该上限。
+    // 求解行为；两种 Hybrid 的 Polyak 与 Helsgaun 阶段分别使用该上限。
     void setRootAscentIterationLimit(std::size_t iterations);
     // 把根势上升的逐轮原始下界与历史最佳下界写到 output。调用方拥有流并
     // 须保证其在 solve() 返回前有效；CSV 表头由调用方写入。
@@ -801,7 +807,7 @@ private:
     double potential_roundoff_guard_ = 0.0;
     // 下一次根搜索使用的根势上升算法配置。
     RootAscentStrategy root_ascent_strategy_ = RootAscentStrategy::Polyak;
-    // 每个根势阶段最多执行的 1-tree/次梯度评估数。Hybrid 有两个阶段；
+    // 每个根势阶段最多执行的 1-tree/次梯度评估数。两种 Hybrid 有两个阶段；
     // 保持“每阶段同一上限”的现有 kMaxIterations 语义。
     std::size_t root_ascent_iteration_limit_ = 400;
     // 非拥有指针；nullptr 表示不记录逐轮根下界。

@@ -25,7 +25,7 @@ class RootAscentPlotTests(unittest.TestCase):
             for strategy in plotter.STRATEGIES
         }
 
-    def test_svg_contains_three_strategies_and_concorde_reference(self) -> None:
+    def test_svg_contains_all_strategies_and_concorde_reference(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "trend.svg"
             plotter.write_svg_chart(
@@ -33,20 +33,27 @@ class RootAscentPlotTests(unittest.TestCase):
             content = output.read_text(encoding="utf-8")
         self.assertIn("Polyak", content)
         self.assertIn("Helsgaun", content)
-        self.assertIn("Hybrid", content)
+        self.assertIn("Hybrid P→H", content)
+        self.assertIn("Hybrid H→P", content)
+        self.assertIn("Polyak + H direction 0.7/0.3", content)
+        self.assertIn("Polyak + H direction dynamic", content)
         self.assertIn("Concorde optimum: 12", content)
         self.assertIn("Per-phase cap: 2000", content)
         self.assertIn("thin = raw bound", content)
         self.assertIn('width="7380"', content)
         self.assertIn('viewBox="0 0 7380 720"', content)
         self.assertIn("400 iterations per 1600px", content)
-        self.assertIn('<rect x="6920.0" y="528.0"', content)
+        self.assertIn('<rect x="6810.0" y="453.0"', content)
         self.assertIn('<g data-series="polyak">', content)
         self.assertIn('<g data-series="helsgaun">', content)
         self.assertIn('<g data-series="hybrid">', content)
+        self.assertIn('<g data-series="hybrid-reverse">', content)
+        self.assertIn('<g data-series="polyak-smoothed">', content)
+        self.assertIn('<g data-series="polyak-smoothed-dynamic">', content)
         self.assertIn('<g data-series="concorde">', content)
         self.assertIn('<g data-legend="polyak">', content)
-        self.assertEqual(content.count('stroke-opacity="0.28"'), 3)
+        self.assertEqual(
+            content.count('stroke-opacity="0.28"'), len(plotter.STRATEGIES))
 
     def test_combined_csv_keeps_raw_and_best_bounds(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -55,7 +62,7 @@ class RootAscentPlotTests(unittest.TestCase):
                 output, Path("sample.tsp"), 12.0, self.traces())
             with output.open(newline="", encoding="utf-8") as source:
                 rows = list(csv.DictReader(source))
-        self.assertEqual(len(rows), 6)
+        self.assertEqual(len(rows), 2 * len(plotter.STRATEGIES))
         self.assertEqual(rows[0]["strategy"], "polyak")
         self.assertEqual(rows[0]["lower_bound"], "10")
         self.assertEqual(rows[0]["best_lower_bound"], "10")

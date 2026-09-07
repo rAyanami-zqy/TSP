@@ -520,6 +520,10 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
         case RootAscentStrategy::Polyak: return "polyak";
         case RootAscentStrategy::Helsgaun: return "helsgaun";
         case RootAscentStrategy::Hybrid: return "hybrid";
+        case RootAscentStrategy::HybridReverse: return "hybrid-reverse";
+        case RootAscentStrategy::PolyakSmoothed: return "polyak-smoothed";
+        case RootAscentStrategy::PolyakSmoothedDynamic:
+            return "polyak-smoothed-dynamic";
         }
         return "unknown";
     };
@@ -712,9 +716,21 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
             << bound << ',' << best_bound << '\n';
     };
 
-    auto run_polyak = [&](const std::vector<double>& initial) {
+    enum class PolyakDirectionMode {
+        Current,
+        FixedHelsgaunSmoothing,
+        DynamicHelsgaunSmoothing,
+    };
+    auto run_polyak = [&](const std::vector<double>& initial,
+                          PolyakDirectionMode direction_mode,
+                          const char* phase_name) {
         // potentials 是正在迭代的工作势；best 单独保存历史最好证书。
         std::vector<double> potentials = initial;
+        std::vector<double> previous_subgradient;
+        bool have_previous_subgradient = false;
+        if (direction_mode != PolyakDirectionMode::Current) {
+            previous_subgradient.assign(static_cast<std::size_t>(n_), 0.0);
+        }
         AscentCandidate best;
         best.potentials = initial;
         // step_scale 是 Polyak 步长乘子；连续停滞后折半。
@@ -736,7 +752,7 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
             } else {
                 ++no_improvement;
             }
-            write_trace("polyak", best.iterations, bound, best.bound);
+            write_trace(phase_name, best.iterations, bound, best.bound);
 
             double subgradient_norm = 0.0;
             for (const int value : evaluation.degree) {
@@ -758,10 +774,56 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
             const double gap = upper_bound - bound;
             const double step = step_scale * gap / subgradient_norm;
             if (!isFinite(step) || step <= 0.0) break;
-            for (int vertex = 0; vertex < n_; ++vertex) {
-                potentials[static_cast<std::size_t>(vertex)] += step
-                    * static_cast<double>(
-                        evaluation.degree[static_cast<std::size_t>(vertex)] - 2);
+            if (direction_mode == PolyakDirectionMode::Current) {
+                for (int vertex = 0; vertex < n_; ++vertex) {
+                    potentials[static_cast<std::size_t>(vertex)] += step
+                        * static_cast<double>(evaluation.degree[
+                            static_cast<std::size_t>(vertex)] - 2);
+                }
+            } else {
+                std::vector<double> subgradient(
+                    static_cast<std::size_t>(n_), 0.0);
+                for (int vertex = 0; vertex < n_; ++vertex) {
+                    const std::size_t index = static_cast<std::size_t>(vertex);
+                    subgradient[index] = static_cast<double>(
+                        evaluation.degree[index] - 2);
+                }
+
+                double current_weight = 0.7;
+                if (direction_mode
+                        == PolyakDirectionMode::DynamicHelsgaunSmoothing
+                    && have_previous_subgradient) {
+                    double dot_product = 0.0;
+                    double previous_norm = 0.0;
+                    for (std::size_t index = 0;
+                         index < subgradient.size(); ++index) {
+                        dot_product += subgradient[index]
+                            * previous_subgradient[index];
+                        previous_norm += previous_subgradient[index]
+                            * previous_subgradient[index];
+                    }
+                    if (previous_norm > 0.0) {
+                        const double cosine = std::clamp(
+                            dot_product
+                                / std::sqrt(subgradient_norm * previous_norm),
+                            -1.0, 1.0);
+                        // 同向时更信任当前方向，振荡或反向时增加历史
+                        // 方向的阻尼；正交时恢复固定 0.7/0.3 基准。
+                        current_weight = std::clamp(
+                            0.7 + 0.2 * cosine, 0.5, 0.9);
+                    }
+                }
+                const double previous_weight = 1.0 - current_weight;
+                for (std::size_t index = 0;
+                     index < subgradient.size(); ++index) {
+                    const double direction = have_previous_subgradient
+                        ? current_weight * subgradient[index]
+                            + previous_weight * previous_subgradient[index]
+                        : subgradient[index];
+                    potentials[index] += step * direction;
+                }
+                previous_subgradient = std::move(subgradient);
+                have_previous_subgradient = true;
             }
 
             if (no_improvement >= kStagnationIterations) {
@@ -863,15 +925,17 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
     AscentCandidate selected;
     std::string selected_name;
     if (root_ascent_strategy_ == RootAscentStrategy::Polyak) {
-        polyak = run_polyak(zero_potentials);
+        polyak = run_polyak(
+            zero_potentials, PolyakDirectionMode::Current, "polyak");
         selected = polyak;
         selected_name = "polyak";
     } else if (root_ascent_strategy_ == RootAscentStrategy::Helsgaun) {
         helsgaun = run_helsgaun(zero_potentials);
         selected = helsgaun;
         selected_name = "helsgaun";
-    } else {
-        polyak = run_polyak(zero_potentials);
+    } else if (root_ascent_strategy_ == RootAscentStrategy::Hybrid) {
+        polyak = run_polyak(
+            zero_potentials, PolyakDirectionMode::Current, "polyak");
         // 组合策略不是简单平均两组势。它从当前 Polyak 最优解继续执行
         // 论文的平滑 period 上升，并始终保留固定根下界更强的一组势。
         helsgaun = run_helsgaun(polyak.potentials);
@@ -884,6 +948,35 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
             selected = polyak;
             selected_name = "polyak";
         }
+    } else if (root_ascent_strategy_ == RootAscentStrategy::HybridReverse) {
+        helsgaun = run_helsgaun(zero_potentials);
+        // 反向两阶段对照：从 Helsgaun 最优势出发，使用原始
+        // Polyak 步长继续精修，仍保留两阶段中更强的证书。
+        polyak = run_polyak(
+            helsgaun.potentials, PolyakDirectionMode::Current, "polyak");
+        const double tolerance = scaledRoundoffTolerance(
+            polyak.bound, helsgaun.bound, static_cast<std::size_t>(n_));
+        if (polyak.bound > helsgaun.bound + tolerance) {
+            selected = polyak;
+            selected_name = "helsgaun+polyak";
+        } else {
+            selected = helsgaun;
+            selected_name = "helsgaun";
+        }
+    } else if (root_ascent_strategy_ == RootAscentStrategy::PolyakSmoothed) {
+        polyak = run_polyak(
+            zero_potentials,
+            PolyakDirectionMode::FixedHelsgaunSmoothing,
+            "polyak-smoothed");
+        selected = polyak;
+        selected_name = "polyak-smoothed";
+    } else {
+        polyak = run_polyak(
+            zero_potentials,
+            PolyakDirectionMode::DynamicHelsgaunSmoothing,
+            "polyak-smoothed-dynamic");
+        selected = polyak;
+        selected_name = "polyak-smoothed-dynamic";
     }
 
     if (!isFinite(selected.bound)

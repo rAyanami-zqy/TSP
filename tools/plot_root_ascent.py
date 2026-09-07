@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Plot root Held--Karp lower-bound trajectories for three ascent strategies.
+"""Plot root Held--Karp lower-bound trajectories for ascent strategies.
 
 Each selected instance is handled independently.  Concorde supplies the exact
-reference cost, while ``tsp_bb`` is run three times in ``--root-bound-only``
-mode for Polyak, Helsgaun, and Hybrid.  The solver's own ascent loops emit the
-per-evaluation data, so this script contains no duplicate optimization logic.
+reference cost, while ``tsp_bb`` is run in ``--root-bound-only`` mode for
+Polyak, Helsgaun, both two-phase orders, and two Polyak direction-smoothing
+variants.  The solver's own ascent loops emit the per-evaluation data, so this
+script contains no duplicate optimization logic.
 
 The configured iteration count is a per-phase cap, matching the solver's
-existing semantics: Hybrid first runs a capped Polyak phase and then a capped
-Helsgaun phase.  Existing convergence tests may stop either phase early.
+existing semantics: each phase in either two-stage strategy receives the same
+cap.  Existing convergence tests may stop a phase early.
 
 Examples:
 
@@ -49,16 +50,29 @@ DEFAULT_CHART_WIDTH = 1600
 DEFAULT_ITERATIONS_PER_WIDTH = 400
 DEFAULT_TIMEOUT = 1800.0
 DEFAULT_CONCORDE_SEED = 123
-STRATEGIES = ("polyak", "helsgaun", "hybrid")
+STRATEGIES = (
+    "polyak",
+    "helsgaun",
+    "hybrid",
+    "hybrid-reverse",
+    "polyak-smoothed",
+    "polyak-smoothed-dynamic",
+)
 STRATEGY_LABELS = {
     "polyak": "Polyak",
     "helsgaun": "Helsgaun",
-    "hybrid": "Hybrid",
+    "hybrid": "Hybrid P→H",
+    "hybrid-reverse": "Hybrid H→P",
+    "polyak-smoothed": "Polyak + H direction 0.7/0.3",
+    "polyak-smoothed-dynamic": "Polyak + H direction dynamic",
 }
 STRATEGY_COLORS = {
     "polyak": "#2563eb",
     "helsgaun": "#dc2626",
     "hybrid": "#059669",
+    "hybrid-reverse": "#7c3aed",
+    "polyak-smoothed": "#d97706",
+    "polyak-smoothed-dynamic": "#0891b2",
 }
 
 
@@ -493,8 +507,8 @@ def write_svg_chart(
         (f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" '
          f'height="{height}" viewBox="0 0 {width} {height}">'),
         f'<title>{html.escape(instance_name)} root potential ascent</title>',
-        ('<desc>Polyak, Helsgaun, and Hybrid root lower-bound trajectories; '
-         'the dashed line is the Concorde optimum.</desc>'),
+        ('<desc>Configured root-ascent lower-bound trajectories; the dashed '
+         'line is the Concorde optimum.</desc>'),
         '<rect width="100%" height="100%" fill="#ffffff"/>',
         '<style>text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",'
         'Arial,sans-serif;fill:#172033}.tick{font-size:13px;fill:#596579}'
@@ -564,8 +578,8 @@ def write_svg_chart(
         )
         elements.append('</g>')
 
-    legend_width = 410
-    legend_height = 82
+    legend_width = 520
+    legend_height = len(STRATEGIES) * 25 + 7
     legend_box_x = left + plot_width - legend_width - 5
     legend_box_y = top + plot_height - legend_height - 5
     legend_x = legend_box_x + 10
@@ -666,9 +680,8 @@ def write_batch_outputs(
         switch_id_prefix = f"lines-{chart.parent.name}"
         switches = []
         for series, label in (
-            ("polyak", "Polyak"),
-            ("helsgaun", "Helsgaun"),
-            ("hybrid", "Hybrid"),
+            *((strategy, STRATEGY_LABELS[strategy])
+              for strategy in STRATEGIES),
             ("concorde", "Concorde"),
         ):
             switch_id = f"{switch_id_prefix}-{series}"
@@ -712,11 +725,11 @@ def write_batch_outputs(
 <style>
 body{margin:0;background:#f1f5f9;color:#172033;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
 header{padding:28px 4vw 18px;background:#0f172a;color:white}header h1{margin:0 0 8px;font-size:26px}header p{margin:0;color:#cbd5e1}
-main{display:grid;grid-template-columns:1fr;gap:20px;max-width:1680px;margin:0 auto;padding:24px 3vw 40px}.card{background:white;border:1px solid #dbe2ea;border-radius:12px;padding:16px;box-shadow:0 3px 12px #0f172a12}.card h2{margin:0;font-size:19px}.card p{margin:7px 0 12px;color:#64748b;font-size:14px}.chart-scroll{overflow-x:auto;border:1px solid #e2e8f0}.chart-scroll svg{display:block;width:auto;max-width:none;height:720px}.card table{width:100%;margin-top:12px;border-collapse:collapse;font-size:13px}.card th,.card td{padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right}.card th:first-child{text-align:left}.card thead th{color:#64748b}.line-switches{display:flex;flex-wrap:wrap;gap:10px 22px;margin:14px 0 8px;padding:10px 12px;border:1px solid #dbe2ea;border-radius:8px}.line-switches legend{padding:0 6px;color:#64748b;font-size:13px}.line-switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:14px}.line-switch input{width:17px;height:17px;margin:0}.line-swatch{display:inline-block;width:30px;height:3px;background:#2563eb}.line-swatch.helsgaun{background:#dc2626}.line-swatch.hybrid{background:#059669}.line-swatch.concorde{height:0;background:none;border-top:2px dashed #111827}.chart-link{display:inline-block;margin-top:4px;font-size:13px;color:#2563eb}
+main{display:grid;grid-template-columns:1fr;gap:20px;max-width:1680px;margin:0 auto;padding:24px 3vw 40px}.card{background:white;border:1px solid #dbe2ea;border-radius:12px;padding:16px;box-shadow:0 3px 12px #0f172a12}.card h2{margin:0;font-size:19px}.card p{margin:7px 0 12px;color:#64748b;font-size:14px}.chart-scroll{overflow-x:auto;border:1px solid #e2e8f0}.chart-scroll svg{display:block;width:auto;max-width:none;height:720px}.card table{width:100%;margin-top:12px;border-collapse:collapse;font-size:13px}.card th,.card td{padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right}.card th:first-child{text-align:left}.card thead th{color:#64748b}.line-switches{display:flex;flex-wrap:wrap;gap:10px 22px;margin:14px 0 8px;padding:10px 12px;border:1px solid #dbe2ea;border-radius:8px}.line-switches legend{padding:0 6px;color:#64748b;font-size:13px}.line-switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:14px}.line-switch input{width:17px;height:17px;margin:0}.line-swatch{display:inline-block;width:30px;height:3px;background:#2563eb}.line-swatch.helsgaun{background:#dc2626}.line-swatch.hybrid{background:#059669}.line-swatch.hybrid-reverse{background:#7c3aed}.line-swatch.polyak-smoothed{background:#d97706}.line-swatch.polyak-smoothed-dynamic{background:#0891b2}.line-swatch.concorde{height:0;background:none;border-top:2px dashed #111827}.chart-link{display:inline-block;margin-top:4px;font-size:13px;color:#2563eb}
 @media(max-width:620px){main{grid-template-columns:1fr;padding:12px}.card{padding:10px}}
 </style></head><body>
 <header><h1>Root potential ascent trends</h1>
-<p>Polyak, Helsgaun, and Hybrid · Concorde references · """
+<p>Polyak, Helsgaun, P→H, H→P, and Polyak direction blends · Concorde references · """
         + html.escape(phase_cap_label)
         + """ evaluations per phase</p></header>
 <main>
