@@ -1,0 +1,201 @@
+Start testing: Sep 07 14:52 CST
+----------------------------------------------------------
+1/5 Testing: tsp_solver_tests
+1/5 Test: tsp_solver_tests
+Command: "/Users/a/Ayanami/code/TSP/build-hkmst-branch-pot/tsp_solver_tests"
+Directory: /Users/a/Ayanami/code/TSP/build-hkmst-branch-pot
+"tsp_solver_tests" start time: Sep 07 14:52 CST
+Output:
+----------------------------------------------------------
+tsp_solver_tests passed
+<end of output>
+Test time =   5.93 sec
+----------------------------------------------------------
+Test Passed.
+"tsp_solver_tests" end time: Sep 07 14:52 CST
+"tsp_solver_tests" time elapsed: 00:00:05
+----------------------------------------------------------
+
+2/5 Testing: tsp_cli_exact
+2/5 Test: tsp_cli_exact
+Command: "/Users/a/Ayanami/code/TSP/build-hkmst-branch-pot/tsp_bb" "/Users/a/Ayanami/code/TSP/examples/five-city.txt"
+Directory: /Users/a/Ayanami/code/TSP/build-hkmst-branch-pot
+"tsp_cli_exact" start time: Sep 07 14:52 CST
+Output:
+----------------------------------------------------------
+Solving instance from file: /Users/a/Ayanami/code/TSP/examples/five-city.txt
+Problem: matrix
+Dimension: 5
+Method: exact
+Root lower bound: 25.999999999998604
+Initial upper bound: 26
+Root potential iterations: 17
+Instance wall seconds: 0.00062087500000000001
+Nodes created: 1
+Nodes expanded: 0
+Pruned by bound: 1
+Pruned infeasible: 0
+Search-node potential update candidates: 0
+Search-node potential updates triggered: 0
+Potential updates skipped strategy none: 0
+Potential updates skipped update depth zero: 0
+Potential updates skipped budget exhausted: 0
+Potential updates skipped numerically unsafe: 0
+Potential updates skipped invalid state: 0
+Potential updates skipped zero violation: 0
+Potential updates skipped zero iteration limit: 0
+Potential updates skipped depth interval: 0
+Potential updates skipped gap below minimum: 0
+Potential updates skipped gap above maximum: 0
+Potential updates improved: 0
+Potential updates pruned: 0
+Potential updates rebuilt: 0
+Potential updates stopped prunable: 0
+Potential updates large-gap tier: 0
+Potential update probes started: 0
+Potential update probes continued: 0
+Potential update probes rejected: 0
+Search-node potential iterations: 0
+Potential update seconds: 0
+Potential update rebuild seconds: 0
+Potential update total gain: 0
+Potential update max gain: 0
+Optimal cost: 26
+Tour: 0 -> 1 -> 3 -> 2 -> 4 -> 0
+<end of output>
+Test time =   0.25 sec
+----------------------------------------------------------
+Test Pass Reason:
+Required regular expression found. Regex=[Method: exact]
+"tsp_cli_exact" end time: Sep 07 14:52 CST
+"tsp_cli_exact" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/5 Testing: tsp_cli_exact_limit_rejected
+3/5 Test: tsp_cli_exact_limit_rejected
+Command: "/Users/a/Ayanami/code/TSP/build-hkmst-branch-pot/tsp_bb" "--exact-max-n" "4" "/Users/a/Ayanami/code/TSP/examples/five-city.txt"
+Directory: /Users/a/Ayanami/code/TSP/build-hkmst-branch-pot
+"tsp_cli_exact_limit_rejected" start time: Sep 07 14:52 CST
+Output:
+----------------------------------------------------------
+Solving instance from file: /Users/a/Ayanami/code/TSP/examples/five-city.txt
+Error: instance dimension exceeds dense exact limit
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"tsp_cli_exact_limit_rejected" end time: Sep 07 14:52 CST
+"tsp_cli_exact_limit_rejected" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/5 Testing: tsp_cli_unlimited_potential_update_budget
+4/5 Test: tsp_cli_unlimited_potential_update_budget
+Command: "/Users/a/Ayanami/code/TSP/build-hkmst-branch-pot/tsp_bb" "--hk-potential-update" "subtree-depth" "--hk-update-budget" "0" "/Users/a/Ayanami/code/TSP/examples/five-city.txt"
+Directory: /Users/a/Ayanami/code/TSP/build-hkmst-branch-pot
+"tsp_cli_unlimited_potential_update_budget" start time: Sep 07 14:52 CST
+Output:
+----------------------------------------------------------
+Solving instance from file: /Users/a/Ayanami/code/TSP/examples/five-city.txt
+Problem: matrix
+Dimension: 5
+Method: exact
+Root lower bound: 25.999999999998604
+Initial upper bound: 26
+Root potential iterations: 17
+Instance wall seconds: 0.00015487500000000001
+Nodes created: 1
+Nodes expanded: 0
+Pruned by bound: 1
+Pruned infeasible: 0
+Search-node potential update candidates: 0
+Search-node potential updates triggered: 0
+Potential updates skipped strategy none: 0
+Potential updates skipped update depth zero: 0
+Potential updates skipped budget exhausted: 0
+Potential updates skipped numerically unsafe: 0
+Potential updates skipped invalid state: 0
+Potential updates skipped zero violation: 0
+Potential updates skipped zero iteration limit: 0
+Potential updates skipped depth interval: 0
+Potential updates skipped gap below minimum: 0
+Potential updates skipped gap above maximum: 0
+Potential updates improved: 0
+Potential updates pruned: 0
+Potential updates rebuilt: 0
+Potential updates stopped prunable: 0
+Potential updates large-gap tier: 0
+Potential update probes started: 0
+Potential update probes continued: 0
+Potential update probes rejected: 0
+Search-node potential iterations: 0
+Potential update seconds: 0
+Potential update rebuild seconds: 0
+Potential update total gain: 0
+Potential update max gain: 0
+Optimal cost: 26
+Tour: 0 -> 1 -> 3 -> 2 -> 4 -> 0
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Pass Reason:
+Required regular expression found. Regex=[Method: exact]
+"tsp_cli_unlimited_potential_update_budget" end time: Sep 07 14:52 CST
+"tsp_cli_unlimited_potential_update_budget" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/5 Testing: tsp_cli_tsplib
+5/5 Test: tsp_cli_tsplib
+Command: "/Users/a/Ayanami/code/TSP/build-hkmst-branch-pot/tsp_bb" "/Users/a/Ayanami/code/TSP/examples/tsplib/five-node-euc.tsp"
+Directory: /Users/a/Ayanami/code/TSP/build-hkmst-branch-pot
+"tsp_cli_tsplib" start time: Sep 07 14:52 CST
+Output:
+----------------------------------------------------------
+Solving instance from file: /Users/a/Ayanami/code/TSP/examples/tsplib/five-node-euc.tsp
+Problem: five-node-euc
+Dimension: 5
+Method: exact
+Root lower bound: 7.9999999999995115
+Initial upper bound: 8
+Root potential iterations: 19
+Instance wall seconds: 0.00029712500000000003
+Nodes created: 1
+Nodes expanded: 0
+Pruned by bound: 1
+Pruned infeasible: 0
+Search-node potential update candidates: 0
+Search-node potential updates triggered: 0
+Potential updates skipped strategy none: 0
+Potential updates skipped update depth zero: 0
+Potential updates skipped budget exhausted: 0
+Potential updates skipped numerically unsafe: 0
+Potential updates skipped invalid state: 0
+Potential updates skipped zero violation: 0
+Potential updates skipped zero iteration limit: 0
+Potential updates skipped depth interval: 0
+Potential updates skipped gap below minimum: 0
+Potential updates skipped gap above maximum: 0
+Potential updates improved: 0
+Potential updates pruned: 0
+Potential updates rebuilt: 0
+Potential updates stopped prunable: 0
+Potential updates large-gap tier: 0
+Potential update probes started: 0
+Potential update probes continued: 0
+Potential update probes rejected: 0
+Search-node potential iterations: 0
+Potential update seconds: 0
+Potential update rebuild seconds: 0
+Potential update total gain: 0
+Potential update max gain: 0
+Optimal cost: 8
+Tour: 0 -> 4 -> 1 -> 2 -> 3 -> 0
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Pass Reason:
+Required regular expression found. Regex=[Optimal cost: 8]
+"tsp_cli_tsplib" end time: Sep 07 14:52 CST
+"tsp_cli_tsplib" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Sep 07 14:52 CST

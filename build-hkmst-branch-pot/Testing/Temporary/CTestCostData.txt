@@ -1,0 +1,6 @@
+tsp_solver_tests 13 0.455856
+tsp_cli_exact 15 0.0166444
+tsp_cli_exact_limit_rejected 15 0.000268539
+tsp_cli_tsplib 15 0.000219469
+tsp_cli_unlimited_potential_update_budget 1 0.00304008
+---
