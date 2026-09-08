@@ -1593,25 +1593,61 @@ void testSearchNodePotentialUpdates()
         }
     }
 
-    // 节点 Helsgaun 使用与 Polyak 相同的触发与 epoch 路径，只替换一次
-    // updateNodePotentialBound 内部的步长调度。这里要求它实际进入更新循环，
-    // 并保持精确最优值不变；是否改善/剪枝属于后续 A/B 的性能指标。
-    {
+    // 三个实验节点策略与 Polyak 使用相同的触发与 epoch 路径，只替换一次
+    // updateNodePotentialBound 内部的调度或方向。这里要求它们实际进入更新
+    // 循环并保持精确最优值不变；是否改善/剪枝属于后续 A/B 的性能指标。
+    for (const tsp::NodeAscentStrategy node_ascent : {
+             tsp::NodeAscentStrategy::Helsgaun,
+             tsp::NodeAscentStrategy::PolyakSmoothed,
+             tsp::NodeAscentStrategy::PolyakSmoothedDynamic}) {
         tsp::BranchBoundSolver solver(matrix);
-        solver.setNodeAscentStrategy(tsp::NodeAscentStrategy::Helsgaun);
+        solver.setNodeAscentStrategy(node_ascent);
         solver.setPotentialUpdateOptions(
             tsp::PotentialUpdateStrategy::SubtreeAdaptive,
             1, 16, 1.0, 100);
         const tsp::SolveResult result = solver.solve();
         expectCost(result.cost, 699.0,
-                   "node Helsgaun update changed the exact optimum");
+                   "experimental node ascent changed the exact optimum");
         expectPotentialUpdateDecisionAccounting(
-            result.stats, "node Helsgaun update");
+            result.stats, "experimental node ascent update");
         if (result.stats.search_node_potential_updates_triggered == 0
             || result.stats.search_node_potential_iterations == 0) {
             throw std::runtime_error(
-                "node Helsgaun regression did not exercise its update loop");
+                "experimental node ascent did not exercise its update loop");
         }
+    }
+
+    {
+        tsp::BranchBoundSolver solver(matrix);
+        solver.setNodeAscentStrategy(
+            tsp::NodeAscentStrategy::PolyakSmoothedDynamic);
+        solver.setNodeAscentDirectionSmoothing(0.65, 0.15, 0.4, 0.85);
+        solver.setPotentialUpdateOptions(
+            tsp::PotentialUpdateStrategy::SubtreeAdaptive,
+            1, 16, 1.0, 100);
+        const tsp::SolveResult result = solver.solve();
+        expectCost(result.cost, 699.0,
+                   "custom node smoothing changed the exact optimum");
+    }
+
+    auto rejects_node_direction_weights = [&](double fixed_weight,
+                                               double cosine_scale,
+                                               double minimum_weight,
+                                               double maximum_weight) {
+        tsp::BranchBoundSolver solver(matrix);
+        try {
+            solver.setNodeAscentDirectionSmoothing(
+                fixed_weight, cosine_scale, minimum_weight, maximum_weight);
+        } catch (const std::invalid_argument&) {
+            return true;
+        }
+        return false;
+    };
+    if (!rejects_node_direction_weights(0.4, 0.2, 0.5, 0.9)
+        || !rejects_node_direction_weights(0.8, 0.2, 0.5, 0.7)
+        || !rejects_node_direction_weights(0.7, -0.1, 0.5, 0.9)) {
+        throw std::runtime_error(
+            "invalid node direction smoothing weights were accepted");
     }
 
     // 同时对一个独立穷举可验证的受约束搜索实例启用零根势，确保节点
@@ -1627,7 +1663,9 @@ void testSearchNodePotentialUpdates()
     const double small_optimum = bruteForceOptimalCost(small);
     for (const tsp::NodeAscentStrategy node_ascent : {
              tsp::NodeAscentStrategy::Polyak,
-             tsp::NodeAscentStrategy::Helsgaun}) {
+             tsp::NodeAscentStrategy::Helsgaun,
+             tsp::NodeAscentStrategy::PolyakSmoothed,
+             tsp::NodeAscentStrategy::PolyakSmoothedDynamic}) {
         for (const tsp::PotentialUpdateStrategy strategy : {
                  tsp::PotentialUpdateStrategy::SubtreeDepth,
                  tsp::PotentialUpdateStrategy::SubtreeAdaptive}) {

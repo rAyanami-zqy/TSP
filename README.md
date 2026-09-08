@@ -358,10 +358,11 @@ python3 tools/run_phkmst_ablation.py \
 
 根节点仍先执行 `--hk-ascent`。后续节点可从当前势 warm start，在当前
 forced/forbidden/active-candidate 约束下运行有限轮势上升。节点内部默认使用
-Polyak，也可用 `--hk-node-ascent helsgaun` 切换到论文式 period 和平滑次梯度；
-触发机制及 epoch 生命周期保持不变。启用搜索节点势更新时，永远重建所有
-依赖势的排序和增量状态，使新势在整个锚点子树中持续生效，回溯到
-兄弟节点时恢复。
+Polyak；`--hk-node-ascent` 还支持 `helsgaun`、`polyak-smoothed` 和
+`polyak-smoothed-dynamic`。后两者保留节点 Polyak 的步长、probe、停滞折半和
+停止条件，只分别换成固定与余弦动态平滑方向。触发机制及 epoch 生命周期保持
+不变。启用搜索节点势更新时，永远重建所有依赖势的排序和增量状态，使新势在
+整个锚点子树中持续生效，回溯到兄弟节点时恢复。
 
 ```bash
 # 推荐配置：距上次更新至少 2 层，且节点 gap 不超过 2%
@@ -372,6 +373,23 @@ Polyak，也可用 `--hk-node-ascent helsgaun` 切换到论文式 period 和平�
 
 # 同一触发配置下对照节点 Helsgaun 调度
 ./build/tsp_bb --hk-node-ascent helsgaun \
+  --hk-potential-update subtree-adaptive \
+  --hk-update-depth 2 --hk-update-gap-ratio 0.02 \
+  --hk-update-iterations 16 --hk-update-budget 5000 input.tsp
+
+# 固定方向融合：0.65 当前次梯度 + 0.35 上一次次梯度
+./build/tsp_bb --hk-node-ascent polyak-smoothed \
+  --hk-node-smoothing-current-weight 0.65 \
+  --hk-potential-update subtree-adaptive \
+  --hk-update-depth 2 --hk-update-gap-ratio 0.02 \
+  --hk-update-iterations 16 --hk-update-budget 5000 input.tsp
+
+# 动态方向融合：clamp(0.65 + 0.15*cosine, 0.4, 0.85)
+./build/tsp_bb --hk-node-ascent polyak-smoothed-dynamic \
+  --hk-node-smoothing-current-weight 0.65 \
+  --hk-node-dynamic-cosine-scale 0.15 \
+  --hk-node-dynamic-min-current-weight 0.4 \
+  --hk-node-dynamic-max-current-weight 0.85 \
   --hk-potential-update subtree-adaptive \
   --hk-update-depth 2 --hk-update-gap-ratio 0.02 \
   --hk-update-iterations 16 --hk-update-budget 5000 input.tsp
@@ -404,6 +422,9 @@ Polyak，也可用 `--hk-node-ascent helsgaun` 切换到论文式 period 和平�
 - `none`：默认值，不在搜索节点更新势；
 - `subtree-depth`：距当前势 epoch 至少指定层数时更新并重建子树状态；
 - `subtree-adaptive`：在 `subtree-depth` 条件上再加相对 gap 门槛；
+- 节点平滑参数与根平滑参数相互独立。默认基准权重为 `0.7`、动态余弦缩放
+  为 `0.2`、动态范围为 `0.5--0.9`；三个权重必须满足
+  `0 <= 最小值 <= 基准值 <= 最大值 <= 1`，余弦缩放必须非负；
 - `--hk-update-min-gap-ratio` 与 `--hk-update-gap-ratio` 分别是
   `subtree-adaptive` 触发区间的下限和上限，默认下限为 0。`subtree-*` 中
   `--hk-update-depth` 是两次成功安装 epoch 的最小层距；达到层距后，后续

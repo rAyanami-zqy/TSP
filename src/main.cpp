@@ -36,6 +36,11 @@ struct CliOptions {
     std::string root_ascent_trace_path;
     // 搜索节点一次势更新内部的步长调度；触发和 epoch 语义由下方策略控制。
     tsp::NodeAscentStrategy node_ascent = tsp::NodeAscentStrategy::Polyak;
+    // 节点改良 Polyak 的固定/正交基准权重、余弦缩放和动态上下限。
+    double node_ascent_smoothing_current_weight = 0.7;
+    double node_ascent_dynamic_cosine_scale = 0.2;
+    double node_ascent_dynamic_min_current_weight = 0.5;
+    double node_ascent_dynamic_max_current_weight = 0.9;
     // 默认沿用调整权重排序；实验策略只切换 BP 内部的分支边优先级，
     // 不改变 1-tree 下界或 Kruskal 候选顺序。
     tsp::BranchEdgeOrder branch_edge_order
@@ -186,6 +191,11 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
         options.root_ascent_dynamic_min_current_weight,
         options.root_ascent_dynamic_max_current_weight);
     solver.setNodeAscentStrategy(options.node_ascent);
+    solver.setNodeAscentDirectionSmoothing(
+        options.node_ascent_smoothing_current_weight,
+        options.node_ascent_dynamic_cosine_scale,
+        options.node_ascent_dynamic_min_current_weight,
+        options.node_ascent_dynamic_max_current_weight);
     // 分支顺序与势更新策略是两个正交开关，便于分别评估搜索树形状和下界质量。
     solver.setBranchEdgeOrder(options.branch_edge_order);
     solver.setPotentialUpdateOptions(
@@ -505,7 +515,12 @@ void printUsage(const char* program)
               << "  --root-ascent-dynamic-min-current-weight <x in [0,1]>\n"
               << "  --root-ascent-dynamic-max-current-weight <x in [0,1]>\n"
               << "  --root-ascent-trace <csv-path> (root-bound-only, single instance)\n"
-              << "  --hk-node-ascent <polyak|helsgaun>\n"
+              << "  --hk-node-ascent <polyak|helsgaun|polyak-smoothed|"
+                 "polyak-smoothed-dynamic>\n"
+              << "  --hk-node-smoothing-current-weight <x in [0,1]>\n"
+              << "  --hk-node-dynamic-cosine-scale <x >= 0>\n"
+              << "  --hk-node-dynamic-min-current-weight <x in [0,1]>\n"
+              << "  --hk-node-dynamic-max-current-weight <x in [0,1]>\n"
               << "  --branch-edge-order <weight|root-alpha-asc|root-alpha-desc|"
                  "root-alpha-global-asc|root-alpha-global-desc|"
                  "forbid-delta-asc|forbid-delta-desc|forbid-degree-desc|"
@@ -555,9 +570,16 @@ tsp::NodeAscentStrategy parseNodeAscentStrategy(const std::string& value)
 {
     if (value == "polyak") return tsp::NodeAscentStrategy::Polyak;
     if (value == "helsgaun") return tsp::NodeAscentStrategy::Helsgaun;
+    if (value == "polyak-smoothed") {
+        return tsp::NodeAscentStrategy::PolyakSmoothed;
+    }
+    if (value == "polyak-smoothed-dynamic") {
+        return tsp::NodeAscentStrategy::PolyakSmoothedDynamic;
+    }
     throw std::runtime_error(
         "invalid value for --hk-node-ascent: " + value
-        + " (expected polyak or helsgaun)");
+        + " (expected polyak, helsgaun, polyak-smoothed, "
+          "or polyak-smoothed-dynamic)");
 }
 
 tsp::PotentialUpdateStrategy parsePotentialUpdateStrategy(
@@ -733,6 +755,22 @@ CliOptions parseArgs(int argc, char** argv)
             options.root_ascent_trace_path = require_value(arg);
         } else if (arg == "--hk-node-ascent") {
             options.node_ascent = parseNodeAscentStrategy(require_value(arg));
+        } else if (arg == "--hk-node-smoothing-current-weight") {
+            options.node_ascent_smoothing_current_weight =
+                parseDoubleOption(require_value(arg), arg);
+        } else if (arg == "--hk-node-dynamic-cosine-scale") {
+            options.node_ascent_dynamic_cosine_scale =
+                parseDoubleOption(require_value(arg), arg);
+            if (options.node_ascent_dynamic_cosine_scale < 0.0) {
+                throw std::runtime_error(
+                    "--hk-node-dynamic-cosine-scale must be non-negative");
+            }
+        } else if (arg == "--hk-node-dynamic-min-current-weight") {
+            options.node_ascent_dynamic_min_current_weight =
+                parseDoubleOption(require_value(arg), arg);
+        } else if (arg == "--hk-node-dynamic-max-current-weight") {
+            options.node_ascent_dynamic_max_current_weight =
+                parseDoubleOption(require_value(arg), arg);
         } else if (arg == "--branch-edge-order") {
             options.branch_edge_order =
                 parseBranchEdgeOrder(require_value(arg));
@@ -824,6 +862,16 @@ CliOptions parseArgs(int argc, char** argv)
         || options.root_ascent_dynamic_max_current_weight > 1.0) {
         throw std::runtime_error(
             "root ascent direction weights must satisfy "
+            "0 <= dynamic minimum <= fixed <= dynamic maximum <= 1");
+    }
+    if (options.node_ascent_dynamic_min_current_weight < 0.0
+        || options.node_ascent_dynamic_min_current_weight
+            > options.node_ascent_smoothing_current_weight
+        || options.node_ascent_smoothing_current_weight
+            > options.node_ascent_dynamic_max_current_weight
+        || options.node_ascent_dynamic_max_current_weight > 1.0) {
+        throw std::runtime_error(
+            "node ascent direction weights must satisfy "
             "0 <= dynamic minimum <= fixed <= dynamic maximum <= 1");
     }
     if (!options.root_ascent_trace_path.empty() && !options.root_bound_only) {

@@ -131,6 +131,10 @@ enum class NodeAscentStrategy {
     Polyak,
     // 使用 LKH 报告中的 period、步长缩放和 0.7/0.3 平滑次梯度。
     Helsgaun,
+    // 保持节点 Polyak 步长与停止条件，使用固定比例融合当前和前一次次梯度。
+    PolyakSmoothed,
+    // 保持节点 Polyak 其余逻辑，按相邻次梯度余弦动态调整融合比例。
+    PolyakSmoothedDynamic,
 };
 
 // 搜索节点上的势更新触发策略。所有启用的策略都把新势安装成
@@ -296,6 +300,14 @@ public:
     void disableRootAscentTraceOutput();
     // 设置搜索节点一次势更新尝试所用的上升算法；不改变触发机制或 epoch 语义。
     void setNodeAscentStrategy(NodeAscentStrategy strategy);
+    // 配置两个节点 Polyak 平滑策略中当前次梯度的权重。fixed_current_weight
+    // 同时是动态策略的正交基准；动态策略计算 fixed+scale*cosine 后限制到
+    // min/max。权重须满足 0<=min<=fixed<=max<=1，scale 须为非负有限数。
+    void setNodeAscentDirectionSmoothing(
+        double fixed_current_weight,
+        double cosine_scale,
+        double dynamic_min_current_weight,
+        double dynamic_max_current_weight);
     // 设置 BP 在违规顶点内部选择分支边的比较顺序；不改变下界算法。
     void setBranchEdgeOrder(BranchEdgeOrder order);
     // 配置搜索节点势更新：depth 是深度/epoch 间隔，iterations 是小 gap
@@ -829,6 +841,11 @@ private:
     std::ostream* root_ascent_trace_output_ = nullptr;
     // 搜索节点一次有限轮势更新内部使用的步长调度；默认保持原 Polyak 行为。
     NodeAscentStrategy node_ascent_strategy_ = NodeAscentStrategy::Polyak;
+    // 节点 Polyak 方向平滑参数；与根方向平滑配置相互独立。
+    double node_ascent_smoothing_current_weight_ = 0.7;
+    double node_ascent_dynamic_cosine_scale_ = 0.2;
+    double node_ascent_dynamic_min_current_weight_ = 0.5;
+    double node_ascent_dynamic_max_current_weight_ = 0.9;
     // BP 在最高度违规顶点上比较未决树边的策略。
     BranchEdgeOrder branch_edge_order_ = BranchEdgeOrder::AdjustedWeight;
     // 大小为 n*n、按 edgeId 索引的根静态 alpha；树边为 0，缺失/未知为

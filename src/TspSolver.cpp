@@ -333,6 +333,33 @@ void BranchBoundSolver::setNodeAscentStrategy(NodeAscentStrategy strategy)
     node_ascent_strategy_ = strategy;
 }
 
+void BranchBoundSolver::setNodeAscentDirectionSmoothing(
+    double fixed_current_weight,
+    double cosine_scale,
+    double dynamic_min_current_weight,
+    double dynamic_max_current_weight)
+{
+    if (!std::isfinite(cosine_scale) || cosine_scale < 0.0) {
+        throw std::invalid_argument(
+            "node ascent dynamic cosine scale must be finite and non-negative");
+    }
+    if (!std::isfinite(fixed_current_weight)
+        || !std::isfinite(dynamic_min_current_weight)
+        || !std::isfinite(dynamic_max_current_weight)
+        || dynamic_min_current_weight < 0.0
+        || dynamic_min_current_weight > fixed_current_weight
+        || fixed_current_weight > dynamic_max_current_weight
+        || dynamic_max_current_weight > 1.0) {
+        throw std::invalid_argument(
+            "node ascent direction weights must satisfy "
+            "0 <= dynamic minimum <= fixed <= dynamic maximum <= 1");
+    }
+    node_ascent_smoothing_current_weight_ = fixed_current_weight;
+    node_ascent_dynamic_cosine_scale_ = cosine_scale;
+    node_ascent_dynamic_min_current_weight_ = dynamic_min_current_weight;
+    node_ascent_dynamic_max_current_weight_ = dynamic_max_current_weight;
+}
+
 void BranchBoundSolver::setBranchEdgeOrder(BranchEdgeOrder order)
 {
     // 此处只记录策略。root alpha 依赖最终根势和根 1-tree；root frequency
@@ -1593,7 +1620,21 @@ BranchBoundSolver::updateNodePotentialBound(
         return result;
     }
 
+    const bool smooth_polyak_direction =
+        node_ascent_strategy_ == NodeAscentStrategy::PolyakSmoothed
+        || node_ascent_strategy_
+            == NodeAscentStrategy::PolyakSmoothedDynamic;
+    std::vector<double> previous_polyak_subgradient;
+    std::vector<double> polyak_subgradient;
+    bool have_previous_polyak_subgradient = false;
+    if (smooth_polyak_direction) {
+        previous_polyak_subgradient.assign(
+            static_cast<std::size_t>(n_), 0.0);
+        polyak_subgradient.assign(static_cast<std::size_t>(n_), 0.0);
+    }
+
     // step_scale 控制 Polyak 步长，no_improvement 达到阈值后折半抑制振荡。
+    // 两种改良 Polyak 只替换更新方向，共用本循环的步长、probe 和停止条件。
     double step_scale = 2.0;
     std::size_t no_improvement = 0;
     for (std::size_t iteration = 0; iteration < max_iterations; ++iteration) {
@@ -1616,9 +1657,14 @@ BranchBoundSolver::updateNodePotentialBound(
         }
 
         double subgradient_norm = 0.0;
-        for (const int degree : evaluation.degree) {
-            const double deviation = static_cast<double>(degree - 2);
+        for (int vertex = 0; vertex < n_; ++vertex) {
+            const std::size_t index = static_cast<std::size_t>(vertex);
+            const double deviation = static_cast<double>(
+                evaluation.degree[index] - 2);
             subgradient_norm += deviation * deviation;
+            if (smooth_polyak_direction) {
+                polyak_subgradient[index] = deviation;
+            }
         }
         // 与 DFS 共用正式剪枝谓词。整数 TSP 中 ceil(bound-tolerance) >= UB
         // 已足以证明该节点不能改进 incumbent；继续迭代只会加固同一证明，
@@ -1639,13 +1685,56 @@ BranchBoundSolver::updateNodePotentialBound(
         const double step = step_scale * gap / subgradient_norm;
         if (!isFinite(step) || step <= 0.0) break;
         bool finite_update = true;
-        for (int vertex = 0; vertex < n_; ++vertex) {
-            const std::size_t index = static_cast<std::size_t>(vertex);
-            potentials[index] += step
-                * static_cast<double>(evaluation.degree[index] - 2);
-            finite_update = finite_update && isFinite(potentials[index]);
+        if (!smooth_polyak_direction) {
+            for (int vertex = 0; vertex < n_; ++vertex) {
+                const std::size_t index = static_cast<std::size_t>(vertex);
+                potentials[index] += step
+                    * static_cast<double>(evaluation.degree[index] - 2);
+                finite_update = finite_update && isFinite(potentials[index]);
+            }
+        } else {
+            double current_weight = node_ascent_smoothing_current_weight_;
+            if (node_ascent_strategy_
+                    == NodeAscentStrategy::PolyakSmoothedDynamic
+                && have_previous_polyak_subgradient) {
+                double dot_product = 0.0;
+                double previous_norm = 0.0;
+                for (std::size_t index = 0;
+                     index < polyak_subgradient.size(); ++index) {
+                    dot_product += polyak_subgradient[index]
+                        * previous_polyak_subgradient[index];
+                    previous_norm += previous_polyak_subgradient[index]
+                        * previous_polyak_subgradient[index];
+                }
+                if (previous_norm > 0.0) {
+                    const double cosine = std::clamp(
+                        dot_product
+                            / std::sqrt(subgradient_norm * previous_norm),
+                        -1.0, 1.0);
+                    current_weight = std::clamp(
+                        current_weight
+                            + node_ascent_dynamic_cosine_scale_ * cosine,
+                        node_ascent_dynamic_min_current_weight_,
+                        node_ascent_dynamic_max_current_weight_);
+                }
+            }
+            const double previous_weight = 1.0 - current_weight;
+            for (std::size_t index = 0;
+                 index < polyak_subgradient.size(); ++index) {
+                const double direction = have_previous_polyak_subgradient
+                    ? current_weight * polyak_subgradient[index]
+                        + previous_weight
+                            * previous_polyak_subgradient[index]
+                    : polyak_subgradient[index];
+                potentials[index] += step * direction;
+                finite_update = finite_update && isFinite(potentials[index]);
+            }
         }
         if (!finite_update) break;
+        if (smooth_polyak_direction) {
+            previous_polyak_subgradient.swap(polyak_subgradient);
+            have_previous_polyak_subgradient = true;
+        }
 
         if (no_improvement >= 4) {
             step_scale *= 0.5;
