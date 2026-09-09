@@ -911,6 +911,10 @@ private:
     // 极端动态范围下禁用根上升和节点势更新，避免修改权重与势修正发生
     // 灾难性消减。
     bool potential_ascent_numerically_safe_ = true;
+    // 原始有限非负边的最大权重。节点势每轮用
+    // max(dist)+2*max(|pi|) 构造调整权重绝对值的保守上界，避免为仅计算
+    // 浮点舍入保护再次全图扫描 O(n^2) 条边。
+    double largest_finite_distance_ = 0.0;
     // 与顶点 0 相连的所有有限边，按权重升序排列。
     // Edge::w 使用当前势；computeOneTree 从中取前两条合法边作为 root edges。
     std::vector<Edge> root_candidates_sorted_;

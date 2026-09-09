@@ -264,6 +264,7 @@ BranchBoundSolver::BranchBoundSolver(std::vector<std::vector<double>> distance)
     potential_ascent_numerically_safe_ =
         !isFinite(smallest_positive)
         || largest_weight / smallest_positive <= 1e12;
+    largest_finite_distance_ = largest_weight;
 }
 
 void BranchBoundSolver::setDebugOutput(std::ostream& output, std::size_t progress_interval)
@@ -1290,10 +1291,6 @@ BranchBoundSolver::updateNodePotentialBound(
     // component_in_tree[c] 标记紧凑分量 c 是否已经被 Prim 选中。
     std::vector<unsigned char> component_in_tree(
         static_cast<std::size_t>(component_count), 0);
-    // 根边数量只有 O(n)，每轮重新收集后强制边优先、其余按调整权重排序。
-    std::vector<Edge> root_edges;
-    root_edges.reserve(static_cast<std::size_t>(n_ - 1));
-
     auto edge_key_less = [](double left_weight, int left_u, int left_v,
                             double right_weight, int right_u, int right_v) {
         if (left_weight != right_weight) return left_weight < right_weight;
@@ -1314,6 +1311,8 @@ BranchBoundSolver::updateNodePotentialBound(
         // 预先收缩的 forced 内部边，最终必须恰好达到 n-2。
         double modified_cost = 0.0;
         int mst_edge_count = forced_internal_count;
+        std::array<Edge, 2> forced_root_edges{};
+        std::size_t forced_root_edge_count = 0;
 
         // 强制边必须先进入受约束 1-tree。边中保存的是根势权重，因此这里
         // 用临时势重新计算权重，不能直接使用 Edge::w。
@@ -1323,6 +1322,8 @@ BranchBoundSolver::updateNodePotentialBound(
                 + potentials[static_cast<std::size_t>(edge.v)];
             if (!isFinite(weight)) return evaluation;
             if (edge.u == 0 || edge.v == 0) {
+                forced_root_edges[forced_root_edge_count++] =
+                    Edge{edge.u, edge.v, weight};
                 continue;
             }
             modified_cost += weight;
@@ -1416,38 +1417,54 @@ BranchBoundSolver::updateNodePotentialBound(
         }
         if (mst_edge_count != n_ - 2) return evaluation;
 
-        root_edges.clear();
-        for (const Edge& edge : node.forced_edges) {
-            if (edge.u != 0 && edge.v != 0) continue;
-            root_edges.push_back(Edge{
-                edge.u, edge.v,
-                dist_[edge.u][edge.v]
-                    + potentials[static_cast<std::size_t>(edge.u)]
-                    + potentials[static_cast<std::size_t>(edge.v)]});
-        }
+        // forced 根边优先占用槽位；其余只需线性维护两条最轻可用边，
+        // 无需每轮收集并排序 O(n) 条根候选。
+        const std::size_t available_root_slots =
+            forced_root_edges.size() - forced_root_edge_count;
+        std::array<Edge, 2> available_root_edges{};
+        std::size_t available_root_edge_count = 0;
         for (int vertex = 1; vertex < n_; ++vertex) {
             const std::size_t id = edgeId(0, vertex);
             if (!isFinite(dist_[0][vertex]) || node.forced[id]
                 || node.forbidden[id] || !isCandidateActive(node, id)) {
                 continue;
             }
-            root_edges.push_back(Edge{
+            const Edge edge{
                 0, vertex,
                 dist_[0][vertex] + potentials[0]
-                    + potentials[static_cast<std::size_t>(vertex)]});
+                    + potentials[static_cast<std::size_t>(vertex)]};
+            std::size_t insert_at = available_root_edge_count;
+            while (insert_at > 0
+                   && edge_key_less(
+                       edge.w, edge.u, edge.v,
+                       available_root_edges[insert_at - 1].w,
+                       available_root_edges[insert_at - 1].u,
+                       available_root_edges[insert_at - 1].v)) {
+                --insert_at;
+            }
+            if (insert_at >= available_root_slots) continue;
+            const std::size_t shifted_end = std::min(
+                available_root_edge_count, available_root_slots - 1);
+            for (std::size_t index = shifted_end; index > insert_at; --index) {
+                available_root_edges[index] = available_root_edges[index - 1];
+            }
+            available_root_edges[insert_at] = edge;
+            available_root_edge_count = std::min(
+                available_root_edge_count + 1, available_root_slots);
         }
-        if (root_edges.size() < 2) return evaluation;
-        std::sort(root_edges.begin(), root_edges.end(),
-                  [&](const Edge& a, const Edge& b) {
-                      const bool a_forced = node.forced[edgeId(a.u, a.v)] != 0;
-                      const bool b_forced = node.forced[edgeId(b.u, b.v)] != 0;
-                      if (a_forced != b_forced) return a_forced;
-                      if (a.w != b.w) return a.w < b.w;
-                      return a.v < b.v;
-                  });
-        // forced 根边已经排在最前；其余位置由修改权重最小的可用根边补齐。
-        for (std::size_t index = 0; index < 2; ++index) {
-            const Edge& edge = root_edges[index];
+        if (available_root_edge_count != available_root_slots) {
+            return evaluation;
+        }
+        for (std::size_t index = 0;
+             index < forced_root_edge_count; ++index) {
+            const Edge& edge = forced_root_edges[index];
+            modified_cost += edge.w;
+            ++evaluation.degree[static_cast<std::size_t>(edge.u)];
+            ++evaluation.degree[static_cast<std::size_t>(edge.v)];
+        }
+        for (std::size_t index = 0;
+             index < available_root_edge_count; ++index) {
+            const Edge& edge = available_root_edges[index];
             modified_cost += edge.w;
             ++evaluation.degree[static_cast<std::size_t>(edge.u)];
             ++evaluation.degree[static_cast<std::size_t>(edge.v)];
@@ -1465,16 +1482,17 @@ BranchBoundSolver::updateNodePotentialBound(
             potentials.begin(), potentials.end(),
             [](double value) { return value != 0.0; });
         if (has_nonzero_potential) {
-            for (int u = 0; u < n_; ++u) {
-                for (int v = u + 1; v < n_; ++v) {
-                    if (!isFinite(dist_[u][v])) continue;
-                    const double weight = dist_[u][v]
-                        + potentials[static_cast<std::size_t>(u)]
-                        + potentials[static_cast<std::size_t>(v)];
-                    largest_adjusted_weight = std::max(
-                        largest_adjusted_weight, std::fabs(weight));
-                }
+            double largest_potential_magnitude = 0.0;
+            for (const double potential : potentials) {
+                largest_potential_magnitude = std::max(
+                    largest_potential_magnitude, std::fabs(potential));
             }
+            // 三角不等式保证 |d(u,v)+pi[u]+pi[v]| 不超过该值。上取一个
+            // 可表示 double，避免最后一次加法向下舍入使保护量偏小。
+            largest_adjusted_weight = std::nextafter(
+                largest_finite_distance_
+                    + 2.0 * largest_potential_magnitude,
+                std::numeric_limits<double>::infinity());
         }
         // guard 只向下放松证书，用于抵消调整权重求和与势修正相减的舍入误差。
         const double guard = scaledRoundoffTolerance(
@@ -1759,15 +1777,14 @@ BranchBoundSolver::OneTree BranchBoundSolver::rebuildPotentialEpoch(
         vertex_potential_.begin(), vertex_potential_.end(),
         [](double value) { return value != 0.0; });
     if (has_nonzero_potential) {
-        double largest_adjusted_weight = 0.0;
-        for (int u = 0; u < n_; ++u) {
-            for (int v = u + 1; v < n_; ++v) {
-                if (!isFinite(dist_[u][v])) continue;
-                largest_adjusted_weight = std::max(
-                    largest_adjusted_weight,
-                    std::fabs(adjustedEdgeWeight(u, v)));
-            }
+        double largest_potential_magnitude = 0.0;
+        for (const double potential : vertex_potential_) {
+            largest_potential_magnitude = std::max(
+                largest_potential_magnitude, std::fabs(potential));
         }
+        const double largest_adjusted_weight = std::nextafter(
+            largest_finite_distance_ + 2.0 * largest_potential_magnitude,
+            std::numeric_limits<double>::infinity());
         potential_roundoff_guard_ = scaledRoundoffTolerance(
             static_cast<double>(n_) * largest_adjusted_weight,
             potential_correction_, static_cast<std::size_t>(n_));
