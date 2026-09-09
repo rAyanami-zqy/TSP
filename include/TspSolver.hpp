@@ -25,6 +25,20 @@ struct SolveStats {
     double root_lower_bound = 0.0;
     // 进入精确搜索前由 NN、2-opt 和 LK 得到的初始可行 tour 成本。
     double initial_upper_bound = 0.0;
+    // 根 reduced-cost fixing 实际执行次数。incumbent 改善导致根重启时会累加。
+    std::size_t root_fixing_calls = 0;
+    // 根 fixing 中测试能否固定为 x_e=0 的 active 非树边总数。
+    std::size_t root_fixing_tested = 0;
+    // 根 fixing 证明可永久固定为 x_e=0 的边总数。
+    std::size_t root_fixing_fixed_zero = 0;
+    // 根 fixing 做单边 forbid sensitivity 的 1-tree 边总数。
+    std::size_t root_fixing_tree_tested = 0;
+    // 根 fixing 证明可永久固定为 x_e=1 的树边总数。
+    std::size_t root_fixing_fixed_one = 0;
+    // 最后一次根 fixing 完成后仍 active 的可选边数。
+    std::size_t root_fixing_active_after = 0;
+    // 根 reduced-cost fixing 的累计墙钟秒数。
+    double root_fixing_seconds = 0.0;
     // 所有根势优化实际执行的 1-tree/次梯度评估总轮数；Hybrid
     // 会累加 Polyak 和 Helsgaun 阶段，根搜索重启时也继续累加。
     std::size_t root_potential_iterations = 0;
@@ -798,10 +812,15 @@ private:
     bool linKernighanImprove(std::vector<int>& tour, double& cost) const;
     // 对 tour 原地执行一次确定性随机 double-bridge 非顺序 4-opt 扰动；
     // 小于所需规模时不修改。
-    void doubleBridgeKick(std::vector<int>& tour) const;
+    void doubleBridgeKick(std::vector<int>& tour, std::uint64_t kick_seed) const;
     // Chained LK 总入口：交替执行局部 LK 和 double-bridge kick，最终将
     // tour/cost 更新为所有尝试中最优的一组。
-    void linKernighan(std::vector<int>& tour, double& cost) const;
+    void linKernighan(
+        std::vector<int>& tour, double& cost,
+        bool diversified_kicks = false) const;
+    // 记录启发式候选回路中的边。精确 replacement 查询只把这些边当作
+    // 快速上界；完整候选回退仍负责证明最轻 replacement，因而不改变可行域。
+    void rememberCandidateHintTour(const std::vector<int>& tour) const;
 
     // ── BP (Branch Partitioning) 搜索 ──
     // 在 current_tree 上执行 BP 划分：依次选取违规顶点的未决树边并测试
@@ -959,6 +978,11 @@ private:
     mutable std::vector<std::vector<int>> candidate_set_;
     // candidate_set_ 是否已经针对当前 dist_ 完成惰性构建。
     mutable bool candidate_set_built_ = false;
+    // Concorde 风格稀疏启发式边的对称邻接表。它只加速 MST replacement
+    // 割集证明，任何未命中都会回退完整 active 候选集。
+    mutable std::vector<std::vector<int>> candidate_hint_neighbors_;
+    // 按 edgeId 去重 candidate_hint_neighbors_ 中的无向边。
+    mutable std::vector<unsigned char> candidate_hint_edges_;
 
     // 当前已知最优可行 tour 的原始成本，即分支定界上界 UB。
     double best_cost_ = std::numeric_limits<double>::infinity();

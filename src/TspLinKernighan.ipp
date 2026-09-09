@@ -73,7 +73,60 @@ void BranchBoundSolver::buildCandidateSets() const
             candidate_set_[static_cast<std::size_t>(i)].push_back(p.second);
         }
     }
+
+    // k-nearest 的无向并集还会作为精确 replacement 查询的快速提示，但不会作为
+    // 硬过滤条件；findMstReplacement 始终保留完整候选证明路径。
+    if (candidate_hint_neighbors_.size() != static_cast<std::size_t>(n_)) {
+        candidate_hint_neighbors_.assign(static_cast<std::size_t>(n_), {});
+    }
+    const std::size_t edge_state_size =
+        static_cast<std::size_t>(n_) * static_cast<std::size_t>(n_);
+    if (candidate_hint_edges_.size() != edge_state_size) {
+        candidate_hint_edges_.assign(edge_state_size, 0);
+    }
+    for (int i = 0; i < n_; ++i) {
+        for (const int j : candidate_set_[static_cast<std::size_t>(i)]) {
+            if (i == j || !isFinite(dist_[i][j])) continue;
+            const std::size_t id = edgeId(i, j);
+            if (candidate_hint_edges_[id]) continue;
+            candidate_hint_edges_[id] = 1;
+            candidate_hint_neighbors_[static_cast<std::size_t>(i)].push_back(j);
+            candidate_hint_neighbors_[static_cast<std::size_t>(j)].push_back(i);
+        }
+    }
     candidate_set_built_ = true;
+}
+
+void BranchBoundSolver::rememberCandidateHintTour(
+    const std::vector<int>& tour) const
+{
+    if (tour.size() != static_cast<std::size_t>(n_)) return;
+    for (int index = 0; index < n_; ++index) {
+        const int u = tour[static_cast<std::size_t>(index)];
+        const int v = tour[static_cast<std::size_t>((index + 1) % n_)];
+        if (u < 0 || u >= n_ || v < 0 || v >= n_ || u == v
+            || !isFinite(dist_[u][v])) {
+            return;
+        }
+    }
+    if (candidate_hint_neighbors_.size() != static_cast<std::size_t>(n_)) {
+        candidate_hint_neighbors_.assign(static_cast<std::size_t>(n_), {});
+    }
+    const std::size_t edge_state_size =
+        static_cast<std::size_t>(n_) * static_cast<std::size_t>(n_);
+    if (candidate_hint_edges_.size() != edge_state_size) {
+        candidate_hint_edges_.assign(edge_state_size, 0);
+    }
+
+    for (int index = 0; index < n_; ++index) {
+        const int u = tour[static_cast<std::size_t>(index)];
+        const int v = tour[static_cast<std::size_t>((index + 1) % n_)];
+        const std::size_t id = edgeId(u, v);
+        if (candidate_hint_edges_[id]) continue;
+        candidate_hint_edges_[id] = 1;
+        candidate_hint_neighbors_[static_cast<std::size_t>(u)].push_back(v);
+        candidate_hint_neighbors_[static_cast<std::size_t>(v)].push_back(u);
+    }
 }
 
 bool BranchBoundSolver::lkSearch(int t1, int t2,
@@ -306,19 +359,46 @@ bool BranchBoundSolver::linKernighanImprove(std::vector<int>& tour, double& cost
     return improved;
 }
 
-void BranchBoundSolver::doubleBridgeKick(std::vector<int>& tour) const
+void BranchBoundSolver::doubleBridgeKick(
+    std::vector<int>& tour, std::uint64_t kick_seed) const
 {
     if (n_ < 8) {
         return;
     }
 
-    // 用基于 n 的确定性断点，避免引入随机数，确保可复现。
-    const int a = 1 + (n_ / 7) % std::max(1, n_ / 4 - 1);
-    const int b = a + 1 + (n_ / 5) % std::max(1, n_ / 4);
-    const int c = b + 1 + (n_ / 3) % std::max(1, n_ / 4);
-    if (c >= n_ - 1) {
+    // seed=0 保留原单起点 LK 的固定 kick 轨迹，确保新增多起点探索不会让
+    // 原有最佳起点退化；其他 seed 用 SplitMix64 产生可复现的不同断点。
+    if (kick_seed == 0) {
+        const int a = 1 + (n_ / 7) % std::max(1, n_ / 4 - 1);
+        const int b = a + 1 + (n_ / 5) % std::max(1, n_ / 4);
+        const int c = b + 1 + (n_ / 3) % std::max(1, n_ / 4);
+        if (c >= n_ - 1) return;
+        std::vector<int> kicked;
+        kicked.reserve(tour.size());
+        kicked.insert(kicked.end(), tour.begin(), tour.begin() + a + 1);
+        kicked.insert(kicked.end(), tour.begin() + b + 1, tour.begin() + c + 1);
+        kicked.insert(kicked.end(), tour.begin() + a + 1, tour.begin() + b + 1);
+        kicked.insert(kicked.end(), tour.begin() + c + 1, tour.end());
+        tour = std::move(kicked);
         return;
     }
+
+    // SplitMix64 只用于产生多起点模式下的断点，不影响精确搜索。
+    auto next_random = [&]() {
+        kick_seed += UINT64_C(0x9e3779b97f4a7c15);
+        std::uint64_t value = kick_seed;
+        value = (value ^ (value >> 30)) * UINT64_C(0xbf58476d1ce4e5b9);
+        value = (value ^ (value >> 27)) * UINT64_C(0x94d049bb133111eb);
+        return value ^ (value >> 31);
+    };
+
+    // 四段均保持非空，并固定 tour[0] 所在首段，避免无意义的整圈旋转。
+    const int a = 1 + static_cast<int>(next_random()
+        % static_cast<std::uint64_t>(n_ - 5));
+    const int b = a + 1 + static_cast<int>(next_random()
+        % static_cast<std::uint64_t>(n_ - a - 3));
+    const int c = b + 1 + static_cast<int>(next_random()
+        % static_cast<std::uint64_t>(n_ - b - 2));
 
     // 四段：A=[0..a], B=[a+1..b], C=[b+1..c], D=[c+1..n_-1]。
     // Double-bridge 重排为 A + C + B + D。
@@ -341,12 +421,18 @@ void BranchBoundSolver::doubleBridgeKick(std::vector<int>& tour) const
     tour = std::move(kicked);
 }
 
-void BranchBoundSolver::linKernighan(std::vector<int>& tour, double& cost) const
+void BranchBoundSolver::linKernighan(
+    std::vector<int>& tour, double& cost, bool diversified_kicks) const
 {
     buildCandidateSets();
 
     std::vector<int> best_tour = tour;
     double best_cost = cost;
+    std::uint64_t tour_seed = UINT64_C(0xcbf29ce484222325);
+    for (const int vertex : tour) {
+        tour_seed ^= static_cast<std::uint64_t>(vertex + 1);
+        tour_seed *= UINT64_C(0x100000001b3);
+    }
 
     for (int kick = 0; kick < kLkMaxKicks; ++kick) {
         // 连续 LK 改进直到局部最优。
@@ -362,14 +448,25 @@ void BranchBoundSolver::linKernighan(std::vector<int>& tour, double& cost) const
             best_tour = tour;
             best_cost = cost;
         }
+        rememberCandidateHintTour(tour);
 
         if (kick == kLkMaxKicks - 1) {
             break;
         }
 
-        // Double-bridge kick 跳出局部最优。
-        doubleBridgeKick(tour);
+        // 使用每轮不同、但跨进程可复现的 double-bridge kick 跳出局部最优。
+        doubleBridgeKick(
+            tour, diversified_kicks
+                ? tour_seed ^ (static_cast<std::uint64_t>(kick + 1)
+                    * UINT64_C(0x9e3779b97f4a7c15))
+                : 0);
         cost = tourCost(tour);
+        if (!isFinite(cost)) {
+            // 稀疏图上的 kick 可能引入缺边；恢复最佳可行 tour，下一轮换一组断点。
+            tour = best_tour;
+            cost = best_cost;
+            continue;
+        }
 
         if (cost + kHeuristicEps < best_cost) {
             best_tour = tour;
@@ -379,4 +476,5 @@ void BranchBoundSolver::linKernighan(std::vector<int>& tour, double& cost) const
 
     tour = std::move(best_tour);
     cost = best_cost;
+    rememberCandidateHintTour(tour);
 }

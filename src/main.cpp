@@ -256,6 +256,18 @@ void printHumanResult(const RunResult& run)
 
     std::cout << "Root lower bound: " << result.stats.root_lower_bound << '\n';
     std::cout << "Initial upper bound: " << result.stats.initial_upper_bound << '\n';
+    std::cout << "Root fixing calls: " << result.stats.root_fixing_calls << '\n';
+    std::cout << "Root fixing tested: " << result.stats.root_fixing_tested << '\n';
+    std::cout << "Root fixing fixed zero: "
+              << result.stats.root_fixing_fixed_zero << '\n';
+    std::cout << "Root fixing tree tested: "
+              << result.stats.root_fixing_tree_tested << '\n';
+    std::cout << "Root fixing fixed one: "
+              << result.stats.root_fixing_fixed_one << '\n';
+    std::cout << "Root fixing active after: "
+              << result.stats.root_fixing_active_after << '\n';
+    std::cout << "Root fixing seconds: "
+              << result.stats.root_fixing_seconds << '\n';
     std::cout << "Root potential iterations: "
               << result.stats.root_potential_iterations << '\n';
     std::cout << "Instance wall seconds: " << run.instance_wall_seconds << '\n';
@@ -357,6 +369,9 @@ void printBatchHeader()
 {
     std::cout
         << "instance,status,method,dimension,cost,root_lower_bound,initial_upper_bound,"
+        << "root_fixing_calls,root_fixing_tested,root_fixing_fixed_zero,"
+        << "root_fixing_tree_tested,root_fixing_fixed_one,root_fixing_active_after,"
+        << "root_fixing_seconds,"
         << "root_potential_iterations,"
         << "instance_wall_seconds,"
         << "nodes_created,nodes_expanded,pruned_by_bound,pruned_infeasible,"
@@ -394,9 +409,9 @@ void printBatchRow(const std::string& path,
 
     if (run == nullptr) {
         // 读取失败、解析失败等情况没有求解统计，只保留错误信息。
-        // method 到 tour 共 37 个空字段；最后一个字段保留错误消息。
+        // method 到 tour 共 44 个空字段；最后一个字段保留错误消息。
         // 新增批量列时必须同步此数量，确保错误行也与 CSV 表头严格对齐。
-        for (int field = 0; field < 37; ++field) {
+        for (int field = 0; field < 44; ++field) {
             std::cout << ',';
         }
         std::cout << csvQuote(message) << '\n';
@@ -410,6 +425,13 @@ void printBatchRow(const std::string& path,
               << formatDouble(result.cost) << ','
               << formatDouble(result.stats.root_lower_bound) << ','
               << formatDouble(result.stats.initial_upper_bound) << ','
+              << result.stats.root_fixing_calls << ','
+              << result.stats.root_fixing_tested << ','
+              << result.stats.root_fixing_fixed_zero << ','
+              << result.stats.root_fixing_tree_tested << ','
+              << result.stats.root_fixing_fixed_one << ','
+              << result.stats.root_fixing_active_after << ','
+              << formatDouble(result.stats.root_fixing_seconds) << ','
               << result.stats.root_potential_iterations << ','
               << formatDouble(run->instance_wall_seconds) << ','
               << result.stats.nodes_created << ','

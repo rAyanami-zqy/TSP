@@ -118,6 +118,13 @@ Nodes created: 1,234
 Nodes expanded: 987
 Pruned by bound: 201
 Pruned by infeasibility: 46
+Root fixing calls: 2
+Root fixing tested: 80
+Root fixing fixed zero: 30
+Root fixing tree tested: 40
+Root fixing fixed one: 3
+Root fixing active after: 200
+Root fixing seconds: 0.125
 Search-node potential update candidates: 103
 Search-node potential updates triggered: 17
 Potential updates skipped strategy none: 1
@@ -139,6 +146,13 @@ Optimal cost: 2.6e1
             "nodes_expanded": 987,
             "pruned_by_bound": 201,
             "pruned_infeasible": 46,
+            "root_fixing_calls": 2,
+            "root_fixing_tested": 80,
+            "root_fixing_fixed_zero": 30,
+            "root_fixing_tree_tested": 40,
+            "root_fixing_fixed_one": 3,
+            "root_fixing_active_after": 200,
+            "root_fixing_seconds": 0.125,
             "root_potential_iterations": 144,
             "search_node_potential_update_candidates": 103,
             "search_node_potential_updates_triggered": 17,
@@ -163,6 +177,10 @@ Optimal cost: 2.6e1
                 "wall_seconds", "result", "branches",
                 "nodes_expanded",
                 "pruned_by_bound", "pruned_infeasible",
+                "root_fixing_calls", "root_fixing_tested",
+                "root_fixing_fixed_zero", "root_fixing_tree_tested",
+                "root_fixing_fixed_one", "root_fixing_active_after",
+                "root_fixing_seconds",
                 "root_potential_iterations",
                 "search_node_potential_update_candidates",
                 "search_node_potential_updates_triggered",
@@ -188,6 +206,13 @@ Optimal cost: 2.6e1
                 "total_nodes_expanded", "median_nodes_expanded",
                 "total_pruned_by_bound", "median_pruned_by_bound",
                 "total_pruned_infeasible", "median_pruned_infeasible",
+                "total_root_fixing_calls", "median_root_fixing_calls",
+                "total_root_fixing_tested", "median_root_fixing_tested",
+                "total_root_fixing_fixed_zero", "median_root_fixing_fixed_zero",
+                "total_root_fixing_tree_tested", "median_root_fixing_tree_tested",
+                "total_root_fixing_fixed_one", "median_root_fixing_fixed_one",
+                "total_root_fixing_active_after", "median_root_fixing_active_after",
+                "total_root_fixing_seconds", "median_root_fixing_seconds",
                 "total_root_potential_iterations",
                 "median_root_potential_iterations",
                 "total_search_node_potential_update_candidates",

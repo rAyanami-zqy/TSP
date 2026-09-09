@@ -318,6 +318,7 @@ Strategy(
 
 CSV 统计列集中定义在“用户配置区 1”的 `OUTPUT_STATISTICS`。当前默认输出成本、
 创建节点数（兼容列名 `branches`）、扩展节点数、下界剪枝数、不可行剪枝数、
+根 reduced-cost fixing 的调用次数、测试/固定边数、剩余 active 边数与耗时，
 根节点势优化总轮次、搜索节点势更新候选数、触发次数、十类互斥的未触发原因，
 以及搜索节点势优化总轮次，并在 `summary.csv` 中生成对应的 total/median。
 继续扩充时只需增加标签、类型和是否汇总；求解器后来新增但未登记的
@@ -472,6 +473,9 @@ Polyak；`--hk-node-ascent` 还支持 `helsgaun`、`polyak-smoothed` 和
 
 ```text
 instance,status,method,dimension,cost,root_lower_bound,initial_upper_bound,
+root_fixing_calls,root_fixing_tested,root_fixing_fixed_zero,
+root_fixing_tree_tested,root_fixing_fixed_one,root_fixing_active_after,
+root_fixing_seconds,
 root_potential_iterations,
 instance_wall_seconds,nodes_created,nodes_expanded,pruned_by_bound,pruned_infeasible,
 search_node_potential_update_candidates,search_node_potential_updates_triggered,

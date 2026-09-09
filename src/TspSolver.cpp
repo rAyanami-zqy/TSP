@@ -2210,7 +2210,17 @@ SolveResult BranchBoundSolver::solve()
             // 根下界已经证明初始 incumbent 最优，候选池不再有使用价值。
             initial_tour_alternatives_.clear();
         } else {
+            const auto fixing_started = std::chrono::steady_clock::now();
             fixing = applyRootReducedCostFixing(root, root_tree);
+            const double fixing_seconds = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - fixing_started).count();
+            ++result_.stats.root_fixing_calls;
+            result_.stats.root_fixing_tested += fixing.tested;
+            result_.stats.root_fixing_fixed_zero += fixing.fixed_zero;
+            result_.stats.root_fixing_tree_tested += fixing.tree_tested;
+            result_.stats.root_fixing_fixed_one += fixing.fixed_one;
+            result_.stats.root_fixing_active_after = fixing.active_after;
+            result_.stats.root_fixing_seconds += fixing_seconds;
             // 根 fixing 是本轮搜索的永久基线，不应被 DFS rollback 恢复。
             candidate_undo_.clear();
             if (debug_.output != nullptr) {
@@ -2219,7 +2229,8 @@ SolveResult BranchBoundSolver::solve()
                      << " fixed_zero=" << fixing.fixed_zero
                      << " tree_tested=" << fixing.tree_tested
                      << " fixed_one=" << fixing.fixed_one
-                     << " active=" << fixing.active_after;
+                     << " active=" << fixing.active_after
+                     << " seconds=" << formatDebugDouble(fixing_seconds);
                 if (fixing.proves_no_improvement) {
                     line << " proves_no_improvement=yes";
                 }
@@ -2276,6 +2287,18 @@ SolveResult BranchBoundSolver::solve()
              << " pruned_infeasible=" << result_.stats.nodes_pruned_infeasible
              << " root_potential_iterations="
              << result_.stats.root_potential_iterations
+             << " root_fixing_calls=" << result_.stats.root_fixing_calls
+             << " root_fixing_tested=" << result_.stats.root_fixing_tested
+             << " root_fixing_fixed_zero="
+             << result_.stats.root_fixing_fixed_zero
+             << " root_fixing_tree_tested="
+             << result_.stats.root_fixing_tree_tested
+             << " root_fixing_fixed_one="
+             << result_.stats.root_fixing_fixed_one
+             << " root_fixing_active_after="
+             << result_.stats.root_fixing_active_after
+             << " root_fixing_seconds="
+             << formatDebugDouble(result_.stats.root_fixing_seconds)
              << " search_node_potential_update_candidates="
              << result_.stats.search_node_potential_update_candidates
              << " search_node_potential_updates_triggered="
@@ -4038,6 +4061,55 @@ const BranchBoundSolver::Edge* BranchBoundSolver::findMstReplacement(
     const std::size_t first_index = static_cast<std::size_t>(
         std::distance(branch_candidates.begin(), first));
 
+    auto in_selected_component = [&](int vertex) {
+        if (mst_selected_component_bits_ != 0) {
+            return (mst_selected_component_bits_
+                    & (std::uint64_t{1}
+                       << static_cast<unsigned>(vertex))) != 0;
+        }
+        if (mst_selected_component_word_count_ != 0) {
+            const std::size_t word_index =
+                static_cast<std::size_t>(vertex) / 64;
+            return (mst_selected_component_words_[word_index]
+                    & (std::uint64_t{1}
+                       << (static_cast<unsigned>(vertex) % 64))) != 0;
+        }
+        return mst_component_mark_[static_cast<std::size_t>(vertex)]
+            == mst_selected_component_epoch_;
+    };
+
+    auto for_each_selected_vertex = [&](const auto& visitor) {
+        if (mst_selected_component_bits_ != 0) {
+            std::uint64_t component = mst_selected_component_bits_;
+            while (component != 0) {
+                const unsigned vertex = trailingZeroCount(component);
+                component &= component - 1;
+                visitor(static_cast<int>(vertex));
+            }
+            return;
+        }
+        if (mst_selected_component_word_count_ != 0) {
+            for (std::size_t component_word = 0;
+                 component_word < mst_selected_component_word_count_;
+                 ++component_word) {
+                std::uint64_t component =
+                    mst_selected_component_words_[component_word];
+                while (component != 0) {
+                    const std::size_t vertex = component_word * 64
+                        + trailingZeroCount(component);
+                    component &= component - 1;
+                    if (vertex < static_cast<std::size_t>(n_)) {
+                        visitor(static_cast<int>(vertex));
+                    }
+                }
+            }
+            return;
+        }
+        const std::vector<int>& component = mst_selected_component_is_left_
+            ? mst_component_left_ : mst_component_right_;
+        for (const int vertex : component) visitor(vertex);
+    };
+
     // 只有生产路径传入全局候选表时，稳定下标、active bitset 和 incident
     // 位图才属于同一坐标系；局部测试候选必须走兼容扫描路径。
     const bool use_global_candidates = &branch_candidates == &candidates_sorted_;
@@ -4047,6 +4119,32 @@ const BranchBoundSolver::Edge* BranchBoundSolver::findMstReplacement(
         && candidate_incident_bits_.size()
             == static_cast<std::size_t>(n_) * candidate_word_count_
         && internal_candidate_bits_.size() == candidate_word_count_) {
+        // 先在 LK/近邻稀疏图中找一个跨 fundamental cut 的 active edge。
+        // 它只给出“精确最优 replacement 不会晚于此下标”的上界；随后仍会
+        // 对此前的完整候选位图做证明，因此稀疏候选遗漏不会改变搜索结果。
+        std::size_t hinted_index = branch_candidates.size();
+        if (candidate_hint_neighbors_.size() == static_cast<std::size_t>(n_)
+            && candidate_word_count_ >= 8) {
+            for_each_selected_vertex([&](int vertex) {
+                for (const int neighbor :
+                     candidate_hint_neighbors_[static_cast<std::size_t>(vertex)]) {
+                    if (neighbor == 0 || in_selected_component(neighbor)) continue;
+                    const std::size_t id = edgeId(vertex, neighbor);
+                    if (id >= edge_rank_by_id_.size()) continue;
+                    const int rank = edge_rank_by_id_[id];
+                    if (rank < 0) continue;
+                    const std::size_t index = static_cast<std::size_t>(rank);
+                    if (index < first_index || index >= hinted_index) continue;
+                    const std::uint64_t bit =
+                        std::uint64_t{1} << (index % 64);
+                    if ((node.candidate_bits[index / 64] & bit) != 0
+                        && (internal_candidate_bits_[index / 64] & bit) != 0) {
+                        hinted_index = index;
+                    }
+                }
+            });
+        }
+
         // 65..128 顶点已有固定双 word component mask。多数 replacement
         // 在 removed edge 的排序位置附近即可命中；先做有预算的顺序扫描，
         // 预算耗尽才支付完整 fundamental-cut XOR 的成本。
@@ -4071,16 +4169,8 @@ const BranchBoundSolver::Edge* BranchBoundSolver::findMstReplacement(
                     // nextActiveCandidate 已由权威 active bitset 排除了
                     // forced/forbidden/filtered 边；candidate_mask 与该位图
                     // 同步维护，无需再次访问三个 edge-id 状态数组。
-                    auto in_component = [&](int vertex) {
-                        const std::size_t word_index =
-                            static_cast<std::size_t>(vertex) / 64;
-                        return (mst_selected_component_words_[word_index]
-                                & (std::uint64_t{1}
-                                   << (static_cast<unsigned>(vertex)
-                                       % 64))) != 0;
-                    };
-                    if (in_component(candidate.u)
-                        != in_component(candidate.v)) {
+                    if (in_selected_component(candidate.u)
+                        != in_selected_component(candidate.v)) {
                         return &candidate;
                     }
                 }
@@ -4094,55 +4184,35 @@ const BranchBoundSolver::Edge* BranchBoundSolver::findMstReplacement(
         }
 
         mst_cut_candidate_bits_.assign(candidate_word_count_, 0);
+        const std::size_t proof_end = hinted_index < branch_candidates.size()
+            ? hinted_index + 1
+            : branch_candidates.size();
+        const std::size_t proof_word_end = std::min(
+            candidate_word_count_, (proof_end + 63) / 64);
         auto add_component_vertex = [&](int vertex) {
             const std::size_t row_begin =
                 static_cast<std::size_t>(vertex) * candidate_word_count_;
             for (std::size_t word_index = 0;
-                 word_index < candidate_word_count_; ++word_index) {
+                 word_index < proof_word_end; ++word_index) {
                 // 分量内部边在两个端点行中各出现一次并相互抵消；跨割边
                 // 只出现一次，因此异或结果恰好是 fundamental cut。
                 mst_cut_candidate_bits_[word_index] ^=
                     candidate_incident_bits_[row_begin + word_index];
             }
         };
-        if (mst_selected_component_bits_ != 0) {
-            std::uint64_t component = mst_selected_component_bits_;
-            while (component != 0) {
-                const unsigned vertex = trailingZeroCount(component);
-                component &= component - 1;
-                add_component_vertex(static_cast<int>(vertex));
-            }
-        } else if (mst_selected_component_word_count_ != 0) {
-            for (std::size_t component_word = 0;
-                 component_word < mst_selected_component_word_count_;
-                 ++component_word) {
-                std::uint64_t component =
-                    mst_selected_component_words_[component_word];
-                while (component != 0) {
-                    const std::size_t vertex = component_word * 64
-                        + trailingZeroCount(component);
-                    component &= component - 1;
-                    if (vertex < static_cast<std::size_t>(n_)) {
-                        add_component_vertex(static_cast<int>(vertex));
-                    }
-                }
-            }
-        } else {
-            const std::vector<int>& component = mst_selected_component_is_left_
-                ? mst_component_left_ : mst_component_right_;
-            for (const int vertex : component) {
-                add_component_vertex(vertex);
-            }
-        }
+        for_each_selected_vertex(add_component_vertex);
 
         std::size_t word_index = first_index / 64;
         const std::size_t bit_offset = first_index % 64;
-        while (word_index < candidate_word_count_) {
+        while (word_index < proof_word_end) {
             std::uint64_t pending = mst_cut_candidate_bits_[word_index]
                 & node.candidate_bits[word_index]
                 & internal_candidate_bits_[word_index];
             if (word_index == first_index / 64) {
                 pending &= ~std::uint64_t{0} << bit_offset;
+            }
+            if (word_index + 1 == proof_word_end && proof_end % 64 != 0) {
+                pending &= (std::uint64_t{1} << (proof_end % 64)) - 1;
             }
             if (pending != 0) {
                 const std::size_t candidate_index = word_index * 64
@@ -4167,23 +4237,6 @@ const BranchBoundSolver::Edge* BranchBoundSolver::findMstReplacement(
         const std::size_t candidate_id = edgeId(candidate.u, candidate.v);
         if (node.forced[candidate_id] || node.forbidden[candidate_id]) continue;
         if (!node.candidate_mask.empty() && !node.candidate_mask[candidate_id]) continue;
-
-        auto in_selected_component = [&](int vertex) {
-            if (mst_selected_component_bits_ != 0) {
-                return (mst_selected_component_bits_
-                        & (std::uint64_t{1}
-                           << static_cast<unsigned>(vertex))) != 0;
-            }
-            if (mst_selected_component_word_count_ != 0) {
-                const std::size_t word_index =
-                    static_cast<std::size_t>(vertex) / 64;
-                return (mst_selected_component_words_[word_index]
-                        & (std::uint64_t{1}
-                           << (static_cast<unsigned>(vertex) % 64))) != 0;
-            }
-            return mst_component_mark_[static_cast<std::size_t>(vertex)]
-                == mst_selected_component_epoch_;
-        };
         const bool u_in_component = in_selected_component(candidate.u);
         const bool v_in_component = in_selected_component(candidate.v);
         if (u_in_component != v_in_component) {

@@ -74,6 +74,7 @@ bool BranchBoundSolver::findInitialTour(
         candidate_cost += dist_[current][start];
         // 最近邻只给出初始回路，再用 2-opt 做局部改进。
         twoOpt(candidate, candidate_cost);
+        rememberCandidateHintTour(candidate);
 
         // 保持原实现的严格小于与首次命中语义，确保便宜的首个 LK 起点
         // 不因候选池的规范化或排序而改变。
@@ -128,8 +129,27 @@ bool BranchBoundSolver::findInitialTour(
         writeDebugLine(debug_, line.str());
     }
 
-    // 用 Lin-Kernighan 对最佳 NN+2opt 结果做精细优化，获取更紧上界。
+    // Concorde 会从多个起点执行带 kick 的 LK。这里立即处理最好的三个
+    // 不同 NN+2-opt 局部最优，使根势优化和 reduced-cost fixing 一开始就能
+    // 使用更紧 UB；其余候选仍留给困难搜索触发的延迟多启动阶段。
+    constexpr std::size_t kImmediateLkStarts = 3;
     linKernighan(best_tour, best_cost);
+    const std::size_t additional_starts = std::min(
+        alternatives.size(), kImmediateLkStarts - 1);
+    for (std::size_t index = 0; index < additional_starts; ++index) {
+        std::vector<int> candidate = alternatives[index].tour;
+        double candidate_cost = alternatives[index].cost;
+        linKernighan(candidate, candidate_cost, true);
+        candidate_cost = tourCost(candidate);
+        if (candidate_cost + kHeuristicEps < best_cost) {
+            best_tour = std::move(candidate);
+            best_cost = candidate_cost;
+        }
+    }
+    alternatives.erase(
+        alternatives.begin(), alternatives.begin()
+            + static_cast<std::ptrdiff_t>(additional_starts));
+    rememberCandidateHintTour(best_tour);
 
     tour = std::move(best_tour);
     cost = best_cost;
@@ -152,7 +172,7 @@ bool BranchBoundSolver::improveInitialTourDiversified(
     for (std::size_t index = 0; index < start_count; ++index) {
         std::vector<int> candidate = alternatives[index].tour;
         double candidate_cost = alternatives[index].cost;
-        linKernighan(candidate, candidate_cost);
+        linKernighan(candidate, candidate_cost, true);
         candidate_cost = tourCost(candidate);
         ++starts_run;
 

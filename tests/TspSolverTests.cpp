@@ -1294,11 +1294,12 @@ void testDiversifiedInitialTourPool()
     const auto stats = tsp::BranchBoundSolverTestAccess::diversifiedTourStats(
         problem.toDenseMatrix(70));
 
-    expectCost(stats.initial_cost, 685.0,
-               "st70 single-start LK upper bound changed unexpectedly");
-    expectCost(stats.diversified_cost, 682.0,
-               "st70 diversified LK did not reproduce the tighter upper bound");
-    if (!stats.improved || stats.alternative_count < 12) {
+    // 最优三个 NN+2-opt 起点会在根搜索前立即做 chained LK；st70 因而
+    // 在原来的延迟 diversified 阶段之前就得到 682 上界。
+    expectCost(stats.initial_cost, 682.0,
+               "st70 immediate multi-start LK did not tighten the upper bound");
+    if (!stats.improved || stats.alternative_count < 10
+        || stats.diversified_cost > stats.initial_cost + 1e-9) {
         throw std::runtime_error(
             "st70 diversified-tour pool was not populated or used");
     }
@@ -1703,14 +1704,15 @@ void testSearchNodePotentialUpdates()
             "persistent potential regression exercised no prunable early stop");
     }
 
-    // 两阶段筛选在 2%--5% 的外层 gap 区间先观察两次势移动。coverage=1
+    // 更紧的多启动 LK 初始上界使 st70 的相关节点 gap 落到 1%--5%；
+    // 两阶段筛选在该外层区间先观察两次势移动。coverage=1
     // 会拒绝所有尚未直接形成剪枝证书的 probe，用于同时覆盖“进入”和
-    // “丢弃”路径；2% 内的节点仍按原策略跑满。
+    // “丢弃”路径；1% 内的节点仍按原策略跑满。
     tsp::BranchBoundSolver probe_solver(st70_problem.toDenseMatrix(70));
     probe_solver.setPotentialUpdateOptions(
         tsp::PotentialUpdateStrategy::SubtreeAdaptive,
         2, 16, 0.05, 5000);
-    probe_solver.setPotentialUpdateProbeOptions(2, 0.02, 1.0);
+    probe_solver.setPotentialUpdateProbeOptions(2, 0.01, 1.0);
     const tsp::SolveResult probe_result = probe_solver.solve();
     expectCost(probe_result.cost, 675.0,
                "potential probe changed the st70 optimum");
@@ -1741,6 +1743,16 @@ void testRootReducedCostFixing()
     const tsp::SolveResult result = solver.solve();
     expectCost(result.cost, 1610.0,
                "bayg29 reduced-cost fixing changed the optimum");
+    if (result.stats.root_fixing_calls == 0
+        || result.stats.root_fixing_tested == 0
+        || result.stats.root_fixing_fixed_zero == 0
+        || result.stats.root_fixing_tree_tested == 0
+        || result.stats.root_fixing_fixed_one == 0
+        || result.stats.root_fixing_active_after == 0
+        || result.stats.root_fixing_seconds < 0.0) {
+        throw std::runtime_error(
+            "bayg29 reduced-cost fixing statistics were not exported");
+    }
 
     const std::string debug_output = debug.str();
     const std::string marker = "root reduced-cost fixing: tested=";

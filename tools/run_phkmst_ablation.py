@@ -173,6 +173,50 @@ OUTPUT_STATISTICS: tuple[OutputStatistic, ...] = (
         kind="int",
         summarize=True,
     ),
+    # 根 reduced-cost fixing 的工作量、效果与耗时。active_after 记录最后一次
+    # 根重启完成 fixing 后保留下来的候选边数，其余计数和耗时跨重启累加。
+    OutputStatistic(
+        column="root_fixing_calls",
+        tspbb_labels=("Root fixing calls",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="root_fixing_tested",
+        tspbb_labels=("Root fixing tested",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="root_fixing_fixed_zero",
+        tspbb_labels=("Root fixing fixed zero",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="root_fixing_tree_tested",
+        tspbb_labels=("Root fixing tree tested",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="root_fixing_fixed_one",
+        tspbb_labels=("Root fixing fixed one",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="root_fixing_active_after",
+        tspbb_labels=("Root fixing active after",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="root_fixing_seconds",
+        tspbb_labels=("Root fixing seconds",),
+        kind="float",
+        summarize=True,
+    ),
     # 根节点势优化总轮次。
     OutputStatistic(
         column="root_potential_iterations",
