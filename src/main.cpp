@@ -41,6 +41,8 @@ struct CliOptions {
     double node_ascent_dynamic_cosine_scale = 0.2;
     double node_ascent_dynamic_min_current_weight = 0.5;
     double node_ascent_dynamic_max_current_weight = 0.9;
+    // 最近节点势以该权重阻尼注入下一兄弟节点；0 关闭跨兄弟 warm start。
+    double node_ascent_sibling_warm_weight = 0.25;
     // 默认沿用调整权重排序；实验策略只切换 BP 内部的分支边优先级，
     // 不改变 1-tree 下界或 Kruskal 候选顺序。
     tsp::BranchEdgeOrder branch_edge_order
@@ -196,6 +198,8 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
         options.node_ascent_dynamic_cosine_scale,
         options.node_ascent_dynamic_min_current_weight,
         options.node_ascent_dynamic_max_current_weight);
+    solver.setNodeAscentSiblingWarmWeight(
+        options.node_ascent_sibling_warm_weight);
     // 分支顺序与势更新策略是两个正交开关，便于分别评估搜索树形状和下界质量。
     solver.setBranchEdgeOrder(options.branch_edge_order);
     solver.setPotentialUpdateOptions(
@@ -543,6 +547,7 @@ void printUsage(const char* program)
               << "  --hk-node-dynamic-cosine-scale <x >= 0>\n"
               << "  --hk-node-dynamic-min-current-weight <x in [0,1]>\n"
               << "  --hk-node-dynamic-max-current-weight <x in [0,1]>\n"
+              << "  --hk-sibling-warm-weight <x in [0,1]> (0 = disabled)\n"
               << "  --branch-edge-order <weight|root-alpha-asc|root-alpha-desc|"
                  "root-alpha-global-asc|root-alpha-global-desc|"
                  "forbid-delta-asc|forbid-delta-desc|forbid-degree-desc|"
@@ -793,6 +798,14 @@ CliOptions parseArgs(int argc, char** argv)
         } else if (arg == "--hk-node-dynamic-max-current-weight") {
             options.node_ascent_dynamic_max_current_weight =
                 parseDoubleOption(require_value(arg), arg);
+        } else if (arg == "--hk-sibling-warm-weight") {
+            options.node_ascent_sibling_warm_weight =
+                parseDoubleOption(require_value(arg), arg);
+            if (options.node_ascent_sibling_warm_weight < 0.0
+                || options.node_ascent_sibling_warm_weight > 1.0) {
+                throw std::runtime_error(
+                    "--hk-sibling-warm-weight must be in [0, 1]");
+            }
         } else if (arg == "--branch-edge-order") {
             options.branch_edge_order =
                 parseBranchEdgeOrder(require_value(arg));

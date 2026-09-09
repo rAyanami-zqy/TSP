@@ -322,6 +322,9 @@ public:
         double cosine_scale,
         double dynamic_min_current_weight,
         double dynamic_max_current_weight);
+    // 搜索节点临时上升可复用最近完成节点的最终势。warm_weight=0 关闭；
+    // 其余值以 (1-w)*父 epoch 势 + w*兄弟势 构造初值，须位于 [0,1]。
+    void setNodeAscentSiblingWarmWeight(double warm_weight);
     // 设置 BP 在违规顶点内部选择分支边的比较顺序；不改变下界算法。
     void setBranchEdgeOrder(BranchEdgeOrder order);
     // 配置搜索节点势更新：depth 是深度/epoch 间隔，iterations 是小 gap
@@ -903,6 +906,11 @@ private:
     std::size_t potential_updates_in_round_ = 0;
     // 当前已安装势 epoch 的锚点 DFS 深度；根势 epoch 为 0。
     int current_potential_epoch_depth_ = 0;
+    // Concorde HELDKARP 风格：最近一次节点上升结束时的势跨兄弟节点传递，
+    // 只作为下一次临时上升的 warm start，不直接充当下界。
+    mutable std::vector<double> sibling_warm_potential_;
+    // 父 epoch 势与兄弟 warm 势的混合权重；0 完全关闭跨兄弟复用。
+    double node_ascent_sibling_warm_weight_ = 0.25;
     // true 时 solve() 在构造根 1-tree 后返回，不执行 reduced-cost fixing/BP。
     bool root_bound_only_ = false;
     // 原问题所有有限边均为精确整数且任意 n 边和不超过 2^53 时，tour

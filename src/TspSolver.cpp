@@ -361,6 +361,16 @@ void BranchBoundSolver::setNodeAscentDirectionSmoothing(
     node_ascent_dynamic_max_current_weight_ = dynamic_max_current_weight;
 }
 
+void BranchBoundSolver::setNodeAscentSiblingWarmWeight(double warm_weight)
+{
+    if (!isFinite(warm_weight) || warm_weight < 0.0 || warm_weight > 1.0) {
+        throw std::invalid_argument(
+            "node ascent sibling warm weight must be finite and in [0, 1]");
+    }
+    node_ascent_sibling_warm_weight_ = warm_weight;
+    if (warm_weight == 0.0) sibling_warm_potential_.clear();
+}
+
 void BranchBoundSolver::setBranchEdgeOrder(BranchEdgeOrder order)
 {
     // 此处只记录策略。root alpha 依赖最终根势和根 1-tree；root frequency
@@ -1513,6 +1523,34 @@ BranchBoundSolver::updateNodePotentialBound(
         potentials.assign(static_cast<std::size_t>(n_), 0.0);
     }
     result.potentials = potentials;
+    if (node_ascent_sibling_warm_weight_ > 0.0
+        && sibling_warm_potential_.size() == static_cast<std::size_t>(n_)) {
+        const double parent_weight = 1.0 - node_ascent_sibling_warm_weight_;
+        bool finite_warm_start = true;
+        for (std::size_t index = 0; index < potentials.size(); ++index) {
+            potentials[index] = parent_weight * potentials[index]
+                + node_ascent_sibling_warm_weight_
+                    * sibling_warm_potential_[index];
+            finite_warm_start = finite_warm_start
+                && isFinite(potentials[index]);
+        }
+        // 极端势值的线性组合仍可能溢出；此时退回父 epoch 势，不让一个
+        // 仅用于加速的 warm start 改变节点可行性判断。
+        if (!finite_warm_start) {
+            potentials = result.potentials;
+        }
+    }
+    auto remember_sibling_warm_start = [&]() {
+        // 约束图不可行或更新溢出时不覆盖上一组有效 warm start。缓存只影响
+        // 后续迭代初值，即使保留旧值也不会直接参与剪枝。
+        if (node_ascent_sibling_warm_weight_ <= 0.0 || !result.feasible
+            || !std::all_of(
+                potentials.begin(), potentials.end(),
+                [](double value) { return isFinite(value); })) {
+            return;
+        }
+        sibling_warm_potential_ = potentials;
+    };
 
     // probe 只筛选离剪枝线较远、但仍通过外层最大 gap 门槛的节点。近距离
     // 节点继续沿用完整上升，避免为已知高 ROI 的更新增加一次中途判断。
@@ -1635,6 +1673,7 @@ BranchBoundSolver::updateNodePotentialBound(
                 first_period = false;
             }
         }
+        remember_sibling_warm_start();
         return result;
     }
 
@@ -1759,6 +1798,7 @@ BranchBoundSolver::updateNodePotentialBound(
             no_improvement = 0;
         }
     }
+    remember_sibling_warm_start();
     return result;
 }
 
@@ -2093,6 +2133,7 @@ SolveResult BranchBoundSolver::solve()
         // 两个计数器都以本次根搜索为生命周期；若改善 incumbent 后重启，
         // 势更新预算和最近 epoch 深度从根重新计算。
         potential_updates_in_round_ = 0;
+        sibling_warm_potential_.clear();
         current_potential_epoch_depth_ = 0;
         optimizeRootPotentials(best_cost_);
         // root 是深度 0 的空约束部分解；之后 reduced-cost fixing 可能在它

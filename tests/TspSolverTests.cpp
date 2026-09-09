@@ -1651,6 +1651,33 @@ void testSearchNodePotentialUpdates()
             "invalid node direction smoothing weights were accepted");
     }
 
+    auto rejects_sibling_warm_weight = [&](double warm_weight) {
+        tsp::BranchBoundSolver solver(matrix);
+        try {
+            solver.setNodeAscentSiblingWarmWeight(warm_weight);
+        } catch (const std::invalid_argument&) {
+            return true;
+        }
+        return false;
+    };
+    if (!rejects_sibling_warm_weight(-0.1)
+        || !rejects_sibling_warm_weight(1.1)
+        || !rejects_sibling_warm_weight(
+            std::numeric_limits<double>::infinity())) {
+        throw std::runtime_error(
+            "invalid node sibling warm weights were accepted");
+    }
+    {
+        tsp::BranchBoundSolver solver(matrix);
+        solver.setNodeAscentSiblingWarmWeight(0.0);
+        solver.setPotentialUpdateOptions(
+            tsp::PotentialUpdateStrategy::SubtreeAdaptive,
+            1, 16, 1.0, 100);
+        const tsp::SolveResult result = solver.solve();
+        expectCost(result.cost, 699.0,
+                   "disabling sibling warm start changed the exact optimum");
+    }
+
     // 同时对一个独立穷举可验证的受约束搜索实例启用零根势，确保节点
     // 更新生成的证书不会越过真实最优值。
     const std::vector<std::vector<double>> small = {

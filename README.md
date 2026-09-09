@@ -363,7 +363,8 @@ Polyak；`--hk-node-ascent` 还支持 `helsgaun`、`polyak-smoothed` 和
 `polyak-smoothed-dynamic`。后两者保留节点 Polyak 的步长、probe、停滞折半和
 停止条件，只分别换成固定与余弦动态平滑方向。触发机制及 epoch 生命周期保持
 不变。启用搜索节点势更新时，永远重建所有依赖势的排序和增量状态，使新势在
-整个锚点子树中持续生效，回溯到兄弟节点时恢复。
+整个锚点子树中持续生效，回溯到兄弟节点时恢复。节点上升另以 0.25 权重
+阻尼复用最近兄弟节点的最终势；它只提供下一次上升初值，不直接作为证书。
 
 ```bash
 # 推荐配置：距上次更新至少 2 层，且节点 gap 不超过 2%
@@ -371,6 +372,10 @@ Polyak；`--hk-node-ascent` 还支持 `helsgaun`、`polyak-smoothed` 和
   --hk-potential-update subtree-adaptive \
   --hk-update-depth 2 --hk-update-gap-ratio 0.02 \
   --hk-update-iterations 16 --hk-update-budget 5000 input.tsp
+
+# 关闭跨兄弟节点的势 warm start，复现原始父 epoch 起点
+./build/tsp_bb --hk-sibling-warm-weight 0 \
+  --hk-potential-update subtree-adaptive input.tsp
 
 # 同一触发配置下对照节点 Helsgaun 调度
 ./build/tsp_bb --hk-node-ascent helsgaun \
@@ -426,6 +431,9 @@ Polyak；`--hk-node-ascent` 还支持 `helsgaun`、`polyak-smoothed` 和
 - 节点平滑参数与根平滑参数相互独立。默认基准权重为 `0.7`、动态余弦缩放
   为 `0.2`、动态范围为 `0.5--0.9`；三个权重必须满足
   `0 <= 最小值 <= 基准值 <= 最大值 <= 1`，余弦缩放必须非负；
+- `--hk-sibling-warm-weight` 控制最近节点势注入父 epoch 势的比例，默认
+  `0.25`，范围 `[0,1]`，设为 `0` 可完全关闭。无论取值如何，每个节点仍会
+  重新计算受约束 1-tree 后才接受下界；
 - `--hk-update-min-gap-ratio` 与 `--hk-update-gap-ratio` 分别是
   `subtree-adaptive` 触发区间的下限和上限，默认下限为 0。`subtree-*` 中
   `--hk-update-depth` 是两次成功安装 epoch 的最小层距；达到层距后，后续
