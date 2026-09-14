@@ -1,3 +1,7 @@
+#ifndef TSP_SOLVER_IMPLEMENTATION_CONTEXT
+#include "TspSolver.cpp"
+#else
+
 // 精确求解器内部用于收紧 incumbent 的 2-opt/Lin-Kernighan 实现。
 void BranchBoundSolver::twoOpt(std::vector<int>& tour, double& cost) const
 {
@@ -478,3 +482,5 @@ void BranchBoundSolver::linKernighan(
     cost = best_cost;
     rememberCandidateHintTour(tour);
 }
+
+#endif // TSP_SOLVER_IMPLEMENTATION_CONTEXT

@@ -496,6 +496,9 @@ struct BranchBoundSolverTestAccess {
         std::vector<std::vector<double>> matrix)
     {
         BranchBoundSolver solver(std::move(matrix));
+        // 本测试专门覆盖历史固定三起点路径；Adaptive 的根 gap 触发在
+        // solve() 集成测试中验证，不能由只调用 findInitialTour 的助手触发。
+        solver.setInitialClkStrategy(InitialClkStrategy::Triple);
         std::vector<int> tour;
         std::vector<BranchBoundSolver::TourCandidate> alternatives;
         double cost = std::numeric_limits<double>::infinity();
@@ -1331,6 +1334,33 @@ void testDiversifiedInitialTourPool()
         throw std::runtime_error(
             "st70 diversified-tour pool was not populated or used");
     }
+
+    tsp::BranchBoundSolver adaptive(problem.toDenseMatrix(70));
+    adaptive.setRootBoundOnly(true);
+    adaptive.setInitialClkStrategy(
+        tsp::InitialClkStrategy::Adaptive, 0.0, 2);
+    const tsp::SolveResult adaptive_result = adaptive.solve();
+    expectCost(adaptive_result.cost, 682.0,
+               "adaptive CLK did not tighten the st70 upper bound");
+    if (adaptive_result.stats.adaptive_clk_triggers != 1
+        || adaptive_result.stats.adaptive_clk_improvements != 1
+        || adaptive_result.stats.initial_clk_starts != 3
+        || adaptive_result.stats.root_ascent_seconds <= 0.0
+        || adaptive_result.stats.initial_tour_seconds <= 0.0) {
+        throw std::runtime_error(
+            "adaptive CLK or phase timing statistics were not recorded");
+    }
+
+    bool invalid_gap_rejected = false;
+    try {
+        adaptive.setInitialClkStrategy(
+            tsp::InitialClkStrategy::Adaptive, -0.1, 2);
+    } catch (const std::invalid_argument&) {
+        invalid_gap_rejected = true;
+    }
+    if (!invalid_gap_rejected) {
+        throw std::runtime_error("negative adaptive CLK gap was accepted");
+    }
 }
 
 void testRootAscentStrategies()
@@ -1704,6 +1734,24 @@ void testSearchNodePotentialUpdates()
         const tsp::SolveResult result = solver.solve();
         expectCost(result.cost, 699.0,
                    "disabling sibling warm start changed the exact optimum");
+    }
+    {
+        tsp::BranchBoundSolver solver(matrix);
+        solver.setNodeAscentSiblingWarmStartStrategy(
+            tsp::SiblingWarmStartStrategy::Guarded);
+        solver.setPotentialUpdateOptions(
+            tsp::PotentialUpdateStrategy::SubtreeAdaptive,
+            1, 16, 1.0, 100);
+        const tsp::SolveResult result = solver.solve();
+        expectCost(result.cost, 699.0,
+                   "guarded sibling warm start changed the exact optimum");
+        if (result.stats.sibling_warm_probes == 0
+            || result.stats.sibling_warm_accepted
+                    + result.stats.sibling_warm_rejected
+                != result.stats.sibling_warm_probes) {
+            throw std::runtime_error(
+                "guarded sibling warm decisions were not fully accounted");
+        }
     }
 
     // 同时对一个独立穷举可验证的受约束搜索实例启用零根势，确保节点

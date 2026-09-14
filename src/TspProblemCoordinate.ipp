@@ -1,3 +1,7 @@
+#ifndef TSP_SOLVER_IMPLEMENTATION_CONTEXT
+#include "TspSolver.cpp"
+#else
+
 // TSPLIB 坐标距离模型，包括二维、三维、ATT 与 GEO 等类型。
 // 将 TSPLIB GEO 格式的“度.分”坐标转换为弧度。
 double geoCoordinateToRadians(double value)
@@ -62,3 +66,5 @@ double coordinateDistance(const Point& a, const Point& b, const std::string& edg
 
     throw std::runtime_error("unsupported coordinate EDGE_WEIGHT_TYPE: " + edge_weight_type);
 }
+
+#endif // TSP_SOLVER_IMPLEMENTATION_CONTEXT

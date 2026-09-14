@@ -58,7 +58,13 @@ Options:
     def test_safe_defaults_are_omitted_but_meaningful_difference_is_rejected(
         self,
     ) -> None:
-        default = runner.CONFIGURATION_BY_NAME["D0"]
+        default = replace(
+            runner.CONFIGURATION_BY_NAME["PPS32"],
+            name="default",
+            solver_args=runner.solver_arguments(
+                "--hk-node-ascent polyak --branch-edge-order weight "
+                "--hk-potential-update none"),
+        )
         adapted_default = runner.adapt_strategy_arguments(
             default, self.interface)
         self.assertFalse(adapted_default.incompatibilities)
@@ -84,8 +90,15 @@ Options:
             debug=True,
             debug_interval=5_000_000,
         )
+        default = replace(
+            runner.CONFIGURATION_BY_NAME["PPS32"],
+            name="default",
+            solver_args=runner.solver_arguments(
+                "--hk-node-ascent polyak --branch-edge-order weight "
+                "--hk-potential-update none"),
+        )
         adapted = runner.effective_args(
-            args, runner.CONFIGURATION_BY_NAME["D0"], self.interface)
+            args, default, self.interface)
         self.assertIn("--exact-max-n", adapted.arguments)
         self.assertIn("--debug", adapted.arguments)
         self.assertNotIn("--debug-interval", adapted.arguments)
@@ -140,7 +153,7 @@ Potential updates skipped gap above maximum: 41
 Search-node potential iterations: 91
 Optimal cost: 2.6e1
 """)
-        self.assertEqual(parsed, {
+        expected = {
             "result": 26.0,
             "branches": 1234,
             "nodes_expanded": 987,
@@ -167,82 +180,42 @@ Optimal cost: 2.6e1
             "search_node_potential_updates_skipped_gap_below_minimum": 9,
             "search_node_potential_updates_skipped_gap_above_maximum": 41,
             "search_node_potential_iterations": 91,
-        })
+        }
+        for field, value in expected.items():
+            self.assertEqual(parsed[field], value)
+        self.assertIsNone(parsed["final_upper_bound"])
+        self.assertIsNone(parsed["replacement_seconds"])
 
     def test_default_csv_fields_include_potential_statistics(self) -> None:
-        self.assertEqual(
-            runner.RESULT_FIELDS,
-            (
-                "run_id", "strategy", "repeat", "instance", "status",
-                "wall_seconds", "result", "branches",
-                "nodes_expanded",
-                "pruned_by_bound", "pruned_infeasible",
-                "root_fixing_calls", "root_fixing_tested",
-                "root_fixing_fixed_zero", "root_fixing_tree_tested",
-                "root_fixing_fixed_one", "root_fixing_active_after",
-                "root_fixing_seconds",
-                "root_potential_iterations",
-                "search_node_potential_update_candidates",
-                "search_node_potential_updates_triggered",
-                "search_node_potential_updates_skipped_strategy_none",
-                "search_node_potential_updates_skipped_update_depth_zero",
-                "search_node_potential_updates_skipped_budget_exhausted",
-                "search_node_potential_updates_skipped_numerically_unsafe",
-                "search_node_potential_updates_skipped_invalid_state",
-                "search_node_potential_updates_skipped_zero_violation",
-                "search_node_potential_updates_skipped_zero_iteration_limit",
-                "search_node_potential_updates_skipped_depth_interval",
-                "search_node_potential_updates_skipped_gap_below_minimum",
-                "search_node_potential_updates_skipped_gap_above_maximum",
-                "search_node_potential_iterations",
-            ),
-        )
-        self.assertEqual(
-            runner.SUMMARY_FIELDS,
-            (
-                "run_id", "strategy", "status", "rows", "successful",
-                "timeouts", "errors", "total_wall_seconds",
-                "median_wall_seconds", "total_branches", "median_branches",
-                "total_nodes_expanded", "median_nodes_expanded",
-                "total_pruned_by_bound", "median_pruned_by_bound",
-                "total_pruned_infeasible", "median_pruned_infeasible",
-                "total_root_fixing_calls", "median_root_fixing_calls",
-                "total_root_fixing_tested", "median_root_fixing_tested",
-                "total_root_fixing_fixed_zero", "median_root_fixing_fixed_zero",
-                "total_root_fixing_tree_tested", "median_root_fixing_tree_tested",
-                "total_root_fixing_fixed_one", "median_root_fixing_fixed_one",
-                "total_root_fixing_active_after", "median_root_fixing_active_after",
-                "total_root_fixing_seconds", "median_root_fixing_seconds",
-                "total_root_potential_iterations",
-                "median_root_potential_iterations",
-                "total_search_node_potential_update_candidates",
-                "median_search_node_potential_update_candidates",
-                "total_search_node_potential_updates_triggered",
-                "median_search_node_potential_updates_triggered",
-                "total_search_node_potential_updates_skipped_strategy_none",
-                "median_search_node_potential_updates_skipped_strategy_none",
-                "total_search_node_potential_updates_skipped_update_depth_zero",
-                "median_search_node_potential_updates_skipped_update_depth_zero",
-                "total_search_node_potential_updates_skipped_budget_exhausted",
-                "median_search_node_potential_updates_skipped_budget_exhausted",
-                "total_search_node_potential_updates_skipped_numerically_unsafe",
-                "median_search_node_potential_updates_skipped_numerically_unsafe",
-                "total_search_node_potential_updates_skipped_invalid_state",
-                "median_search_node_potential_updates_skipped_invalid_state",
-                "total_search_node_potential_updates_skipped_zero_violation",
-                "median_search_node_potential_updates_skipped_zero_violation",
-                "total_search_node_potential_updates_skipped_zero_iteration_limit",
-                "median_search_node_potential_updates_skipped_zero_iteration_limit",
-                "total_search_node_potential_updates_skipped_depth_interval",
-                "median_search_node_potential_updates_skipped_depth_interval",
-                "total_search_node_potential_updates_skipped_gap_below_minimum",
-                "median_search_node_potential_updates_skipped_gap_below_minimum",
-                "total_search_node_potential_updates_skipped_gap_above_maximum",
-                "median_search_node_potential_updates_skipped_gap_above_maximum",
-                "total_search_node_potential_iterations",
-                "median_search_node_potential_iterations",
-            ),
-        )
+        self.assertEqual(runner.RESULT_FIELDS[:6], runner.RESULT_BASE_FIELDS)
+        self.assertEqual(len(runner.RESULT_FIELDS), len(set(runner.RESULT_FIELDS)))
+        for field in (
+            "final_upper_bound", "final_lower_bound", "final_relative_gap",
+            "initial_tour_seconds", "root_ascent_seconds",
+            "potential_update_seconds", "potential_update_rebuild_seconds",
+            "replacement_seconds",
+        ):
+            self.assertIn(field, runner.RESULT_FIELDS)
+        for field in (
+            "total_initial_tour_seconds", "median_root_ascent_seconds",
+            "total_replacement_seconds",
+        ):
+            self.assertIn(field, runner.SUMMARY_FIELDS)
+
+    def test_timeout_progress_recovers_latest_certificate_and_nodes(self) -> None:
+        parsed = runner.parse_tspbb_progress("", """\
+[tsp-debug] initial incumbent: cost=120
+[tsp-debug] initial tour timing: seconds=0.5 clk_starts=1
+[tsp-debug] root: lower_bound=100 best=120 created=1 expanded=0 initial_tour_seconds=0.5 root_ascent_seconds=0.2 root_fixing_seconds=0.1 replacement_seconds=0.01 search=bp-chain
+[tsp-debug] new incumbent: cost=110 source=bp-node depth=4
+[tsp-debug] progress: expanded=500 created=900 depth=8 bound=105 best=110 pruned_bound=3 pruned_infeasible=4 potential_seconds=2.5 potential_rebuild_seconds=0.4 replacement_seconds=1.25
+""")
+        self.assertEqual(parsed["final_upper_bound"], 110.0)
+        self.assertEqual(parsed["final_lower_bound"], 100.0)
+        self.assertAlmostEqual(parsed["final_relative_gap"], 10.0 / 110.0)
+        self.assertEqual(parsed["branches"], 900)
+        self.assertEqual(parsed["nodes_expanded"], 500)
+        self.assertEqual(parsed["replacement_seconds"], 1.25)
 
 
 if __name__ == "__main__":

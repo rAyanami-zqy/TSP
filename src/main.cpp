@@ -43,8 +43,15 @@ struct CliOptions {
     double node_ascent_dynamic_cosine_scale = 0.2;
     double node_ascent_dynamic_min_current_weight = 0.5;
     double node_ascent_dynamic_max_current_weight = 0.9;
+    // off/blend/guarded 控制兄弟势是否复用以及是否先验证当前节点下界。
+    tsp::SiblingWarmStartStrategy sibling_warm_start
+        = tsp::SiblingWarmStartStrategy::Guarded;
     // 最近节点势以该权重阻尼注入下一兄弟节点；0 关闭跨兄弟 warm start。
     double node_ascent_sibling_warm_weight = 0.25;
+    // 初始 CLK 默认先单起点，再按根 gap 决定是否追加两个起点。
+    tsp::InitialClkStrategy initial_clk = tsp::InitialClkStrategy::Adaptive;
+    double adaptive_clk_gap_ratio = 0.02;
+    std::size_t adaptive_clk_additional_starts = 2;
     // 默认沿用调整权重排序；实验策略只切换 BP 内部的分支边优先级，
     // 不改变 1-tree 下界或 Kruskal 候选顺序。
     tsp::BranchEdgeOrder branch_edge_order
@@ -216,6 +223,12 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
         options.node_ascent_dynamic_max_current_weight);
     solver.setNodeAscentSiblingWarmWeight(
         options.node_ascent_sibling_warm_weight);
+    solver.setNodeAscentSiblingWarmStartStrategy(
+        options.sibling_warm_start);
+    solver.setInitialClkStrategy(
+        options.initial_clk,
+        options.adaptive_clk_gap_ratio,
+        options.adaptive_clk_additional_starts);
     // 分支顺序与势更新策略是两个正交开关，便于分别评估搜索树形状和下界质量。
     solver.setBranchEdgeOrder(options.branch_edge_order);
     solver.setPotentialUpdateOptions(
@@ -263,6 +276,30 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
     return output;
 }
 
+double finalUpperBound(const RunResult& run)
+{
+    return run.result.feasible
+        ? run.result.cost : run.result.stats.initial_upper_bound;
+}
+
+double finalLowerBound(const RunResult& run)
+{
+    // exact 正常返回表示证明已经完成；root-bound 模式只拥有根 1-tree 证书。
+    return run.method == "exact" && run.result.feasible
+        ? run.result.cost : run.result.stats.root_lower_bound;
+}
+
+double finalRelativeGap(const RunResult& run)
+{
+    const double upper = finalUpperBound(run);
+    const double lower = finalLowerBound(run);
+    if (!std::isfinite(upper) || !std::isfinite(lower)) {
+        return std::numeric_limits<double>::infinity();
+    }
+    return std::max(0.0, upper - lower)
+        / std::max(1.0, std::fabs(upper));
+}
+
 // 单实例模式使用人类可读输出，方便手动观察搜索统计。
 void printHumanResult(const RunResult& run)
 {
@@ -276,6 +313,17 @@ void printHumanResult(const RunResult& run)
 
     std::cout << "Root lower bound: " << result.stats.root_lower_bound << '\n';
     std::cout << "Initial upper bound: " << result.stats.initial_upper_bound << '\n';
+    std::cout << "Final upper bound: " << finalUpperBound(run) << '\n';
+    std::cout << "Final lower bound: " << finalLowerBound(run) << '\n';
+    std::cout << "Final relative gap: " << finalRelativeGap(run) << '\n';
+    std::cout << "Initial tour seconds: "
+              << result.stats.initial_tour_seconds << '\n';
+    std::cout << "Initial CLK starts: "
+              << result.stats.initial_clk_starts << '\n';
+    std::cout << "Adaptive CLK triggers: "
+              << result.stats.adaptive_clk_triggers << '\n';
+    std::cout << "Adaptive CLK improvements: "
+              << result.stats.adaptive_clk_improvements << '\n';
     std::cout << "Root fixing calls: " << result.stats.root_fixing_calls << '\n';
     std::cout << "Root fixing tested: " << result.stats.root_fixing_tested << '\n';
     std::cout << "Root fixing fixed zero: "
@@ -290,6 +338,8 @@ void printHumanResult(const RunResult& run)
               << result.stats.root_fixing_seconds << '\n';
     std::cout << "Root potential iterations: "
               << result.stats.root_potential_iterations << '\n';
+    std::cout << "Root ascent seconds: "
+              << result.stats.root_ascent_seconds << '\n';
     std::cout << "Instance wall seconds: " << run.instance_wall_seconds << '\n';
     std::cout << "Nodes created: " << result.stats.nodes_created << '\n';
     std::cout << "Nodes expanded: " << result.stats.nodes_expanded << '\n';
@@ -341,6 +391,14 @@ void printHumanResult(const RunResult& run)
               << result.stats.potential_update_seconds << '\n';
     std::cout << "Potential update rebuild seconds: "
               << result.stats.potential_update_rebuild_seconds << '\n';
+    std::cout << "Sibling warm probes: "
+              << result.stats.sibling_warm_probes << '\n';
+    std::cout << "Sibling warm accepted: "
+              << result.stats.sibling_warm_accepted << '\n';
+    std::cout << "Sibling warm rejected: "
+              << result.stats.sibling_warm_rejected << '\n';
+    std::cout << "Replacement seconds: "
+              << result.stats.replacement_seconds << '\n';
     std::cout << "Potential update total gain: "
               << result.stats.potential_update_total_gain << '\n';
     std::cout << "Potential update max gain: "
@@ -389,10 +447,13 @@ void printBatchHeader()
 {
     std::cout
         << "instance,status,method,dimension,cost,root_lower_bound,initial_upper_bound,"
+        << "final_upper_bound,final_lower_bound,final_relative_gap,"
+        << "initial_tour_seconds,initial_clk_starts,adaptive_clk_triggers,"
+        << "adaptive_clk_improvements,"
         << "root_fixing_calls,root_fixing_tested,root_fixing_fixed_zero,"
         << "root_fixing_tree_tested,root_fixing_fixed_one,root_fixing_active_after,"
         << "root_fixing_seconds,"
-        << "root_potential_iterations,"
+        << "root_potential_iterations,root_ascent_seconds,"
         << "instance_wall_seconds,"
         << "nodes_created,nodes_expanded,pruned_by_bound,pruned_infeasible,"
         << "search_node_potential_update_candidates,"
@@ -415,6 +476,8 @@ void printBatchHeader()
         << "potential_update_rebuild_seconds,potential_update_total_gain,"
         << "potential_update_max_gain,potential_update_probes_started,"
         << "potential_update_probes_continued,potential_update_probes_rejected,"
+        << "sibling_warm_probes,sibling_warm_accepted,sibling_warm_rejected,"
+        << "replacement_seconds,"
         << "tour,message\n";
 }
 
@@ -429,9 +492,9 @@ void printBatchRow(const std::string& path,
 
     if (run == nullptr) {
         // 读取失败、解析失败等情况没有求解统计，只保留错误信息。
-        // method 到 tour 共 44 个空字段；最后一个字段保留错误消息。
+        // method 到 tour 共 56 个空字段；最后一个字段保留错误消息。
         // 新增批量列时必须同步此数量，确保错误行也与 CSV 表头严格对齐。
-        for (int field = 0; field < 44; ++field) {
+        for (int field = 0; field < 56; ++field) {
             std::cout << ',';
         }
         std::cout << csvQuote(message) << '\n';
@@ -445,6 +508,13 @@ void printBatchRow(const std::string& path,
               << formatDouble(result.cost) << ','
               << formatDouble(result.stats.root_lower_bound) << ','
               << formatDouble(result.stats.initial_upper_bound) << ','
+              << formatDouble(finalUpperBound(*run)) << ','
+              << formatDouble(finalLowerBound(*run)) << ','
+              << formatDouble(finalRelativeGap(*run)) << ','
+              << formatDouble(result.stats.initial_tour_seconds) << ','
+              << result.stats.initial_clk_starts << ','
+              << result.stats.adaptive_clk_triggers << ','
+              << result.stats.adaptive_clk_improvements << ','
               << result.stats.root_fixing_calls << ','
               << result.stats.root_fixing_tested << ','
               << result.stats.root_fixing_fixed_zero << ','
@@ -453,6 +523,7 @@ void printBatchRow(const std::string& path,
               << result.stats.root_fixing_active_after << ','
               << formatDouble(result.stats.root_fixing_seconds) << ','
               << result.stats.root_potential_iterations << ','
+              << formatDouble(result.stats.root_ascent_seconds) << ','
               << formatDouble(run->instance_wall_seconds) << ','
               << result.stats.nodes_created << ','
               << result.stats.nodes_expanded << ','
@@ -483,6 +554,10 @@ void printBatchRow(const std::string& path,
               << result.stats.potential_update_probes_started << ','
               << result.stats.potential_update_probes_continued << ','
               << result.stats.potential_update_probes_rejected << ','
+              << result.stats.sibling_warm_probes << ','
+              << result.stats.sibling_warm_accepted << ','
+              << result.stats.sibling_warm_rejected << ','
+              << formatDouble(result.stats.replacement_seconds) << ','
               << csvQuote(formatTourLimited(result.tour)) << ','
               << csvQuote(message) << '\n';
 }
@@ -564,7 +639,11 @@ void printUsage(const char* program)
               << "  --hk-node-dynamic-cosine-scale <x >= 0>\n"
               << "  --hk-node-dynamic-min-current-weight <x in [0,1]>\n"
               << "  --hk-node-dynamic-max-current-weight <x in [0,1]>\n"
+              << "  --hk-sibling-warm-start <off|blend|guarded>\n"
               << "  --hk-sibling-warm-weight <x in [0,1]> (0 = disabled)\n"
+              << "  --initial-clk <single|triple|adaptive>\n"
+              << "  --adaptive-clk-gap-ratio <x >= 0>\n"
+              << "  --adaptive-clk-additional-starts <n>\n"
               << "  --branch-edge-order <weight|root-alpha-asc|root-alpha-desc|"
                  "root-alpha-global-asc|root-alpha-global-desc|"
                  "forbid-delta-asc|forbid-delta-desc|forbid-degree-desc|"
@@ -624,6 +703,27 @@ tsp::NodeAscentStrategy parseNodeAscentStrategy(const std::string& value)
         "invalid value for --hk-node-ascent: " + value
         + " (expected polyak, helsgaun, polyak-smoothed, "
           "or polyak-smoothed-dynamic)");
+}
+
+tsp::SiblingWarmStartStrategy parseSiblingWarmStartStrategy(
+    const std::string& value)
+{
+    if (value == "off") return tsp::SiblingWarmStartStrategy::Off;
+    if (value == "blend") return tsp::SiblingWarmStartStrategy::Blend;
+    if (value == "guarded") return tsp::SiblingWarmStartStrategy::Guarded;
+    throw std::runtime_error(
+        "invalid value for --hk-sibling-warm-start: " + value
+        + " (expected off, blend, or guarded)");
+}
+
+tsp::InitialClkStrategy parseInitialClkStrategy(const std::string& value)
+{
+    if (value == "single") return tsp::InitialClkStrategy::Single;
+    if (value == "triple") return tsp::InitialClkStrategy::Triple;
+    if (value == "adaptive") return tsp::InitialClkStrategy::Adaptive;
+    throw std::runtime_error(
+        "invalid value for --initial-clk: " + value
+        + " (expected single, triple, or adaptive)");
 }
 
 tsp::PotentialUpdateStrategy parsePotentialUpdateStrategy(
@@ -817,6 +917,9 @@ CliOptions parseArgs(int argc, char** argv)
         } else if (arg == "--hk-node-dynamic-max-current-weight") {
             options.node_ascent_dynamic_max_current_weight =
                 parseDoubleOption(require_value(arg), arg);
+        } else if (arg == "--hk-sibling-warm-start") {
+            options.sibling_warm_start =
+                parseSiblingWarmStartStrategy(require_value(arg));
         } else if (arg == "--hk-sibling-warm-weight") {
             options.node_ascent_sibling_warm_weight =
                 parseDoubleOption(require_value(arg), arg);
@@ -825,6 +928,18 @@ CliOptions parseArgs(int argc, char** argv)
                 throw std::runtime_error(
                     "--hk-sibling-warm-weight must be in [0, 1]");
             }
+        } else if (arg == "--initial-clk") {
+            options.initial_clk = parseInitialClkStrategy(require_value(arg));
+        } else if (arg == "--adaptive-clk-gap-ratio") {
+            options.adaptive_clk_gap_ratio =
+                parseDoubleOption(require_value(arg), arg);
+            if (options.adaptive_clk_gap_ratio < 0.0) {
+                throw std::runtime_error(
+                    "--adaptive-clk-gap-ratio must be non-negative");
+            }
+        } else if (arg == "--adaptive-clk-additional-starts") {
+            options.adaptive_clk_additional_starts =
+                parseSizeOption(require_value(arg), arg);
         } else if (arg == "--branch-edge-order") {
             options.branch_edge_order =
                 parseBranchEdgeOrder(require_value(arg));

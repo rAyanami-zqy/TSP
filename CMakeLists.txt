@@ -5,6 +5,10 @@ project(TSPBranchBound
     LANGUAGES CXX
 )
 
+# clangd/VS Code 依赖该数据库取得与真实构建完全一致的 C++ 标准、宏和
+# include path。Makefiles 与 Ninja 生成器都会在 build/ 下写出该文件。
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 include(CTest)
 
 function(tsp_apply_common_settings target)

@@ -25,6 +25,14 @@ struct SolveStats {
     double root_lower_bound = 0.0;
     // 进入精确搜索前由 NN、2-opt 和 LK 得到的初始可行 tour 成本。
     double initial_upper_bound = 0.0;
+    // 初始 NN/2-opt/LK 以及后续自适应/困难实例 diversified LK 的累计墙钟秒数。
+    double initial_tour_seconds = 0.0;
+    // 本次求解实际执行的 CLK 起点数，包含首次、根 gap 自适应和延迟启动。
+    std::size_t initial_clk_starts = 0;
+    // 根 gap 判定触发追加 CLK 的次数；一次 solve 最多为 1。
+    std::size_t adaptive_clk_triggers = 0;
+    // 自适应追加 CLK 严格改善 incumbent 的次数；一次 solve 最多为 1。
+    std::size_t adaptive_clk_improvements = 0;
     // 根 reduced-cost fixing 实际执行次数。incumbent 改善导致根重启时会累加。
     std::size_t root_fixing_calls = 0;
     // 根 fixing 中测试能否固定为 x_e=0 的 active 非树边总数。
@@ -42,6 +50,8 @@ struct SolveStats {
     // 所有根势优化实际执行的 1-tree/次梯度评估总轮数；Hybrid
     // 会累加 Polyak 和 Helsgaun 阶段，根搜索重启时也继续累加。
     std::size_t root_potential_iterations = 0;
+    // 根势优化的累计墙钟秒数；根搜索重启时累加。
+    double root_ascent_seconds = 0.0;
     // 搜索节点上的势更新统计。成功改善且未立即剪枝的新势会
     // 重建候选排序和 HKMST 状态，并在该锚点子树内持续生效。
     // 实际进入势更新触发判定的非根逻辑搜索节点数。它不包含在触发判定前
@@ -92,6 +102,15 @@ struct SolveStats {
     double potential_update_seconds = 0.0;
     // subtree 模式重建候选排序、位图和 1-tree 的累计墙钟秒数。
     double potential_update_rebuild_seconds = 0.0;
+    // 节点势更新中对 sibling warm 势做当前约束图验证的次数。
+    std::size_t sibling_warm_probes = 0;
+    // 验证后严格强于父势已有证书、因而被采用的 sibling warm 次数。
+    std::size_t sibling_warm_accepted = 0;
+    // 验证不可行或未严格改善、因而退回父势的 sibling warm 次数。
+    std::size_t sibling_warm_rejected = 0;
+    // fundamental-cut MST replacement 查询本体的累计墙钟秒数。该时间是
+    // root fixing / BP 搜索等阶段的子集，不能与这些阶段简单相加。
+    double replacement_seconds = 0.0;
     // 所有有效势更新带来的下界增量之和。
     double potential_update_total_gain = 0.0;
     // 单次节点势更新取得的最大下界增量。
@@ -149,6 +168,22 @@ enum class NodeAscentStrategy {
     PolyakSmoothed,
     // 保持节点 Polyak 其余逻辑，按相邻次梯度余弦动态调整融合比例。
     PolyakSmoothedDynamic,
+};
+
+// 搜索节点之间复用最近势的策略。三种模式只影响临时上升初值，不改变
+// 受约束 1-tree 证书或精确搜索可行域。
+enum class SiblingWarmStartStrategy {
+    Off,
+    Blend,
+    Guarded,
+};
+
+// 精确搜索前 CLK 的启动策略。Adaptive 先执行一个起点，再由根 1-tree
+// 相对 gap 判断是否值得追加多起点 CLK。
+enum class InitialClkStrategy {
+    Single,
+    Triple,
+    Adaptive,
 };
 
 // 搜索节点上的势更新触发策略。所有启用的策略都把新势安装成
@@ -328,6 +363,15 @@ public:
     // 搜索节点临时上升可复用最近完成节点的最终势。warm_weight=0 关闭；
     // 其余值以 (1-w)*父 epoch 势 + w*兄弟势 构造初值，须位于 [0,1]。
     void setNodeAscentSiblingWarmWeight(double warm_weight);
+    // 设置兄弟势复用模式：off 关闭，blend 直接采用混合势，guarded 先在
+    // 当前约束图验证其下界并只接受严格改善的初值。
+    void setNodeAscentSiblingWarmStartStrategy(
+        SiblingWarmStartStrategy strategy);
+    // 设置初始 CLK 模式，以及 Adaptive 追加启动的根相对 gap 阈值和最多
+    // 追加起点数。gap_ratio 必须非负有限；additional_starts 可为 0。
+    void setInitialClkStrategy(InitialClkStrategy strategy,
+                               double gap_ratio = 0.02,
+                               std::size_t additional_starts = 2);
     // 设置 BP 在违规顶点内部选择分支边的比较顺序；不改变下界算法。
     void setBranchEdgeOrder(BranchEdgeOrder order);
     // 配置搜索节点势更新：depth 是深度/epoch 间隔，iterations 是小 gap
@@ -612,6 +656,10 @@ private:
         bool probe_continued = false;
         // probe 覆盖率不足；调用方必须丢弃其势和下界。
         bool probe_rejected = false;
+        // guarded sibling warm 是否实际验证、接受或拒绝。
+        bool sibling_warm_probed = false;
+        bool sibling_warm_accepted = false;
+        bool sibling_warm_rejected = false;
         // 所有已评估势中最强的原问题下界。
         double bound = -std::numeric_limits<double>::infinity();
         // 实际完成的 1-tree/次梯度评估次数。
@@ -796,7 +844,8 @@ private:
     bool improveInitialTourDiversified(
         std::vector<TourCandidate>& alternatives,
         double root_lower_bound,
-        std::vector<int>& tour, double& cost);
+        std::vector<int>& tour, double& cost,
+        std::size_t max_starts = 12);
     // 当节点扩展数达到困难度阈值时至多执行一次 diversified LK；若改善
     // incumbent，则设置 restart_search_requested_，要求完整回退并重启根搜索。
     void maybeImproveIncumbentDiversified();
@@ -914,6 +963,14 @@ private:
     mutable std::vector<double> sibling_warm_potential_;
     // 父 epoch 势与兄弟 warm 势的混合权重；0 完全关闭跨兄弟复用。
     double node_ascent_sibling_warm_weight_ = 0.25;
+    // 默认验证 warm 势，只在当前约束图上取得更强下界时采用。
+    SiblingWarmStartStrategy sibling_warm_start_strategy_
+        = SiblingWarmStartStrategy::Guarded;
+    // 初始 CLK 默认按根 gap 自适应追加，避免简单实例固定支付三起点成本。
+    InitialClkStrategy initial_clk_strategy_ = InitialClkStrategy::Adaptive;
+    double adaptive_clk_gap_ratio_ = 0.02;
+    std::size_t adaptive_clk_additional_starts_ = 2;
+    bool adaptive_initial_clk_attempted_ = false;
     // true 时 solve() 在构造根 1-tree 后返回，不执行 reduced-cost fixing/BP。
     bool root_bound_only_ = false;
     // 原问题所有有限边均为精确整数且任意 n 边和不超过 2^53 时，tour
@@ -998,6 +1055,8 @@ private:
     mutable std::vector<std::vector<int>> candidate_hint_neighbors_;
     // 按 edgeId 去重 candidate_hint_neighbors_ 中的无向边。
     mutable std::vector<unsigned char> candidate_hint_edges_;
+    // const replacement 查询使用的累计计时器；solve 返回前复制到 SolveStats。
+    mutable double replacement_seconds_ = 0.0;
 
     // 当前已知最优可行 tour 的原始成本，即分支定界上界 UB。
     double best_cost_ = std::numeric_limits<double>::infinity();

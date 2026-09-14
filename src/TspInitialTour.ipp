@@ -1,3 +1,7 @@
+#ifndef TSP_SOLVER_IMPLEMENTATION_CONTEXT
+#include "TspSolver.cpp"
+#else
+
 // 精确分支定界求解前的初始上界构造，以及困难实例上的多起点改善入口。
 bool BranchBoundSolver::findInitialTour(
     std::vector<int>& tour, double& cost,
@@ -129,17 +133,20 @@ bool BranchBoundSolver::findInitialTour(
         writeDebugLine(debug_, line.str());
     }
 
-    // Concorde 会从多个起点执行带 kick 的 LK。这里立即处理最好的三个
-    // 不同 NN+2-opt 局部最优，使根势优化和 reduced-cost fixing 一开始就能
-    // 使用更紧 UB；其余候选仍留给困难搜索触发的延迟多启动阶段。
-    constexpr std::size_t kImmediateLkStarts = 3;
+    // Single/Adaptive 先只支付一个 CLK 起点；Adaptive 会等首个根 1-tree
+    // 证书出来后按 gap 决定是否追加。Triple 保留此前固定三起点行为，便于
+    // 论文消融和历史结果复现。
+    const std::size_t immediate_lk_starts =
+        initial_clk_strategy_ == InitialClkStrategy::Triple ? 3 : 1;
     linKernighan(best_tour, best_cost);
+    ++result_.stats.initial_clk_starts;
     const std::size_t additional_starts = std::min(
-        alternatives.size(), kImmediateLkStarts - 1);
+        alternatives.size(), immediate_lk_starts - 1);
     for (std::size_t index = 0; index < additional_starts; ++index) {
         std::vector<int> candidate = alternatives[index].tour;
         double candidate_cost = alternatives[index].cost;
         linKernighan(candidate, candidate_cost, true);
+        ++result_.stats.initial_clk_starts;
         candidate_cost = tourCost(candidate);
         if (candidate_cost + kHeuristicEps < best_cost) {
             best_tour = std::move(candidate);
@@ -159,13 +166,13 @@ bool BranchBoundSolver::findInitialTour(
 bool BranchBoundSolver::improveInitialTourDiversified(
     std::vector<TourCandidate>& alternatives,
     double root_lower_bound,
-    std::vector<int>& tour, double& cost)
+    std::vector<int>& tour, double& cost,
+    std::size_t max_starts)
 {
-    constexpr std::size_t kDiversifiedLkStarts = 12;
     // start_count 是本次实际运行 LK 的候选上限；starts_run 记录提前停止前
     // 已完成的数量，用于性能日志。
     const std::size_t start_count = std::min(
-        alternatives.size(), kDiversifiedLkStarts);
+        alternatives.size(), max_starts);
     bool improved = false;
     std::size_t starts_run = 0;
 
@@ -173,6 +180,7 @@ bool BranchBoundSolver::improveInitialTourDiversified(
         std::vector<int> candidate = alternatives[index].tour;
         double candidate_cost = alternatives[index].cost;
         linKernighan(candidate, candidate_cost, true);
+        ++result_.stats.initial_clk_starts;
         candidate_cost = tourCost(candidate);
         ++starts_run;
 
@@ -193,3 +201,5 @@ bool BranchBoundSolver::improveInitialTourDiversified(
             + " best=" + formatDebugDouble(cost));
     return improved;
 }
+
+#endif // TSP_SOLVER_IMPLEMENTATION_CONTEXT

@@ -156,6 +156,40 @@ class AblationHtmlReportTests(unittest.TestCase):
         self.assertIn("hk-update-iterations=32 更优", verdict)
         self.assertIn("1.000 s 对 2.000 s", verdict)
 
+    def test_run_summary_and_performance_profile_penalize_timeout(self) -> None:
+        fast = self.make_run("fast", 1.0)
+        slow = self.make_run("slow", 2.0)
+        fast.timeout_seconds = 10.0
+        slow.timeout_seconds = 10.0
+        timeout_item = summarizer.InstanceResult(
+            name="timeout.tsp", source="timeout.tsp", status="timeout",
+            observed_repeats=1, expected_repeats=1, successful_repeats=0,
+            timeouts=1, errors=0, result=None, result_consistent=True,
+            numeric={
+                "wall_seconds": 10.0,
+                "final_upper_bound": 120.0,
+                "final_lower_bound": 100.0,
+            },
+            text={},
+        )
+        fast.instances[timeout_item.name] = timeout_item
+        slow.instances[timeout_item.name] = timeout_item
+
+        summary = {row["run_id"]: row for row in
+                   summarizer.run_performance_rows([fast, slow])}
+        self.assertEqual(summary["fast"]["solved_count"], 1)
+        self.assertAlmostEqual(summary["fast"]["par2_seconds"], 10.5)
+        self.assertAlmostEqual(
+            summary["fast"]["penalized_geometric_mean_seconds"],
+            20.0 ** 0.5)
+
+        profile = summarizer.performance_profile_rows([fast, slow])
+        at_one = next(row for row in profile if row["tau"] == 1.0)
+        at_two = next(row for row in profile if row["tau"] == 2.0)
+        self.assertEqual(at_one["fast"], 0.5)
+        self.assertEqual(at_one["slow"], 0.0)
+        self.assertEqual(at_two["slow"], 0.5)
+
 
 if __name__ == "__main__":
     unittest.main()

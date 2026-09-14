@@ -1,3 +1,7 @@
+#ifndef TSP_SOLVER_IMPLEMENTATION_CONTEXT
+#include "TspSolver.cpp"
+#else
+
 // TspProblem 的数据访问与稠密距离矩阵物化。
 int TspProblem::dimension() const
 {
@@ -58,3 +62,5 @@ std::vector<std::vector<double>> TspProblem::toDenseMatrix(std::size_t max_dimen
     }
     return dense;
 }
+
+#endif // TSP_SOLVER_IMPLEMENTATION_CONTEXT

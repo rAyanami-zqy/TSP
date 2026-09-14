@@ -1,3 +1,7 @@
+#ifndef TSP_SOLVER_IMPLEMENTATION_CONTEXT
+#include "TspSolver.cpp"
+#else
+
 // 不进入精确 BP 搜索的通用 tour 构造与 2-opt 启发式。
 // 与精确求解器内部的初始 tour/LK 启发式分开，便于独立阅读两条路径。
 // 计算给定 TSP 回路的总成本，若回路无效（长度不为 n 或存在缺边）则返回 infinity。
@@ -335,3 +339,5 @@ std::string formatTour(const std::vector<int>& tour)
     }
     return out.str();
 }
+
+#endif // TSP_SOLVER_IMPLEMENTATION_CONTEXT

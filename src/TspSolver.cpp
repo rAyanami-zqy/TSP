@@ -1,3 +1,5 @@
+#define TSP_SOLVER_IMPLEMENTATION_CONTEXT 1
+
 #include "TspSolver.hpp"
 
 #include <algorithm>
@@ -118,6 +120,25 @@ void writeDebugLine(const DebugOptions& debug, const std::string& message)
     (*debug.output) << "[tsp-debug] " << message << '\n';
     debug.output->flush();
 }
+
+// 给包含多个提前 return 的热路径累计墙钟时间，避免每个出口重复记账。
+class ScopedSeconds {
+public:
+    explicit ScopedSeconds(double& target)
+        : target_(target), started_at_(std::chrono::steady_clock::now()) {}
+    ~ScopedSeconds()
+    {
+        target_ += std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - started_at_).count();
+    }
+
+    ScopedSeconds(const ScopedSeconds&) = delete;
+    ScopedSeconds& operator=(const ScopedSeconds&) = delete;
+
+private:
+    double& target_;
+    std::chrono::steady_clock::time_point started_at_;
+};
 
 // 格式化 double 数值用于调试输出，特殊处理 infinity 以避免输出过长的数字。
 std::string formatDebugDouble(double value)
@@ -371,6 +392,28 @@ void BranchBoundSolver::setNodeAscentSiblingWarmWeight(double warm_weight)
     if (warm_weight == 0.0) sibling_warm_potential_.clear();
 }
 
+void BranchBoundSolver::setNodeAscentSiblingWarmStartStrategy(
+    SiblingWarmStartStrategy strategy)
+{
+    sibling_warm_start_strategy_ = strategy;
+    if (strategy == SiblingWarmStartStrategy::Off) {
+        sibling_warm_potential_.clear();
+    }
+}
+
+void BranchBoundSolver::setInitialClkStrategy(
+    InitialClkStrategy strategy, double gap_ratio,
+    std::size_t additional_starts)
+{
+    if (!isFinite(gap_ratio) || gap_ratio < 0.0) {
+        throw std::invalid_argument(
+            "adaptive CLK gap ratio must be finite and non-negative");
+    }
+    initial_clk_strategy_ = strategy;
+    adaptive_clk_gap_ratio_ = gap_ratio;
+    adaptive_clk_additional_starts_ = additional_starts;
+}
+
 void BranchBoundSolver::setBranchEdgeOrder(BranchEdgeOrder order)
 {
     // 此处只记录策略。root alpha 依赖最终根势和根 1-tree；root frequency
@@ -621,9 +664,10 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
                              double helsgaun_bound) {
         result_.stats.root_potential_iterations +=
             polyak_iterations + helsgaun_iterations;
-        if (debug_.output == nullptr) return;
         const double seconds = std::chrono::duration<double>(
             std::chrono::steady_clock::now() - started_at).count();
+        result_.stats.root_ascent_seconds += seconds;
+        if (debug_.output == nullptr) return;
         std::ostringstream line;
         line << "root ascent: strategy=" << strategy_name(root_ascent_strategy_)
              << " selected=" << selected
@@ -1545,8 +1589,12 @@ BranchBoundSolver::updateNodePotentialBound(
         potentials.assign(static_cast<std::size_t>(n_), 0.0);
     }
     result.potentials = potentials;
-    if (node_ascent_sibling_warm_weight_ > 0.0
+    Evaluation guarded_initial_evaluation;
+    bool reuse_guarded_initial_evaluation = false;
+    if (sibling_warm_start_strategy_ != SiblingWarmStartStrategy::Off
+        && node_ascent_sibling_warm_weight_ > 0.0
         && sibling_warm_potential_.size() == static_cast<std::size_t>(n_)) {
+        const std::vector<double> parent_potentials = potentials;
         const double parent_weight = 1.0 - node_ascent_sibling_warm_weight_;
         bool finite_warm_start = true;
         for (std::size_t index = 0; index < potentials.size(); ++index) {
@@ -1559,13 +1607,38 @@ BranchBoundSolver::updateNodePotentialBound(
         // 极端势值的线性组合仍可能溢出；此时退回父 epoch 势，不让一个
         // 仅用于加速的 warm start 改变节点可行性判断。
         if (!finite_warm_start) {
-            potentials = result.potentials;
+            potentials = parent_potentials;
+        } else if (sibling_warm_start_strategy_
+                   == SiblingWarmStartStrategy::Guarded) {
+            // 父势在 current_bound 中已有当前约束图上的有效证书。只额外
+            // 评估一次混合兄弟势，并在严格改善该证书时采用；否则回退父势。
+            // 这次验证也属于实际 1-tree 工作量，因此计入 iterations。
+            result.sibling_warm_probed = true;
+            const Evaluation warm_evaluation = evaluate(potentials);
+            ++result.iterations;
+            const double tolerance = warm_evaluation.feasible
+                ? scaledRoundoffTolerance(
+                    warm_evaluation.bound, current_bound,
+                    static_cast<std::size_t>(n_))
+                : 0.0;
+            if (warm_evaluation.feasible
+                && warm_evaluation.bound > current_bound + tolerance) {
+                result.sibling_warm_accepted = true;
+                result.bound = warm_evaluation.bound;
+                result.potentials = potentials;
+                guarded_initial_evaluation = warm_evaluation;
+                reuse_guarded_initial_evaluation = true;
+            } else {
+                result.sibling_warm_rejected = true;
+                potentials = parent_potentials;
+            }
         }
     }
     auto remember_sibling_warm_start = [&]() {
         // 约束图不可行或更新溢出时不覆盖上一组有效 warm start。缓存只影响
         // 后续迭代初值，即使保留旧值也不会直接参与剪枝。
-        if (node_ascent_sibling_warm_weight_ <= 0.0 || !result.feasible
+        if (sibling_warm_start_strategy_ == SiblingWarmStartStrategy::Off
+            || node_ascent_sibling_warm_weight_ <= 0.0 || !result.feasible
             || !std::all_of(
                 potentials.begin(), potentials.end(),
                 [](double value) { return isFinite(value); })) {
@@ -1618,8 +1691,14 @@ BranchBoundSolver::updateNodePotentialBound(
              iteration < max_iterations && period > 0
                  && step > 0.0 && isFinite(step);
              ++iteration) {
-            const Evaluation evaluation = evaluate(potentials);
-            ++result.iterations;
+            Evaluation evaluation;
+            if (reuse_guarded_initial_evaluation) {
+                evaluation = std::move(guarded_initial_evaluation);
+                reuse_guarded_initial_evaluation = false;
+            } else {
+                evaluation = evaluate(potentials);
+                ++result.iterations;
+            }
             if (!evaluation.feasible) {
                 result.feasible = false;
                 break;
@@ -1717,8 +1796,14 @@ BranchBoundSolver::updateNodePotentialBound(
     double step_scale = 2.0;
     std::size_t no_improvement = 0;
     for (std::size_t iteration = 0; iteration < max_iterations; ++iteration) {
-        const Evaluation evaluation = evaluate(potentials);
-        ++result.iterations;
+        Evaluation evaluation;
+        if (reuse_guarded_initial_evaluation) {
+            evaluation = std::move(guarded_initial_evaluation);
+            reuse_guarded_initial_evaluation = false;
+        } else {
+            evaluation = evaluate(potentials);
+            ++result.iterations;
+        }
         if (!evaluation.feasible) {
             result.feasible = false;
             break;
@@ -1978,6 +2063,15 @@ bool BranchBoundSolver::searchSubtreeWithUpdatedPotentials(
     if (update.probe_rejected) {
         ++result_.stats.potential_update_probes_rejected;
     }
+    if (update.sibling_warm_probed) {
+        ++result_.stats.sibling_warm_probes;
+    }
+    if (update.sibling_warm_accepted) {
+        ++result_.stats.sibling_warm_accepted;
+    }
+    if (update.sibling_warm_rejected) {
+        ++result_.stats.sibling_warm_rejected;
+    }
     result_.stats.potential_update_seconds += std::chrono::duration<double>(
         std::chrono::steady_clock::now() - update_started_at).count();
 
@@ -2136,13 +2230,16 @@ SolveResult BranchBoundSolver::solve()
     best_tour_.clear();
     initial_tour_alternatives_.clear();
     diversified_tour_attempted_ = false;
+    adaptive_initial_clk_attempted_ = false;
     restart_search_requested_ = false;
+    replacement_seconds_ = 0.0;
     candidate_undo_.clear();
     tree_undo_.clear();
     tree_snapshot_undo_.clear();
     writeDebugLine(debug_, "exact solve started: vertices=" + std::to_string(n_));
 
     // 先用启发式得到一个上界。
+    const auto initial_tour_started = std::chrono::steady_clock::now();
     bool has_initial_tour = findInitialTour(
         best_tour_, best_cost_, initial_tour_alternatives_);
     if (!supplied_initial_tour_.empty()) {
@@ -2164,6 +2261,14 @@ SolveResult BranchBoundSolver::solve()
         result_.stats.initial_upper_bound = std::numeric_limits<double>::infinity();
         writeDebugLine(debug_, "initial incumbent: unavailable");
     }
+    result_.stats.initial_tour_seconds += std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - initial_tour_started).count();
+    writeDebugLine(
+        debug_,
+        "initial tour timing: seconds="
+            + formatDebugDouble(result_.stats.initial_tour_seconds)
+            + " clk_starts="
+            + std::to_string(result_.stats.initial_clk_starts));
     // 自适应多启动 LK 若在探测搜索后改善 incumbent，会完整回退当前
     // DFS，再用更紧上界重新优化根势并重启。subtree 模式在单轮内部还可
     // 创建局部势 epoch，但每个 epoch 都在退出其子树时完整恢复。
@@ -2269,12 +2374,90 @@ SolveResult BranchBoundSolver::solve()
             result_.feasible = false;
             result_.cost = std::numeric_limits<double>::infinity();
             result_.stats.root_lower_bound = std::numeric_limits<double>::infinity();
+            result_.stats.replacement_seconds = replacement_seconds_;
             writeDebugLine(debug_, "root 1-tree infeasible; exact solve stopped");
             return result_;
         }
         result_.stats.root_lower_bound = root_tree.cost;
         root.bound = root_tree.cost;
         ++result_.stats.nodes_created;
+        writeDebugLine(
+            debug_,
+            "root certificate: lower_bound="
+                + formatDebugDouble(root_tree.cost)
+                + " best=" + formatDebugDouble(best_cost_)
+                + " created="
+                + std::to_string(result_.stats.nodes_created)
+                + " expanded="
+                + std::to_string(result_.stats.nodes_expanded)
+                + " initial_tour_seconds="
+                + formatDebugDouble(result_.stats.initial_tour_seconds)
+                + " root_ascent_seconds="
+                + formatDebugDouble(result_.stats.root_ascent_seconds));
+
+        // Adaptive 先用单起点 CLK 得到 UB 和首个根证书；gap 足够大才追加
+        // 多起点 CLK。若 UB 改善，必须重新优化根势，因为 Polyak 步长依赖 UB。
+        if (initial_clk_strategy_ == InitialClkStrategy::Adaptive
+            && !adaptive_initial_clk_attempted_
+            && adaptive_clk_additional_starts_ != 0
+            && !initial_tour_alternatives_.empty()
+            && isFinite(best_cost_) && isFinite(root_tree.cost)
+            && !shouldPrune(root_tree.cost, best_cost_)) {
+            const double gap = std::max(0.0, best_cost_ - root_tree.cost);
+            const double relative_gap = gap
+                / std::max(1.0, std::fabs(best_cost_));
+            if (relative_gap >= adaptive_clk_gap_ratio_) {
+                adaptive_initial_clk_attempted_ = true;
+                ++result_.stats.adaptive_clk_triggers;
+                const double old_cost = best_cost_;
+                const std::size_t old_clk_starts =
+                    result_.stats.initial_clk_starts;
+                const auto adaptive_clk_started =
+                    std::chrono::steady_clock::now();
+                const bool improved = improveInitialTourDiversified(
+                    initial_tour_alternatives_, root_tree.cost,
+                    best_tour_, best_cost_, adaptive_clk_additional_starts_);
+                result_.stats.initial_tour_seconds +=
+                    std::chrono::duration<double>(
+                        std::chrono::steady_clock::now()
+                            - adaptive_clk_started).count();
+                const std::size_t starts_run =
+                    result_.stats.initial_clk_starts - old_clk_starts;
+                initial_tour_alternatives_.erase(
+                    initial_tour_alternatives_.begin(),
+                    initial_tour_alternatives_.begin()
+                        + static_cast<std::ptrdiff_t>(std::min(
+                            starts_run,
+                            initial_tour_alternatives_.size())));
+                if (improved) {
+                    const double recomputed_cost = tourCost(best_tour_);
+                    if (recomputed_cost < old_cost) {
+                        best_cost_ = recomputed_cost;
+                        result_.stats.initial_upper_bound = best_cost_;
+                        ++result_.stats.adaptive_clk_improvements;
+                        rememberCandidateHintTour(best_tour_);
+                        writeDebugLine(
+                            debug_,
+                            "adaptive CLK improved: cost="
+                                + formatDebugDouble(best_cost_)
+                                + " previous="
+                                + formatDebugDouble(old_cost)
+                                + " relative_gap="
+                                + formatDebugDouble(relative_gap)
+                                + " starts="
+                                + std::to_string(starts_run));
+                        continue;
+                    }
+                }
+                writeDebugLine(
+                    debug_,
+                    "adaptive CLK retained incumbent: cost="
+                        + formatDebugDouble(best_cost_)
+                        + " relative_gap="
+                        + formatDebugDouble(relative_gap)
+                        + " starts=" + std::to_string(starts_run));
+            }
+        }
         if (root_bound_only_) {
             result_.feasible = isFinite(best_cost_) && !best_tour_.empty();
             result_.cost = result_.feasible
@@ -2285,6 +2468,7 @@ SolveResult BranchBoundSolver::solve()
                 "root-bound-only finished: lower_bound="
                     + formatDebugDouble(root.bound)
                     + " upper_bound=" + formatDebugDouble(best_cost_));
+            result_.stats.replacement_seconds = replacement_seconds_;
             return result_;
         }
         if (branch_edge_order_ == BranchEdgeOrder::RootAlphaAscending
@@ -2336,6 +2520,17 @@ SolveResult BranchBoundSolver::solve()
         {
             std::ostringstream line;
             line << "root: lower_bound=" << formatDebugDouble(root.bound)
+                 << " best=" << formatDebugDouble(best_cost_)
+                 << " created=" << result_.stats.nodes_created
+                 << " expanded=" << result_.stats.nodes_expanded
+                 << " initial_tour_seconds="
+                 << formatDebugDouble(result_.stats.initial_tour_seconds)
+                 << " root_ascent_seconds="
+                 << formatDebugDouble(result_.stats.root_ascent_seconds)
+                 << " root_fixing_seconds="
+                 << formatDebugDouble(result_.stats.root_fixing_seconds)
+                 << " replacement_seconds="
+                 << formatDebugDouble(replacement_seconds_)
                  << " search=bp-chain";
             writeDebugLine(debug_, line.str());
         }
@@ -2373,6 +2568,7 @@ SolveResult BranchBoundSolver::solve()
         result_.feasible = false;
         result_.cost = std::numeric_limits<double>::infinity();
     }
+    result_.stats.replacement_seconds = replacement_seconds_;
     {
         std::ostringstream line;
         line << "exact solve finished: feasible=" << (result_.feasible ? "yes" : "no")
@@ -2441,7 +2637,19 @@ SolveResult BranchBoundSolver::solve()
              << formatDebugDouble(result_.stats.potential_update_seconds)
              << " potential_rebuild_seconds="
              << formatDebugDouble(
-                    result_.stats.potential_update_rebuild_seconds);
+                    result_.stats.potential_update_rebuild_seconds)
+             << " initial_tour_seconds="
+             << formatDebugDouble(result_.stats.initial_tour_seconds)
+             << " root_ascent_seconds="
+             << formatDebugDouble(result_.stats.root_ascent_seconds)
+             << " replacement_seconds="
+             << formatDebugDouble(result_.stats.replacement_seconds)
+             << " sibling_warm_probes="
+             << result_.stats.sibling_warm_probes
+             << " sibling_warm_accepted="
+             << result_.stats.sibling_warm_accepted
+             << " sibling_warm_rejected="
+             << result_.stats.sibling_warm_rejected;
         writeDebugLine(debug_, line.str());
     }
     return result_;
@@ -3381,7 +3589,7 @@ void BranchBoundSolver::search(
 
     // 调试输出。
     const std::size_t debug_interval = normalizedDebugInterval(debug_);
-    if (count_node && debug_.output != nullptr
+        if (count_node && debug_.output != nullptr
         && result_.stats.nodes_expanded % debug_interval == 0) {
         std::ostringstream line;
         line << "progress: expanded=" << result_.stats.nodes_expanded
@@ -3390,7 +3598,14 @@ void BranchBoundSolver::search(
              << " bound=" << formatDebugDouble(node.bound)
              << " best=" << formatDebugDouble(best_cost_)
              << " pruned_bound=" << result_.stats.nodes_pruned_by_bound
-             << " pruned_infeasible=" << result_.stats.nodes_pruned_infeasible;
+             << " pruned_infeasible=" << result_.stats.nodes_pruned_infeasible
+             << " potential_seconds="
+             << formatDebugDouble(result_.stats.potential_update_seconds)
+             << " potential_rebuild_seconds="
+             << formatDebugDouble(
+                    result_.stats.potential_update_rebuild_seconds)
+             << " replacement_seconds="
+             << formatDebugDouble(replacement_seconds_);
         writeDebugLine(debug_, line.str());
     }
 
@@ -4145,6 +4360,7 @@ const BranchBoundSolver::Edge* BranchBoundSolver::findMstReplacement(
     const PartialSol& node, const std::vector<Edge>& branch_candidates,
     const OneTree& tree, const Edge& removed_edge) const
 {
+    ScopedSeconds replacement_timer(replacement_seconds_);
     if (!markMstComponentWithoutEdge(tree, removed_edge)) {
         throw std::logic_error("dynamic MST state is missing or inconsistent");
     }
@@ -5708,6 +5924,7 @@ void BranchBoundSolver::maybeImproveIncumbentDiversified()
     diversified_tour_attempted_ = true;
     const double old_cost = best_cost_;
     std::vector<int> old_tour = best_tour_;
+    const auto diversified_started = std::chrono::steady_clock::now();
     if (improveInitialTourDiversified(
             initial_tour_alternatives_, result_.stats.root_lower_bound,
             best_tour_, best_cost_)) {
@@ -5727,6 +5944,8 @@ void BranchBoundSolver::maybeImproveIncumbentDiversified()
             best_tour_ = std::move(old_tour);
         }
     }
+    result_.stats.initial_tour_seconds += std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - diversified_started).count();
     initial_tour_alternatives_.clear();
 }
 
@@ -5756,3 +5975,5 @@ double BranchBoundSolver::tourCost(const std::vector<int>& tour) const
 #include "TspHeuristicSolver.ipp"
 
 } // namespace tsp
+
+#undef TSP_SOLVER_IMPLEMENTATION_CONTEXT

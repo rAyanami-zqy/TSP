@@ -1,3 +1,9 @@
+#ifndef TSP_SOLVER_IMPLEMENTATION_CONTEXT
+// 该文件只应由 TspSolver.cpp 拼接。编辑器单独打开时加载完整上下文，
+// 正常构建仍只产生一个求解器翻译单元。
+#include "TspSolver.cpp"
+#else
+
 // 输入文本规范化与基础数值转换，仅供问题解析模块使用。
 std::string trimCopy(const std::string& text)
 {
@@ -37,3 +43,5 @@ int roundedDistance(double value)
 {
     return static_cast<int>(std::floor(value + 0.5));
 }
+
+#endif // TSP_SOLVER_IMPLEMENTATION_CONTEXT

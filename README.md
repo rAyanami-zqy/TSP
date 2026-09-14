@@ -376,7 +376,8 @@ Polyak；`--hk-node-ascent` 还支持 `helsgaun`、`polyak-smoothed` 和
 停止条件，只分别换成固定与余弦动态平滑方向。触发机制及 epoch 生命周期保持
 不变。启用搜索节点势更新时，永远重建所有依赖势的排序和增量状态，使新势在
 整个锚点子树中持续生效，回溯到兄弟节点时恢复。节点上升另以 0.25 权重
-阻尼复用最近兄弟节点的最终势；它只提供下一次上升初值，不直接作为证书。
+阻尼复用最近兄弟节点的最终势；默认 `guarded` 模式先在当前约束图上评估
+混合势，仅当其下界严格强于父势已有证书时采用。
 
 ```bash
 # 推荐配置：距上次更新至少 2 层，且节点 gap 不超过 2%
@@ -386,8 +387,18 @@ Polyak；`--hk-node-ascent` 还支持 `helsgaun`、`polyak-smoothed` 和
   --hk-update-iterations 16 --hk-update-budget 5000 input.tsp
 
 # 关闭跨兄弟节点的势 warm start，复现原始父 epoch 起点
-./build/tsp_bb --hk-sibling-warm-weight 0 \
+./build/tsp_bb --hk-sibling-warm-start off \
   --hk-potential-update subtree-adaptive input.tsp
+
+# 复现此前不做准入验证、直接使用混合势的行为
+./build/tsp_bb --hk-sibling-warm-start blend \
+  --hk-sibling-warm-weight 0.25 \
+  --hk-potential-update subtree-adaptive input.tsp
+
+# 初始 CLK：先跑一个起点，根相对 gap 至少 2% 时再追加最多两个起点
+./build/tsp_bb --initial-clk adaptive \
+  --adaptive-clk-gap-ratio 0.02 \
+  --adaptive-clk-additional-starts 2 input.tsp
 
 # 同一触发配置下对照节点 Helsgaun 调度
 ./build/tsp_bb --hk-node-ascent helsgaun \
@@ -443,9 +454,15 @@ Polyak；`--hk-node-ascent` 还支持 `helsgaun`、`polyak-smoothed` 和
 - 节点平滑参数与根平滑参数相互独立。默认基准权重为 `0.7`、动态余弦缩放
   为 `0.2`、动态范围为 `0.5--0.9`；三个权重必须满足
   `0 <= 最小值 <= 基准值 <= 最大值 <= 1`，余弦缩放必须非负；
-- `--hk-sibling-warm-weight` 控制最近节点势注入父 epoch 势的比例，默认
+- `--hk-sibling-warm-start` 支持 `off|blend|guarded`，默认 `guarded`；
+  `--hk-sibling-warm-weight` 控制最近节点势注入父 epoch 势的比例，默认
   `0.25`，范围 `[0,1]`，设为 `0` 可完全关闭。无论取值如何，每个节点仍会
-  重新计算受约束 1-tree 后才接受下界；
+  重新计算受约束 1-tree 后才接受下界。Guarded 接受的验证评估直接复用于
+  首轮上升；拒绝时该验证是配置迭代上限之外的一次额外评估；
+- `--initial-clk` 支持 `single|triple|adaptive`，默认 `adaptive`。Adaptive
+  首先只运行一个 CLK；首个根 1-tree 的相对 gap 达到
+  `--adaptive-clk-gap-ratio` 后，最多追加
+  `--adaptive-clk-additional-starts` 个不同起点；若 UB 改善则重新运行根势上升；
 - `--hk-update-min-gap-ratio` 与 `--hk-update-gap-ratio` 分别是
   `subtree-adaptive` 触发区间的下限和上限，默认下限为 0。`subtree-*` 中
   `--hk-update-depth` 是两次成功安装 epoch 的最小层距；达到层距后，后续
@@ -493,10 +510,12 @@ Polyak；`--hk-node-ascent` 还支持 `helsgaun`、`polyak-smoothed` 和
 
 ```text
 instance,status,method,dimension,cost,root_lower_bound,initial_upper_bound,
+final_upper_bound,final_lower_bound,final_relative_gap,
+initial_tour_seconds,initial_clk_starts,adaptive_clk_triggers,adaptive_clk_improvements,
 root_fixing_calls,root_fixing_tested,root_fixing_fixed_zero,
 root_fixing_tree_tested,root_fixing_fixed_one,root_fixing_active_after,
 root_fixing_seconds,
-root_potential_iterations,
+root_potential_iterations,root_ascent_seconds,
 instance_wall_seconds,nodes_created,nodes_expanded,pruned_by_bound,pruned_infeasible,
 search_node_potential_update_candidates,search_node_potential_updates_triggered,
 search_node_potential_updates_skipped_strategy_none,
@@ -515,12 +534,17 @@ potential_updates_large_gap_tier,
 search_node_potential_iterations,potential_update_seconds,
 potential_update_rebuild_seconds,potential_update_total_gain,
 potential_update_max_gain,potential_update_probes_started,
-potential_update_probes_continued,potential_update_probes_rejected,tour,message
+potential_update_probes_continued,potential_update_probes_rejected,
+sibling_warm_probes,sibling_warm_accepted,sibling_warm_rejected,
+replacement_seconds,tour,message
 ```
 
 `status=ok,method=exact` 表示精确求解得到最优 tour；精确搜索证实无解时为 `status=infeasible`。每个实例的 debug 信息仍只写到标准错误。
 `instance_wall_seconds` 单独计量每个实例从解析输入到 `solve()` 返回的墙钟时间；
 它不包含批处理进程启动和 CSV 输出时间。
+`replacement_seconds` 是 root fixing、BP 和候选删除内部 replacement 查询的
+子阶段，可能与其他阶段计时重叠。外部消融运行器在超时时还会从已刷新 debug
+快照保留最终已知 UB、根全局 LB、相对 gap、created/expanded 节点数和阶段耗时。
 
 后续验证经典数据集时，可以把矩阵或 TSPLIB 实例路径写入一个清单文件：
 

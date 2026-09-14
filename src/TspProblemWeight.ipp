@@ -1,3 +1,7 @@
+#ifndef TSP_SOLVER_IMPLEMENTATION_CONTEXT
+#include "TspSolver.cpp"
+#else
+
 // 显式距离矩阵的单个权值解析，仅供问题解析模块使用。
 // 解析一个距离矩阵元素，支持数字、INF、-、X 等表示缺边的写法。
 double parseWeight(const std::string& token)
@@ -21,3 +25,5 @@ double parseWeight(const std::string& token)
     }
     return value;
 }
+
+#endif // TSP_SOLVER_IMPLEMENTATION_CONTEXT

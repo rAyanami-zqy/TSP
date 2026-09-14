@@ -1,3 +1,7 @@
+#ifndef TSP_SOLVER_IMPLEMENTATION_CONTEXT
+#include "TspSolver.cpp"
+#else
+
 // TSP/TSPLIB 输入识别与解析。该实现片段由 TspSolver.cpp 包含，
 // 不作为独立翻译单元编译，以保持重构前的代码生成方式。
 namespace {
@@ -282,3 +286,5 @@ std::vector<std::vector<double>> readDistanceMatrix(std::istream& input)
     }
     return distance;
 }
+
+#endif // TSP_SOLVER_IMPLEMENTATION_CONTEXT

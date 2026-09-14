@@ -1,4 +1,15 @@
 CompileFlags:
+  CompilationDatabase: build
   Add:
     - -Iinclude
     - -std=c++17
+
+---
+If:
+  PathMatch: .*\.ipp
+Diagnostics:
+  # .ipp 在编辑器中会加载 TspSolver.cpp 来取得其真实拼接上下文。Clang
+  # 编译器接受这条受宏保护的有限包含；clangd 构建 preamble 时会额外给出
+  # 一条专属提示，因此只屏蔽该提示，不屏蔽任何 C++ 语义或语法诊断。
+  Suppress:
+    - pp_including_mainfile_in_preamble

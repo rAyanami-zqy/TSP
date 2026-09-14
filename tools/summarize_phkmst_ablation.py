@@ -9,6 +9,8 @@ depending on a hard-coded list of strategy names or statistics.
 The generated analysis contains:
 
 * ``configurations.csv``: every discovered run and its flattened options;
+* ``run_summary.csv``: solved count, PAR2 and geometric means per run;
+* ``performance_profile.csv``: Dolan–Moré wall-time profile points;
 * ``instance_details.csv``: one aggregated row per run and instance;
 * ``pairwise_summary.csv``: long-form metrics for every comparison;
 * ``逐实例组合表/*.csv``: full per-instance data for each comparison;
@@ -48,8 +50,13 @@ SKIPPED_REASON_PREFIX = "search_node_potential_updates_skipped_"
 SKIPPED_TOTAL_FIELD = "search_node_potential_updates_skipped_total"
 PREFERRED_METRICS = (
     "wall_seconds",
+    "final_upper_bound",
+    "final_lower_bound",
+    "final_relative_gap",
     "branches",
     "nodes_expanded",
+    "initial_tour_seconds",
+    "root_ascent_seconds",
     "pruned_by_bound",
     "pruned_infeasible",
     "root_fixing_calls",
@@ -59,6 +66,9 @@ PREFERRED_METRICS = (
     "root_fixing_fixed_one",
     "root_fixing_active_after",
     "root_fixing_seconds",
+    "potential_update_seconds",
+    "potential_update_rebuild_seconds",
+    "replacement_seconds",
     "root_potential_iterations",
     "search_node_potential_update_candidates",
     "search_node_potential_updates_triggered",
@@ -68,10 +78,21 @@ PREFERRED_METRICS = (
 DEFAULT_HTML_METRICS = (
     "wall_seconds",
     "branches",
+    "initial_tour_seconds",
+    "root_ascent_seconds",
+    "root_fixing_seconds",
+    "potential_update_seconds",
+    "potential_update_rebuild_seconds",
+    "replacement_seconds",
     SKIPPED_TOTAL_FIELD,
 )
 METRIC_LABELS = {
     "wall_seconds": "运行时间",
+    "root_lower_bound": "根下界",
+    "initial_upper_bound": "初始上界",
+    "final_upper_bound": "最终上界",
+    "final_lower_bound": "最终下界",
+    "final_relative_gap": "最终相对 gap",
     "branches": "分支创建数",
     "nodes_expanded": "展开节点数",
     "pruned_by_bound": "下界剪枝数",
@@ -83,11 +104,22 @@ METRIC_LABELS = {
     "root_fixing_fixed_one": "根 fixing 固定为 1",
     "root_fixing_active_after": "根 fixing 后 active 边数",
     "root_fixing_seconds": "根 fixing 耗时",
+    "initial_tour_seconds": "初始/自适应 CLK 耗时",
+    "initial_clk_starts": "CLK 起点数",
+    "adaptive_clk_triggers": "自适应 CLK 触发数",
+    "adaptive_clk_improvements": "自适应 CLK 改善数",
     "root_potential_iterations": "根势迭代数",
+    "root_ascent_seconds": "根势上升耗时",
     "search_node_potential_update_candidates": "节点势更新候选数",
     "search_node_potential_updates_triggered": "节点势更新触发数",
     SKIPPED_TOTAL_FIELD: "节点势更新跳过总数",
     "search_node_potential_iterations": "节点势迭代数",
+    "potential_update_seconds": "节点势更新耗时",
+    "potential_update_rebuild_seconds": "势 epoch 重建耗时",
+    "sibling_warm_probes": "guarded warm 探测数",
+    "sibling_warm_accepted": "guarded warm 接受数",
+    "sibling_warm_rejected": "guarded warm 拒绝数",
+    "replacement_seconds": "replacement 查询耗时",
     "search_node_potential_updates_skipped_strategy_none": "跳过：策略关闭",
     "search_node_potential_updates_skipped_update_depth_zero": "跳过：更新深度为零",
     "search_node_potential_updates_skipped_budget_exhausted": "跳过：预算耗尽",
@@ -318,8 +350,9 @@ def aggregate_instance(
     numeric: dict[str, float | None] = {}
     for field in numeric_fields:
         source_rows = successful
-        # A timeout still has a useful externally measured wall time.
-        if field == "wall_seconds" and not source_rows:
+        # 全部重复均超时/失败时，仍保留最后一次已刷新出的 UB/LB、节点数和
+        # 阶段时间；这些字段只用于诊断，不会进入共同成功集的成对性能统计。
+        if not source_rows:
             source_rows = list(rows)
         numeric[field] = median(finite_float(row.get(field)) for row in source_rows)
 
@@ -830,7 +863,7 @@ def ordered_pair_instances(
 
 
 def instance_metric(item: InstanceResult | None, metric: str) -> float | None:
-    if item is None or item.status != "ok":
+    if item is None:
         return None
     return item.numeric.get(metric)
 
@@ -841,6 +874,8 @@ def comparable_change(
     metric: str,
 ) -> float | None:
     """Return a change only when both participating runs completed successfully."""
+    if left is None or right is None or left.status != "ok" or right.status != "ok":
+        return None
     return relative_change(instance_metric(left, metric), instance_metric(right, metric))
 
 
@@ -947,6 +982,170 @@ def iteration_comparison_verdict(comparison: Comparison) -> str | None:
 
 def all_metrics(runs: Sequence[Run]) -> list[str]:
     return metric_order(field for run in runs for field in run.numeric_fields)
+
+
+def benchmark_instance_names(runs: Sequence[Run]) -> list[str]:
+    return sorted({name for run in runs for name in run.instances})
+
+
+def geometric_mean(values: Iterable[float]) -> float | None:
+    positive = [value for value in values if value > 0.0 and math.isfinite(value)]
+    if not positive:
+        return None
+    return math.exp(sum(math.log(value) for value in positive) / len(positive))
+
+
+def run_performance_rows(runs: Sequence[Run]) -> list[dict[str, Any]]:
+    """Compute solved count, PAR2 and geometric means on one shared universe."""
+
+    names = benchmark_instance_names(runs)
+    rows: list[dict[str, Any]] = []
+    for run in runs:
+        solved_times: list[float] = []
+        penalized_times: list[float] = []
+        timeout = run.timeout_seconds
+        for name in names:
+            item = run.instances.get(name)
+            wall = instance_metric(item, "wall_seconds")
+            if item is not None and item.status == "ok" and wall is not None:
+                solved_times.append(wall)
+                penalized_times.append(wall)
+            elif timeout is not None:
+                penalized_times.append(2.0 * timeout)
+        solved_count = len(solved_times)
+        rows.append({
+            "run_id": run.run_id,
+            "strategy": run.strategy,
+            "label": run.label,
+            "benchmark_instances": len(names),
+            "solved_count": solved_count,
+            "solved_fraction": (
+                solved_count / len(names) if names else None),
+            "timeout_seconds": timeout,
+            "par2_seconds": (
+                sum(penalized_times) / len(names)
+                if names and len(penalized_times) == len(names) else None),
+            "geometric_mean_solved_seconds": geometric_mean(solved_times),
+            "penalized_geometric_mean_seconds": (
+                geometric_mean(penalized_times)
+                if len(penalized_times) == len(names) else None),
+        })
+    return rows
+
+
+def performance_profile_rows(
+    runs: Sequence[Run], max_tau: float = 100.0,
+) -> list[dict[str, Any]]:
+    """Dolan–Moré wall-time profile; unsolved rows have infinite ratio."""
+
+    names = benchmark_instance_names(runs)
+    ratios: dict[str, dict[str, float]] = {run.run_id: {} for run in runs}
+    finite_breaks = {
+        value for value in (1.0, 1.05, 1.1, 1.2, 1.5, 2.0, 3.0,
+                            5.0, 10.0, 20.0, 50.0, max_tau)
+        if value <= max_tau
+    }
+    for name in names:
+        successful: list[tuple[Run, float]] = []
+        for run in runs:
+            item = run.instances.get(name)
+            wall = instance_metric(item, "wall_seconds")
+            if item is not None and item.status == "ok" and wall is not None:
+                successful.append((run, max(wall, 1e-12)))
+        if not successful:
+            continue
+        best = min(wall for _, wall in successful)
+        for run, wall in successful:
+            ratio = max(1.0, wall / best)
+            ratios[run.run_id][name] = ratio
+            if ratio <= max_tau:
+                finite_breaks.add(ratio)
+
+    taus = sorted(finite_breaks)
+    denominator = len(names)
+    rows: list[dict[str, Any]] = []
+    for tau in taus:
+        row: dict[str, Any] = {"tau": tau}
+        for run in runs:
+            row[run.label] = (
+                sum(value <= tau for value in ratios[run.run_id].values())
+                / denominator if denominator else 0.0)
+        rows.append(row)
+    return rows
+
+
+def performance_profile_svg(
+    runs: Sequence[Run], rows: Sequence[dict[str, Any]],
+    width: int = 980, height: int = 480,
+) -> str:
+    if not rows or not runs:
+        return '<p class="muted">没有足够数据生成性能剖面。</p>'
+    left, right, top, bottom = 64, 22, 24, 100
+    plot_width = width - left - right
+    plot_height = height - top - bottom
+    max_tau = max(float(row["tau"]) for row in rows)
+    log_max = math.log(max_tau) if max_tau > 1.0 else 1.0
+
+    def x_for(tau: float) -> float:
+        return left + math.log(max(1.0, tau)) / log_max * plot_width
+
+    def y_for(fraction: float) -> float:
+        return top + (1.0 - fraction) * plot_height
+
+    colors = (
+        "#245b9e", "#c05621", "#2f855a", "#805ad5", "#b83280",
+        "#2b6cb0", "#975a16", "#276749", "#553c9a", "#9b2c2c",
+    )
+    strategy_counts = Counter(run.strategy for run in runs)
+    pieces = [
+        f'<svg class="performance-profile" viewBox="0 0 {width} {height}" '
+        'role="img" aria-label="Dolan–Moré wall-time performance profile">',
+        f'<line x1="{left}" y1="{top}" x2="{left}" y2="{top + plot_height}" class="axis"/>',
+        f'<line x1="{left}" y1="{top + plot_height}" x2="{left + plot_width}" y2="{top + plot_height}" class="axis"/>',
+    ]
+    for fraction in (0.0, 0.25, 0.5, 0.75, 1.0):
+        y = y_for(fraction)
+        pieces.append(
+            f'<line x1="{left}" y1="{y:.2f}" x2="{left + plot_width}" y2="{y:.2f}" class="grid"/>'
+            f'<text x="{left - 10}" y="{y + 4:.2f}" text-anchor="end">{fraction:.0%}</text>')
+    for tau in (1, 2, 5, 10, 20, 50, 100):
+        if tau > max_tau:
+            continue
+        x = x_for(float(tau))
+        pieces.append(
+            f'<line x1="{x:.2f}" y1="{top}" x2="{x:.2f}" y2="{top + plot_height}" class="grid"/>'
+            f'<text x="{x:.2f}" y="{top + plot_height + 22}" text-anchor="middle">{tau:g}×</text>')
+
+    for index, run in enumerate(runs):
+        color = colors[index % len(colors)]
+        points = [(float(row["tau"]), float(row[run.label])) for row in rows]
+        commands = [f'M {x_for(points[0][0]):.2f} {y_for(points[0][1]):.2f}']
+        previous_fraction = points[0][1]
+        for tau, fraction in points[1:]:
+            x = x_for(tau)
+            commands.append(f'H {x:.2f}')
+            if fraction != previous_fraction:
+                commands.append(f'V {y_for(fraction):.2f}')
+            previous_fraction = fraction
+        pieces.append(
+            f'<path d="{" ".join(commands)}" fill="none" stroke="{color}" '
+            'stroke-width="2.2"/>')
+        legend_x = left + (index % 3) * 285
+        legend_y = height - 42 + (index // 3) * 16
+        legend_label = (
+            run.strategy if strategy_counts[run.strategy] == 1
+            else f"{run.strategy} [{run.run_id.rsplit('-', 1)[-1]}]"
+        )
+        pieces.append(
+            f'<line x1="{legend_x}" y1="{legend_y}" x2="{legend_x + 22}" y2="{legend_y}" '
+            f'stroke="{color}" stroke-width="3"/>'
+            f'<text x="{legend_x + 28}" y="{legend_y + 4}">{html.escape(legend_label)}</text>')
+    pieces.extend([
+        f'<text x="{left + plot_width / 2:.2f}" y="{height - 72}" text-anchor="middle">相对最快配置的时间比 τ（对数轴）</text>',
+        f'<text transform="translate(18 {top + plot_height / 2:.2f}) rotate(-90)" text-anchor="middle">在 τ 内完成的实例比例</text>',
+        '</svg>',
+    ])
+    return "".join(pieces)
 
 
 def configuration_rows(runs: Sequence[Run]) -> tuple[list[str], list[dict[str, Any]]]:
@@ -1117,6 +1316,10 @@ def format_metric(metric: str, value: float | None) -> str:
         return "—"
     if metric == "wall_seconds":
         return f"{value * 1000:,.3f} ms" if value < 1 else f"{value:,.3f} s"
+    if metric == "final_relative_gap":
+        return f"{value:.3%}"
+    if metric.endswith("_seconds"):
+        return f"{value * 1000:,.3f} ms" if value < 1 else f"{value:,.3f} s"
     return format_number(value)
 
 
@@ -1179,6 +1382,8 @@ def markdown_report(
     reference: Run | None,
     warnings: Sequence[str],
 ) -> str:
+    performance = {row["run_id"]: row for row in run_performance_rows(runs)}
+    profile = performance_profile_rows(runs)
     lines = [
         "# PHKMST 消融实验汇总",
         "",
@@ -1191,15 +1396,20 @@ def markdown_report(
     lines.extend([
         "## 运行概览",
         "",
-        "| 配置 | run_id | 类型 | 已载入实例 | 成功 | 超时 | 错误/混合/部分 | 重复数 |",
-        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |",
+        "| 配置 | run_id | 类型 | Solved count | PAR2 | 成功集几何平均 | 惩罚几何平均 | 超时 | 其他 |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ])
     for run in runs:
         statuses = Counter(item.status for item in run.instances.values())
         other = sum(statuses[name] for name in ("error", "mixed", "partial"))
+        perf = performance[run.run_id]
         lines.append(
-            f"| {run.label} | `{run.run_id}` | {run.kind or '—'} | {len(run.instances)} | "
-            f"{statuses['ok']} | {statuses['timeout']} | {other} | {run.repeats} |"
+            f"| {run.label} | `{run.run_id}` | {run.kind or '—'} | "
+            f"{perf['solved_count']}/{perf['benchmark_instances']} | "
+            f"{format_metric('wall_seconds', perf['par2_seconds'])} | "
+            f"{format_metric('wall_seconds', perf['geometric_mean_solved_seconds'])} | "
+            f"{format_metric('wall_seconds', perf['penalized_geometric_mean_seconds'])} | "
+            f"{statuses['timeout']} | {other} |"
         )
     lines.extend(["", "## 自动化口径", ""])
     if all(run.repeats == 1 for run in runs):
@@ -1214,11 +1424,31 @@ def markdown_report(
         "- 右侧相对变化采用 `右侧总量/左侧总量-1`；负数表示右侧减少，正数表示右侧增加。",
         "- 下降/持平/上升按每个共同成功实例的原始单次观测计数。",
         "- 新增的数值型 results.csv 列会自动进入明细和成对汇总 CSV，无需修改本脚本。",
+        "- PAR2 在统一实例全集上计算：成功使用实际墙钟时间，超时、错误、部分完成或缺失使用 `2 × 该配置 timeout`；惩罚几何平均使用同一组 PAR2 样本。成功集几何平均只使用成功实例。",
+        "- 性能剖面使用 Dolan–Moré 时间比：每个实例以所有成功配置中的最快时间为 1；未成功配置视为无穷，在任何有限 τ 下都不计入。",
     ])
     if reference:
         lines.append(f"- 正确性参考：{reference.label}（`{reference.run_id}`）。")
     else:
         lines.append("- 当前没有可用的独立正确性参考；仅报告成对结果是否一致。")
+    lines.extend([
+        "",
+        "## 墙钟时间性能剖面",
+        "",
+        "下表给出性能剖面的几个代表性 τ；完整阶梯点见 `performance_profile.csv`。",
+        "",
+        "| 配置 | 1× | 2× | 10× | 100× |",
+        "| --- | ---: | ---: | ---: | ---: |",
+    ])
+    profile_by_tau = {round(float(row["tau"]), 12): row for row in profile}
+    for run in runs:
+        values = [
+            profile_by_tau.get(float(tau), {}).get(run.label, 0.0)
+            for tau in (1, 2, 10, 100)
+        ]
+        lines.append(
+            f"| {run.label} | {values[0]:.1%} | {values[1]:.1%} | "
+            f"{values[2]:.1%} | {values[3]:.1%} |")
     lines.extend([
         "",
         "## 节点势更新指标含义",
@@ -1227,7 +1457,9 @@ def markdown_report(
         "- **节点势更新触发数**：候选节点通过策略、预算、数值安全、深度和 gap 等条件后，实际启动节点势优化的次数。",
         "- **节点势迭代数**：所有已触发更新内部执行的次梯度迭代轮数之和；一次触发最多可执行 `--hk-update-iterations` 轮。",
         "- **节点势更新跳过总数**：所有互斥跳过原因之和。求解器按第一个命中的原因计数，因此应满足 `候选数 = 触发数 + 跳过总数`。",
+        "- **guarded warm**：混合兄弟势先做一次当前约束图 1-tree 验证；接受时该评估复用为上升首轮，拒绝时它是配置迭代上限之外的一次额外评估。探测、接受和拒绝分别有独立计数。",
         "- `--hk-update-budget` 限制的是**每轮根搜索的触发次数**，不是迭代总数；设为 `0` 表示不限。正数预算下，初始探测轮最多使用 `min(budget, 1000)` 次；若 incumbent 改善并重启根搜索，计数器会清零，下一轮可再使用完整预算。因此整个求解的触发数可能超过配置预算，迭代数还会再乘上每次更新的迭代轮数。预算耗尽后访问的候选节点仍会逐个计入“跳过：预算耗尽”，所以跳过数也可能远大于预算。",
+        "- 阶段耗时中 `replacement_seconds` 是根 fixing、BP 分支和候选删除过程中 fundamental-cut replacement 查询的子阶段，可能与其他阶段重叠，不能直接把所有耗时列相加当作总时间。",
         "",
     ])
 
@@ -1312,6 +1544,9 @@ def html_report(
     reference: Run | None,
     warnings: Sequence[str],
 ) -> str:
+    performance = {row["run_id"]: row for row in run_performance_rows(runs)}
+    profile_rows = performance_profile_rows(runs)
+    profile_svg = performance_profile_svg(runs, profile_rows)
     observation_note = (
         "当前每个配置、每个实例只有一次观测；不计算跨实例中位数。"
         if all(run.repeats == 1 for run in runs)
@@ -1320,11 +1555,18 @@ def html_report(
     overview_rows: list[str] = []
     for run in runs:
         statuses = Counter(item.status for item in run.instances.values())
+        perf = performance[run.run_id]
         overview_rows.append(
             "<tr>" + "".join([
                 html_cell(run.label), html_cell(run.run_id), html_cell(run.kind or "—"),
                 html_cell(str(len(run.instances)), "num"),
-                html_cell(str(statuses["ok"]), "num"),
+                html_cell(
+                    f"{perf['solved_count']}/{perf['benchmark_instances']}", "num"),
+                html_cell(format_metric("wall_seconds", perf["par2_seconds"]), "num"),
+                html_cell(format_metric(
+                    "wall_seconds", perf["geometric_mean_solved_seconds"]), "num"),
+                html_cell(format_metric(
+                    "wall_seconds", perf["penalized_geometric_mean_seconds"]), "num"),
                 html_cell(str(statuses["timeout"]), "num"),
                 html_cell(str(statuses["partial"] + statuses["mixed"] + statuses["error"]), "num"),
                 html_cell(run.description or "—"),
@@ -1566,6 +1808,9 @@ details summary{{cursor:pointer;font-weight:700;margin:10px 0}} .detail table{{m
 .skip-columns-toggle{{border:1px solid #8ca0b8;border-radius:6px;background:white;color:#245b9e;padding:5px 10px;cursor:pointer;font:inherit;font-weight:700}}
 .skip-columns-toggle:hover{{background:#eef4fb}} .skip-columns-toggle:focus-visible{{outline:2px solid #245b9e;outline-offset:2px}}
 .detail-table .skip-reason-column{{display:none}} .detail-table.show-skip-reasons .skip-reason-column{{display:table-cell}}
+.profile-card{{background:white;border:1px solid var(--line);border-radius:8px;padding:10px;margin:8px 0 18px;overflow:auto}}
+.performance-profile{{display:block;min-width:760px;width:100%;height:auto}} .performance-profile text{{fill:#465366;font-size:11px}}
+.performance-profile .axis{{stroke:#465366;stroke-width:1.3}} .performance-profile .grid{{stroke:#e1e6ed;stroke-width:1}}
 @media(max-width:900px){{.cards{{grid-template-columns:1fr}}}}
 </style></head><body><main>
 <h1>PHKMST 消融实验汇总</h1>
@@ -1574,15 +1819,22 @@ details summary{{cursor:pointer;font-weight:700;margin:10px 0}} .detail table{{m
 <div class="muted">右侧相对变化 = 右侧总量 / 左侧总量 - 1；负数表示减少，正数表示增加。</div>
 {f'<ul class="warnings">{warning_html}</ul>' if warnings else ''}
 <h2>运行概览</h2><div class="table-wrap"><table><thead><tr>
-<th>配置</th><th>run_id</th><th>类型</th><th>实例</th><th>成功</th><th>超时</th><th>其他</th><th>描述</th>
+<th>配置</th><th>run_id</th><th>类型</th><th>实例</th><th>Solved count</th>
+<th>PAR2</th><th>成功集几何平均</th><th>惩罚几何平均</th><th>超时</th><th>其他</th><th>描述</th>
 </tr></thead><tbody>{''.join(overview_rows)}</tbody></table></div>
+<p>PAR2：成功使用实际时间，未成功或缺失使用该配置 <code>2 × timeout</code>；惩罚几何平均使用同一惩罚样本。</p>
+<h2>墙钟时间性能剖面</h2>
+<p>每个实例以最快成功配置为 1；未成功配置在任何有限 τ 下都不计入。</p>
+<div class="profile-card">{profile_svg}</div>
 <h2>节点势更新指标含义</h2>
 <ul class="definitions">
 <li><strong>节点势更新候选数：</strong>到达势更新判定点的非根逻辑搜索节点数；每个节点只计一次，是触发率分母。</li>
 <li><strong>节点势更新触发数：</strong>通过策略、预算、数值安全、深度和 gap 等条件后，实际启动节点势优化的次数。</li>
 <li><strong>节点势迭代数：</strong>所有已触发更新内部执行的次梯度迭代轮数之和；一次触发可执行多轮。</li>
 <li><strong>节点势更新跳过总数：</strong>所有互斥跳过原因之和；应满足“候选数 = 触发数 + 跳过总数”。</li>
+<li><strong>guarded warm：</strong>先验证混合兄弟势；接受时复用为上升首轮，拒绝时验证是迭代上限之外的一次额外评估。</li>
 <li><strong>预算口径：</strong><code>--hk-update-budget</code> 限制每轮根搜索的触发次数，不限制迭代总数；设为 <code>0</code> 表示不限。正数预算下，初始探测轮最多使用 <code>min(budget, 1000)</code> 次；incumbent 改善并重启后预算计数清零，下一轮可再使用完整预算。预算耗尽后的候选仍计入跳过数。</li>
+<li><strong>阶段耗时：</strong><code>replacement_seconds</code> 是 root fixing、BP 和候选删除内部的 replacement 查询子阶段，可能与其他阶段重叠，不能把所有阶段列直接相加。</li>
 </ul>
 <h2>对比导航</h2><nav>{navigation_html}</nav>
 {''.join(sections)}
@@ -1633,6 +1885,19 @@ def write_outputs(
 
     config_fields, configs = configuration_rows(runs)
     write_csv(output_dir / "configurations.csv", configs, config_fields)
+
+    performance = run_performance_rows(runs)
+    performance_fields = [
+        "run_id", "strategy", "label", "benchmark_instances",
+        "solved_count", "solved_fraction", "timeout_seconds",
+        "par2_seconds", "geometric_mean_solved_seconds",
+        "penalized_geometric_mean_seconds",
+    ]
+    write_csv(output_dir / "run_summary.csv", performance, performance_fields)
+
+    profile = performance_profile_rows(runs)
+    profile_fields = ["tau", *(run.label for run in runs)]
+    write_csv(output_dir / "performance_profile.csv", profile, profile_fields)
 
     instance_fields = [
         "run_id", "strategy", "label", "instance", "source", "status",
