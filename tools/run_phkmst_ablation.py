@@ -386,6 +386,8 @@ def phkmst_args(
 # 到下方元组中，再用 ``--configs legacy current`` 选择它们。
 # ============================================================================
 SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
+    # 仅保留 Concorde 参考与第五轮并列最佳的四个 smoothed 配置
+    # （2026-09-14，CPHKMST 分支重编译验证），其余配置已删除。
     Strategy(
         name="Concorde",
         kind="concorde",
@@ -393,60 +395,6 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
         executable=PROJECT_ROOT / "concorde" / "TSP" / "concorde",
         solver_args=(),
         description="Concorde exact solver with a fixed seed"),
-    Strategy(
-        name="P32",
-        kind="tsp_bb",
-        category="core",
-        executable=PROJECT_ROOT / "build" / "tsp_bb",
-        solver_args=solver_arguments("""
-            --hk-ascent polyak
-            --hk-node-ascent polyak
-            --branch-edge-order weight
-            --hk-potential-update subtree-adaptive
-            --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
-            --hk-update-iterations 32
-            --hk-update-budget 0
-        """),
-        description="polyak-32",
-    ),
-    Strategy(
-        name="PS32",
-        kind="tsp_bb",
-        category="core",
-        executable=PROJECT_ROOT / "build" / "tsp_bb",
-        solver_args=solver_arguments("""
-            --hk-ascent polyak-smoothed
-            --hk-node-ascent polyak
-            --branch-edge-order weight
-            --hk-potential-update subtree-adaptive
-            --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
-            --hk-update-iterations 32
-            --hk-update-budget 0
-        """),
-        description="polyak-smoothed-32",
-    ),
-    Strategy(
-        name="PSD32",
-        kind="tsp_bb",
-        category="core",
-        executable=PROJECT_ROOT / "build" / "tsp_bb",
-        solver_args=solver_arguments("""
-            --hk-ascent polyak-smoothed-dynamic
-            --hk-node-ascent polyak
-            --branch-edge-order weight
-            --hk-potential-update subtree-adaptive
-            --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
-            --hk-update-iterations 32
-            --hk-update-budget 0
-        """),
-        description="polyak-smoothed-dynamic-32",
-    ),
     Strategy(
         name="hybrid-reverse",
         kind="tsp_bb",
@@ -519,97 +467,6 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
         """),
         description="polyak-smoothed-polyak-smoothed-32",
     ),
-    Strategy(
-        name="PS-PS16",
-        kind="tsp_bb",
-        category="core",
-        executable=PROJECT_ROOT / "build" / "tsp_bb",
-        solver_args=solver_arguments("""
-            --hk-ascent polyak-smoothed
-            --hk-node-ascent polyak-smoothed
-            --branch-edge-order weight
-            --hk-potential-update subtree-adaptive
-            --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
-            --hk-update-iterations 16
-            --hk-update-budget 0
-        """),
-        description="polyak-smoothed-polyak-smoothed-16",
-    ),
-    Strategy(
-        name="PS-PS64",
-        kind="tsp_bb",
-        category="core",
-        executable=PROJECT_ROOT / "build" / "tsp_bb",
-        solver_args=solver_arguments("""
-            --hk-ascent polyak-smoothed
-            --hk-node-ascent polyak-smoothed
-            --branch-edge-order weight
-            --hk-potential-update subtree-adaptive
-            --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
-            --hk-update-iterations 16
-            --hk-update-budget 0
-        """),
-        description="polyak-smoothed-polyak-smoothed-64",
-    ),
-    Strategy(
-        name="PSD-PSD32",
-        kind="tsp_bb",
-        category="core",
-        executable=PROJECT_ROOT / "build" / "tsp_bb",
-        solver_args=solver_arguments("""
-            --hk-ascent polyak-smoothed-dynamic
-            --hk-node-ascent polyak-smoothed-dynamic
-            --branch-edge-order weight
-            --hk-potential-update subtree-adaptive
-            --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
-            --hk-update-iterations 32
-            --hk-update-budget 0
-        """),
-        description="polyak-smoothed-dynamic-32",
-    ),
-    Strategy(
-        name="PSD-PSD16",
-        kind="tsp_bb",
-        category="core",
-        executable=PROJECT_ROOT / "build" / "tsp_bb",
-        solver_args=solver_arguments("""
-            --hk-ascent polyak-smoothed-dynamic
-            --hk-node-ascent polyak-smoothed-dynamic
-            --branch-edge-order weight
-            --hk-potential-update subtree-adaptive
-            --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
-            --hk-update-iterations 16
-            --hk-update-budget 0
-        """),
-        description="polyak-smoothed-dynamic2-16",
-    ),
-    Strategy(
-        name="PSD-PSD64",
-        kind="tsp_bb",
-        category="core",
-        executable=PROJECT_ROOT / "build" / "tsp_bb",
-        solver_args=solver_arguments("""
-            --hk-ascent polyak-smoothed-dynamic
-            --hk-node-ascent polyak-smoothed-dynamic
-            --branch-edge-order weight
-            --hk-potential-update subtree-adaptive
-            --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
-            --hk-update-iterations 16
-            --hk-update-budget 0
-        """),
-        description="polyak-smoothed-dynamic2-64",
-    ),
-
 )
 
 CONFIGURATION_BY_NAME = {
