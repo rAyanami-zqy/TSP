@@ -20,6 +20,8 @@ struct CliOptions {
     std::string input_path;
     // 批处理清单路径；清单每个有效行保存一个实例文件路径。
     std::string batch_path;
+    // 外部 tour 文件：n 后接 n 个 0-based 顶点编号，适用于单实例。
+    std::string initial_tour_path;
     // 坐标实例展开为 n×n 稠密矩阵时允许的最大顶点数，防止意外耗尽内存。
     std::size_t exact_max_n = 10000;
     // 根节点 Held-Karp 势的上升算法；不影响问题可行域，只影响下界强度。
@@ -185,6 +187,20 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
 
     auto distance = problem.toDenseMatrix(options.exact_max_n);
     tsp::BranchBoundSolver solver(std::move(distance));
+    if (!options.initial_tour_path.empty()) {
+        std::ifstream tour_input(options.initial_tour_path);
+        long long count = -1;
+        if (!(tour_input >> count) || count != dimension) {
+            throw std::runtime_error("initial tour file must start with the instance dimension");
+        }
+        std::vector<int> tour(static_cast<std::size_t>(dimension));
+        for (int& vertex : tour) {
+            if (!(tour_input >> vertex)) throw std::runtime_error("incomplete initial tour file");
+        }
+        tour_input >> std::ws;
+        if (!tour_input.eof()) throw std::runtime_error("extra data in initial tour file");
+        solver.setInitialTour(tour);
+    }
     solver.setRootAscentStrategy(options.root_ascent);
     solver.setRootAscentIterationLimit(options.root_ascent_iterations);
     solver.setRootAscentDirectionSmoothing(
@@ -533,6 +549,7 @@ void printUsage(const char* program)
               << "  " << program << " [options] --batch <list-file>\n"
               << "\nOptions:\n"
               << "  --exact-max-n <n>\n"
+              << "  --initial-tour <file> (n then n zero-based vertices; single instance)\n"
               << "  --hk-ascent <none|polyak|helsgaun|hybrid|hybrid-reverse|"
                  "polyak-smoothed|polyak-smoothed-dynamic>\n"
               << "  --root-ascent-iterations <n>\n"
@@ -749,6 +766,8 @@ CliOptions parseArgs(int argc, char** argv)
             std::exit(0);
         } else if (arg == "--batch") {
             options.batch_path = require_value(arg);
+        } else if (arg == "--initial-tour") {
+            options.initial_tour_path = require_value(arg);
         } else if (arg == "--exact-max-n") {
             options.exact_max_n = parseSizeOption(require_value(arg), arg);
             if (options.exact_max_n == 0) {
@@ -888,6 +907,9 @@ CliOptions parseArgs(int argc, char** argv)
         throw std::runtime_error(
             "--hk-update-large-gap-ratio and "
             "--hk-update-large-gap-iterations must be used together");
+    }
+    if (!options.initial_tour_path.empty() && !options.batch_path.empty()) {
+        throw std::runtime_error("--initial-tour only supports a single instance");
     }
     if (options.root_ascent_dynamic_min_current_weight < 0.0
         || options.root_ascent_dynamic_min_current_weight

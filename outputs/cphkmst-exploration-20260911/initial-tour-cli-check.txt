@@ -1,0 +1,47 @@
+/private/tmp/cphkmst-explore.Cwek2a/compact-build/tsp_bb --initial-tour outputs/cphkmst-exploration-20260911/eil101-clk-multi-seed1.tour --hk-potential-update subtree-adaptive --hk-update-depth 1 --hk-update-iterations 32 --hk-update-gap-ratio 0.02 --hk-update-budget 0 data/classic/tsplib/eil101.tsp
+Solving instance from file: data/classic/tsplib/eil101.tsp
+Problem: eil101
+Dimension: 101
+Method: exact
+Root lower bound: 626.77821850403484
+Initial upper bound: 630
+Root fixing calls: 1
+Root fixing tested: 4949
+Root fixing fixed zero: 4783
+Root fixing tree tested: 101
+Root fixing fixed one: 12
+Root fixing active after: 255
+Root fixing seconds: 0.00019254100000000001
+Root potential iterations: 100
+Instance wall seconds: 0.076114917000000004
+Nodes created: 287
+Nodes expanded: 88
+Pruned by bound: 202
+Pruned infeasible: 21
+Search-node potential update candidates: 205
+Search-node potential updates triggered: 205
+Potential updates skipped strategy none: 0
+Potential updates skipped update depth zero: 0
+Potential updates skipped budget exhausted: 0
+Potential updates skipped numerically unsafe: 0
+Potential updates skipped invalid state: 0
+Potential updates skipped zero violation: 0
+Potential updates skipped zero iteration limit: 0
+Potential updates skipped depth interval: 0
+Potential updates skipped gap below minimum: 0
+Potential updates skipped gap above maximum: 0
+Potential updates improved: 193
+Potential updates pruned: 118
+Potential updates rebuilt: 75
+Potential updates stopped prunable: 118
+Potential updates large-gap tier: 0
+Potential update probes started: 0
+Potential update probes continued: 0
+Potential update probes rejected: 0
+Search-node potential iterations: 3618
+Potential update seconds: 0.026306414
+Potential update rebuild seconds: 0.0017214200000000002
+Potential update total gain: 85.189641263459521
+Potential update max gain: 1.8947375653915515
+Optimal cost: 629
+Tour: 0 -> 68 -> 26 -> 100 -> 52 -> 27 -> 25 -> 11 -> 79 -> 67 -> 28 -> 23 -> 53 -> 3 -> 54 -> 24 -> 38 -> 66 -> 22 -> 55 -> 74 -> 40 -> 21 -> 73 -> 71 -> 72 -> 20 -> 39 -> 57 -> 12 -> 93 -> 94 -> 96 -> 86 -> 1 -> 56 -> 14 -> 42 -> 41 -> 13 -> 37 -> 43 -> 85 -> 15 -> 60 -> 84 -> 90 -> 99 -> 36 -> 97 -> 91 -> 58 -> 92 -> 98 -> 95 -> 5 -> 88 -> 51 -> 17 -> 82 -> 59 -> 4 -> 83 -> 16 -> 44 -> 7 -> 45 -> 46 -> 35 -> 48 -> 63 -> 62 -> 89 -> 31 -> 9 -> 61 -> 10 -> 18 -> 47 -> 81 -> 6 -> 87 -> 30 -> 69 -> 29 -> 19 -> 65 -> 70 -> 64 -> 34 -> 8 -> 50 -> 32 -> 80 -> 33 -> 77 -> 78 -> 2 -> 76 -> 75 -> 49 -> 0

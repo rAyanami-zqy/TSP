@@ -217,6 +217,34 @@ struct BranchBoundSolverTestAccess {
                    "Prim potential bound differs from constrained Kruskal");
         }
 
+        void verifyCompactedEpoch(const std::vector<double>& potentials)
+        {
+            const auto active = node.candidate_mask;
+            Node compact_node = node;
+            const auto compact = solver.rebuildPotentialEpoch(compact_node, potentials, active);
+            Node full_node = compact_node;
+            full_node.candidate_bits.clear();
+            full_node.candidate_mask = active;
+            auto full_candidates = candidates;
+            std::size_t retained = 0;
+            for (auto& e : full_candidates) {
+                e.w = solver.adjustedEdgeWeight(e.u, e.v);
+                const auto id = solver.edgeId(e.u, e.v);
+                if (active[id] || node.forced[id]) ++retained;
+                expect(solver.isCandidateActive(compact_node, id) == (active[id] != 0),
+                       "epoch compaction changed edge activity");
+            }
+            sortEdges(full_candidates);
+            const auto full = solver.computeOneTree(full_node, full_candidates);
+            expect(compact.feasible && full.feasible, "epoch test lost its feasible cycle");
+            expect(std::fabs(compact.cost - full.cost) <= 1e-9 && compact.degree == full.degree,
+                   "compacted epoch differs from full-edge constrained tree");
+#ifndef TSP_DISABLE_EPOCH_COMPACTION
+            expect(solver.candidates_sorted_.size() == retained,
+                   "epoch retained an inactive unforced edge or lost a forced edge");
+#endif
+        }
+
         void verifyUnlimitedPotentialUpdateBudget()
         {
             solver.initial_tour_alternatives_.push_back(
@@ -1803,6 +1831,67 @@ void testRootReducedCostFixing()
     }
 }
 
+void testCompactedEpoch()
+{
+    std::mt19937 rng(82731);
+    const double inf = std::numeric_limits<double>::infinity();
+    for (int trial = 0; trial < 96; ++trial) {
+        const int n = 6 + trial % 13;
+        std::vector<std::vector<double>> matrix(n, std::vector<double>(n, 0));
+        for (int u = 0; u < n; ++u) for (int v = u + 1; v < n; ++v) {
+            const bool cycle = v == u + 1 || (u == 0 && v == n - 1);
+            const double value = !cycle && rng() % 5 == 0 ? inf : (1 + rng() % 9) * 0.25;
+            matrix[u][v] = matrix[v][u] = value;
+        }
+        tsp::BranchBoundSolverTestAccess::Fixture f(matrix);
+        if (trial % 3) f.force(0, 1);
+        if (trial % 3 == 2) f.force(0, n - 1);
+        f.force(1, 2);
+        // Keep an entire feasible cycle; forced edges need not be active.
+        for (const auto& e : f.candidates) {
+            const auto id = static_cast<std::size_t>(e.u) * n + e.v;
+            const bool cycle = e.v == e.u + 1 || (e.u == 0 && e.v == n - 1);
+            if (f.node.forced[id] || (!cycle && rng() % 2 == 0)) f.node.candidate_mask[id] = 0;
+        }
+        std::vector<double> potentials(n);
+        for (auto& value : potentials) value = (static_cast<int>(rng() % 41) - 20) * 0.125;
+        f.verifyCompactedEpoch(potentials);
+    }
+}
+
+// An external tour is only an incumbent, never an optimality certificate.
+void testSuppliedInitialTour()
+{
+    std::mt19937 rng(91923);
+    for (int trial = 0; trial < 32; ++trial) {
+        const int n = 5 + trial % 4;
+        std::vector<std::vector<double>> matrix(n, std::vector<double>(n, 0));
+        for (int u = 0; u < n; ++u) for (int v = u + 1; v < n; ++v)
+            matrix[u][v] = matrix[v][u] = 1 + rng() % 100;
+        std::vector<int> tour(n);
+        std::iota(tour.begin(), tour.end(), 0);
+        std::shuffle(tour.begin(), tour.end(), rng);
+        tsp::BranchBoundSolver solver(matrix);
+        solver.setInitialTour(tour);
+        solver.setPotentialUpdateOptions(tsp::PotentialUpdateStrategy::SubtreeDepth, 1, 8, 1, 0);
+        expectCost(solver.solve().cost, bruteForceOptimalCost(matrix), "supplied incumbent changed optimum");
+        solver.setInitialTour({});
+        expectCost(solver.solve().cost, bruteForceOptimalCost(matrix), "cleared incumbent changed optimum");
+        for (const auto& bad : std::vector<std::vector<int>>{{0}, {0,0,1,2,3}, {-1,0,1,2,3}}) {
+            bool rejected = false;
+            try { solver.setInitialTour(bad); } catch (const std::invalid_argument&) { rejected = true; }
+            if (!rejected) throw std::runtime_error("invalid external tour accepted");
+        }
+    }
+    const double inf = std::numeric_limits<double>::infinity();
+    tsp::BranchBoundSolver sparse({{0,1,inf,1},{1,0,1,inf},{inf,1,0,1},{1,inf,1,0}});
+    sparse.setInitialTour({0,1,2,3});
+    bool rejected = false;
+    try { sparse.setInitialTour({0,2,1,3}); } catch (const std::invalid_argument&) { rejected = true; }
+    if (!rejected) throw std::runtime_error("external tour with missing edge accepted");
+    expectCost(sparse.solve().cost, 4.0, "invalid setter damaged previous incumbent");
+}
+
 } // namespace
 
 int main()
@@ -1839,6 +1928,8 @@ int main()
         testSearchNodePotentialUpdates();
         testDiversifiedInitialTourPool();
         testRootReducedCostFixing();
+        testCompactedEpoch();
+        testSuppliedInitialTour();
     } catch (const std::exception& error) {
         std::cerr << "tsp_solver_tests failed: " << error.what() << '\n';
         return 1;

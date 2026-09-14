@@ -112,6 +112,18 @@ cmake --build build --target tsp_bb_variants
 
 分支定界具有指数级最坏复杂度，实际使用仍应优先从小实例开始。
 
+可以提供外部启发式回路作为初始上界（单实例）：
+
+```bash
+./build/tsp_bb --initial-tour examples/five-city.initial-tour.txt examples/five-city.txt
+```
+
+回路文件为 `n` 后接 `n` 个从 0 开始、不重复起点的顶点编号；不是 TSPLIB
+`TOUR_SECTION` 格式。求解器验证排列及所有边、重新计算成本，并与内置启发式
+择优，不会把外部回路当作最优证明或限制精确搜索边集。可选的 Concorde Linkern
+研究接口和候选集/定价实验见 [实验工具说明](tools/experiments/README.md)，
+完整结果见 [CPHKMST 探索报告](docs/CPHKMST-candidate-pricing-exploration-2026-09-11.md)。
+
 查看主求解过程中的实时 debug 输出：
 
 ```bash

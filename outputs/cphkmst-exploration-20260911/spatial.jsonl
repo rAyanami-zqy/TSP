@@ -1,0 +1,6 @@
+{"n":100,"k":8,"queries_verified":100,"scan_seconds":0.000127917,"kd_seconds":0.0001415}
+{"n":100,"k":20,"queries_verified":100,"scan_seconds":0.000146625,"kd_seconds":0.000215166}
+{"n":1000,"k":8,"queries_verified":1000,"scan_seconds":0.00873242,"kd_seconds":0.00108062}
+{"n":1000,"k":20,"queries_verified":1000,"scan_seconds":0.0111721,"kd_seconds":0.00269871}
+{"n":10000,"k":8,"queries_verified":10000,"scan_seconds":0.47176,"kd_seconds":0.00735371}
+{"n":10000,"k":20,"queries_verified":10000,"scan_seconds":0.468739,"kd_seconds":0.015733}

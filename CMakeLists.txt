@@ -143,4 +143,26 @@ if(BUILD_TESTING)
     set_tests_properties(tsp_cli_tsplib PROPERTIES
         PASS_REGULAR_EXPRESSION "Optimal cost: 8"
     )
+
+    add_test(NAME tsp_cli_initial_tour
+        COMMAND $<TARGET_FILE:tsp_bb>
+            --initial-tour ${CMAKE_CURRENT_SOURCE_DIR}/examples/five-city.initial-tour.txt
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/five-city.txt
+    )
+    set_tests_properties(tsp_cli_initial_tour PROPERTIES
+        PASS_REGULAR_EXPRESSION "Method: exact"
+    )
+    add_test(NAME tsp_cli_initial_tour_invalid
+        COMMAND $<TARGET_FILE:tsp_bb>
+            --initial-tour ${CMAKE_CURRENT_SOURCE_DIR}/tests/invalid-initial-tour.txt
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/five-city.txt
+    )
+    add_test(NAME tsp_cli_initial_tour_batch_rejected
+        COMMAND $<TARGET_FILE:tsp_bb>
+            --initial-tour ${CMAKE_CURRENT_SOURCE_DIR}/examples/five-city.initial-tour.txt
+            --batch ${CMAKE_CURRENT_SOURCE_DIR}/data/classic/batch-node-ascent.txt
+    )
+    set_tests_properties(tsp_cli_initial_tour_invalid tsp_cli_initial_tour_batch_rejected
+        PROPERTIES WILL_FAIL TRUE
+    )
 endif()

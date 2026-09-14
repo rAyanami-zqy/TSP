@@ -289,6 +289,9 @@ public:
     // 用对称 n×n 距离矩阵构造求解器，并验证尺寸、对角线和对称性。
     // distance 的所有权移入求解器；正无穷可表示不存在的边。
     explicit BranchBoundSolver(std::vector<std::vector<double>> distance);
+    // 可选的外部可行上界（0-based、不重复闭环起点）。逐边验证并重算成本；
+    // 与内置启发式择优，空向量清除。不能改变精确搜索的边集。
+    void setInitialTour(const std::vector<int>& tour);
     // 开启调试输出。output 由调用方拥有，progress_interval 控制节点进度频率。
     void setDebugOutput(std::ostream& output, std::size_t progress_interval = 1000);
     // 关闭调试输出并清除现有输出流指针和频率设置。
@@ -1000,6 +1003,7 @@ private:
     double best_cost_ = std::numeric_limits<double>::infinity();
     // 与 best_cost_ 对应、不重复闭环起点的顶点序列。
     std::vector<int> best_tour_;
+    std::vector<int> supplied_initial_tour_;
     // 初始 NN+2-opt 得到的不同次优局部最优，困难时供 diversified LK 使用。
     std::vector<TourCandidate> initial_tour_alternatives_;
     // 当前 solve() 是否已经执行过一次按节点阈值触发的 diversified LK。

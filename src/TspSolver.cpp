@@ -450,6 +450,28 @@ void BranchBoundSolver::setRootBoundOnly(bool enabled)
     root_bound_only_ = enabled;
 }
 
+void BranchBoundSolver::setInitialTour(const std::vector<int>& tour)
+{
+    if (tour.empty()) {
+        supplied_initial_tour_.clear();
+        return;
+    }
+    if (tour.size() != static_cast<std::size_t>(n_)) {
+        throw std::invalid_argument("initial tour must contain exactly n vertices");
+    }
+    std::vector<unsigned char> seen(static_cast<std::size_t>(n_), 0);
+    for (const int vertex : tour) {
+        if (vertex < 0 || vertex >= n_ || seen[static_cast<std::size_t>(vertex)]) {
+            throw std::invalid_argument("initial tour must be a permutation of 0..n-1");
+        }
+        seen[static_cast<std::size_t>(vertex)] = 1;
+    }
+    if (!isFinite(tourCost(tour))) {
+        throw std::invalid_argument("initial tour contains a missing edge or nonfinite cost");
+    }
+    supplied_initial_tour_ = tour;
+}
+
 double BranchBoundSolver::adjustedEdgeWeight(int u, int v) const
 {
     const double original = dist_[u][v];
@@ -1841,8 +1863,9 @@ BranchBoundSolver::OneTree BranchBoundSolver::rebuildPotentialEpoch(
         }
     }
 
-    // active_by_edge_id 使用旧 epoch 的稳定 edgeId；重排后借它把相同的
-    // 活跃边集合投影到新 candidates_sorted_ 的 bitset 下标。
+    // active_by_edge_id 使用旧 epoch 的稳定 edgeId。只物化仍 active 或
+    // forced 的边；已证明/逻辑排除的边在本子树不可能重新可用。父 epoch
+    // 由 snapshot 完整恢复，因而省去这些边的排序和 incident 位图不改变可行域。
     const std::size_t edge_state_size = static_cast<std::size_t>(n_)
         * static_cast<std::size_t>(n_);
     candidates_sorted_.clear();
@@ -1850,6 +1873,11 @@ BranchBoundSolver::OneTree BranchBoundSolver::rebuildPotentialEpoch(
     for (int u = 0; u < n_; ++u) {
         for (int v = u + 1; v < n_; ++v) {
             if (!isFinite(dist_[u][v])) continue;
+#ifndef TSP_DISABLE_EPOCH_COMPACTION
+            const std::size_t id = edgeId(u, v);
+            if (!node.forced[id]
+                && (id >= active_by_edge_id.size() || !active_by_edge_id[id])) continue;
+#endif
             candidates_sorted_.push_back(
                 Edge{u, v, adjustedEdgeWeight(u, v)});
         }
@@ -2115,8 +2143,18 @@ SolveResult BranchBoundSolver::solve()
     writeDebugLine(debug_, "exact solve started: vertices=" + std::to_string(n_));
 
     // 先用启发式得到一个上界。
-    if (findInitialTour(
-            best_tour_, best_cost_, initial_tour_alternatives_)) {
+    bool has_initial_tour = findInitialTour(
+        best_tour_, best_cost_, initial_tour_alternatives_);
+    if (!supplied_initial_tour_.empty()) {
+        const double supplied_cost = tourCost(supplied_initial_tour_);
+        if (!has_initial_tour || supplied_cost < tourCost(best_tour_)) {
+            best_tour_ = supplied_initial_tour_;
+            best_cost_ = supplied_cost;
+            has_initial_tour = true;
+        }
+        rememberCandidateHintTour(supplied_initial_tour_);
+    }
+    if (has_initial_tour) {
         // 启发式内部会做多次增量 delta 更新。精确搜索的 incumbent 必须以
         // 返回回路逐边重算的真实成本为准，不能沿用可能漂移的缓存值。
         best_cost_ = tourCost(best_tour_);
