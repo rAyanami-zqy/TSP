@@ -342,15 +342,144 @@ def phkmst_args(
 # 到下方元组中，再用 ``--configs legacy current`` 选择它们。
 # ============================================================================
 SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
+    # --- 以下三个配置已注释（2026-09-10 新一轮 min-gap 0.01 实验），防止重跑 ---
+    # Strategy(
+    #     name="Concorde",
+    #     kind="concorde",
+    #     category="reference",
+    #     executable=PROJECT_ROOT / "concorde" / "TSP" / "concorde",
+    #     solver_args=(),
+    #     description="Concorde exact solver with a fixed seed"),
+    # Strategy(
+    #     name="P32",
+    #     kind="tsp_bb",
+    #     category="core",
+    #     executable=PROJECT_ROOT / "build" / "tsp_bb",
+    #     solver_args=solver_arguments("""
+    #         --hk-ascent polyak
+    #         --hk-node-ascent polyak
+    #         --branch-edge-order weight
+    #         --hk-potential-update subtree-adaptive
+    #         --hk-update-depth 1
+    #         --hk-update-gap-ratio 0.02
+    #         --hk-update-min-gap-ratio 0.0
+    #         --hk-update-iterations 32
+    #         --hk-update-budget 0
+    #     """),
+    #     description="polyak-32",
+    # ),
+    # Strategy(
+    #     name="P32-no-node-update",
+    #     kind="tsp_bb",
+    #     category="core",
+    #     executable=PROJECT_ROOT / "build" / "tsp_bb",
+    #     solver_args=solver_arguments("""
+    #         --hk-ascent polyak
+    #         --hk-node-ascent polyak
+    #         --branch-edge-order weight
+    #         --hk-potential-update none
+    #         --hk-update-depth 1
+    #         --hk-update-gap-ratio 0.02
+    #         --hk-update-min-gap-ratio 0.0
+    #         --hk-update-iterations 32
+    #         --hk-update-budget 0
+    #     """),
+    #     description="polyak-32, search-node potential updates disabled",
+    # ),
+    # --- 以下三个 min-gap 0.01 变体已注释（2026-09-11 新一轮 min-gap 0.005 实验），防止重跑 ---
+    # Strategy(
+    #     name="P33>1%",
+    #     kind="tsp_bb",
+    #     category="core",
+    #     executable=PROJECT_ROOT / "build" / "tsp_bb",
+    #     solver_args=solver_arguments("""
+    #         --hk-ascent polyak
+    #         --hk-node-ascent polyak
+    #         --branch-edge-order weight
+    #         --hk-potential-update subtree-adaptive
+    #         --hk-update-depth 1
+    #         --hk-update-gap-ratio 0.1
+    #         --hk-update-min-gap-ratio 0.01
+    #         --hk-update-iterations 32
+    #         --hk-update-budget 0
+    #     """),
+    #     description="gap>1%",
+    # ),
+    # Strategy(
+    #     name="P33>1%64",
+    #     kind="tsp_bb",
+    #     category="core",
+    #     executable=PROJECT_ROOT / "build" / "tsp_bb",
+    #     solver_args=solver_arguments("""
+    #         --hk-ascent polyak
+    #         --hk-node-ascent polyak
+    #         --branch-edge-order weight
+    #         --hk-potential-update subtree-adaptive
+    #         --hk-update-depth 1
+    #         --hk-update-gap-ratio 0.1
+    #         --hk-update-min-gap-ratio 0.01
+    #         --hk-update-iterations 64
+    #         --hk-update-budget 0
+    #     """),
+    #     description="gap>1% 64",
+    # ),
+    # Strategy(
+    #     name="P33>1%128",
+    #     kind="tsp_bb",
+    #     category="core",
+    #     executable=PROJECT_ROOT / "build" / "tsp_bb",
+    #     solver_args=solver_arguments("""
+    #         --hk-ascent polyak
+    #         --hk-node-ascent polyak
+    #         --branch-edge-order weight
+    #         --hk-potential-update subtree-adaptive
+    #         --hk-update-depth 1
+    #         --hk-update-gap-ratio 0.1
+    #         --hk-update-min-gap-ratio 0.01
+    #         --hk-update-iterations 128
+    #         --hk-update-budget 0
+    #     """),
+    #     description="gap>1% 128",
+    # ),
+    # --- 以下五个 min-gap 0.005 变体为新一轮配置（2026-09-11）---
     Strategy(
-        name="Concorde",
-        kind="concorde",
-        category="reference",
-        executable=PROJECT_ROOT / "concorde" / "TSP" / "concorde",
-        solver_args=(),
-        description="Concorde exact solver with a fixed seed"),
+        name="gap0.005-0.01",
+        kind="tsp_bb",
+        category="core",
+        executable=PROJECT_ROOT / "build" / "tsp_bb",
+        solver_args=solver_arguments("""
+            --hk-ascent polyak
+            --hk-node-ascent polyak
+            --branch-edge-order weight
+            --hk-potential-update subtree-adaptive
+            --hk-update-depth 1
+            --hk-update-gap-ratio 0.01
+            --hk-update-min-gap-ratio 0.005
+            --hk-update-iterations 32
+            --hk-update-budget 0
+        """),
+        description="min 0.005, max 0.01",
+    ),
     Strategy(
-        name="P32",
+        name="gap0.005-0.015",
+        kind="tsp_bb",
+        category="core",
+        executable=PROJECT_ROOT / "build" / "tsp_bb",
+        solver_args=solver_arguments("""
+            --hk-ascent polyak
+            --hk-node-ascent polyak
+            --branch-edge-order weight
+            --hk-potential-update subtree-adaptive
+            --hk-update-depth 1
+            --hk-update-gap-ratio 0.015
+            --hk-update-min-gap-ratio 0.005
+            --hk-update-iterations 32
+            --hk-update-budget 0
+        """),
+        description="min 0.005, max 0.015",
+    ),
+    Strategy(
+        name="gap0.005-0.02",
         kind="tsp_bb",
         category="core",
         executable=PROJECT_ROOT / "build" / "tsp_bb",
@@ -361,14 +490,14 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
             --hk-potential-update subtree-adaptive
             --hk-update-depth 1
             --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
+            --hk-update-min-gap-ratio 0.005
             --hk-update-iterations 32
             --hk-update-budget 0
         """),
-        description="polyak-32",
+        description="min 0.005, max 0.02",
     ),
     Strategy(
-        name="P32-no-node-update",
+        name="gap0.005-0.03",
         kind="tsp_bb",
         category="core",
         executable=PROJECT_ROOT / "build" / "tsp_bb",
@@ -376,14 +505,32 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
             --hk-ascent polyak
             --hk-node-ascent polyak
             --branch-edge-order weight
-            --hk-potential-update none
+            --hk-potential-update subtree-adaptive
             --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
+            --hk-update-gap-ratio 0.03
+            --hk-update-min-gap-ratio 0.005
             --hk-update-iterations 32
             --hk-update-budget 0
         """),
-        description="polyak-32, search-node potential updates disabled",
+        description="min 0.005, max 0.03",
+    ),
+    Strategy(
+        name="gap0.005-0.04",
+        kind="tsp_bb",
+        category="core",
+        executable=PROJECT_ROOT / "build" / "tsp_bb",
+        solver_args=solver_arguments("""
+            --hk-ascent polyak
+            --hk-node-ascent polyak
+            --branch-edge-order weight
+            --hk-potential-update subtree-adaptive
+            --hk-update-depth 1
+            --hk-update-gap-ratio 0.04
+            --hk-update-min-gap-ratio 0.005
+            --hk-update-iterations 32
+            --hk-update-budget 0
+        """),
+        description="min 0.005, max 0.04",
     ),
     # --- 以下 P33 gap 变体配置已注释（2026-09-10），防止重跑 ---
     # Strategy(
