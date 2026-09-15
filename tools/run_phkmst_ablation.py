@@ -530,11 +530,6 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
             --hk-update-min-gap-ratio 0.0
             --hk-update-iterations 32
             --hk-update-budget 0
-            --initial-clk adaptive
-            --adaptive-clk-gap-ratio 0.02
-            --adaptive-clk-additional-starts 2
-            --hk-sibling-warm-start guarded
-            --hk-sibling-warm-weight 0.25
         """),
         description="hybrid-reverse-32",
     ),
@@ -553,11 +548,6 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
             --hk-update-min-gap-ratio 0.0
             --hk-update-iterations 32
             --hk-update-budget 0
-            --initial-clk adaptive
-            --adaptive-clk-gap-ratio 0.02
-            --adaptive-clk-additional-starts 2
-            --hk-sibling-warm-start guarded
-            --hk-sibling-warm-weight 0.25
         """),
         description="P-polyak-smoothed-32",
     ),
@@ -576,11 +566,6 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
             --hk-update-min-gap-ratio 0.0
             --hk-update-iterations 32
             --hk-update-budget 0
-            --initial-clk adaptive
-            --adaptive-clk-gap-ratio 0.02
-            --adaptive-clk-additional-starts 2
-            --hk-sibling-warm-start guarded
-            --hk-sibling-warm-weight 0.25
         """),
         description="P-polyak-smoothed-dynamic -32",
     ),
@@ -599,11 +584,6 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
             --hk-update-min-gap-ratio 0.0
             --hk-update-iterations 32
             --hk-update-budget 0
-            --initial-clk adaptive
-            --adaptive-clk-gap-ratio 0.02
-            --adaptive-clk-additional-starts 2
-            --hk-sibling-warm-start guarded
-            --hk-sibling-warm-weight 0.25
         """),
         description="polyak-smoothed-polyak-smoothed-32",
     ),
@@ -744,15 +724,6 @@ KNOWN_VALUE_OPTIONS = {
     "--hk-node-dynamic-cosine-scale",
     "--hk-node-dynamic-min-current-weight",
     "--hk-node-dynamic-max-current-weight",
-    "--hk-sibling-warm-start",
-    "--hk-sibling-warm-weight",
-    "--initial-clk",
-    "--adaptive-clk-gap-ratio",
-    "--adaptive-clk-additional-starts",
-    "--lk-candidate-set",
-    "--lk-candidates",
-    "--root-guided-lk",
-    "--root-guided-lk-reascent",
     "--branch-edge-order",
     "--hk-potential-update",
     "--hk-update-depth",

@@ -56,6 +56,59 @@ cmake --build build --target tsp_bb
 
 主可执行文件为 `./build/tsp_bb`，使用 degree 分支策略和当前增量 MST / 1-tree 实现。MST 分支的已编译归档副本命名为 `solver/07-20-MST/tsp_bb`。
 
+### 可选：本地编译的隔离式 LKH provider
+
+LKH 的许可证声明为 research use 且作者保留全部权利，因此仓库不复制其源码。
+下载并解压 LKH 2.x 后，把源码目录通过 CMake 显式传入：
+
+```bash
+cmake -S . -B build-lkh -DCMAKE_BUILD_TYPE=Release \
+  -DTSP_LKH_SOURCE_DIR=/path/to/LKH-2.0.11
+cmake --build build-lkh --target tsp_bb -j4
+
+./build-lkh/tsp_bb --lkh-provider auto \
+  data/classic/tsplib/eil101.tsp
+```
+
+该配置从本机 LKH 的 `SRC/*.c` 直接生成 `tsp_lkh_provider`，不要求先执行
+LKH 自带的 `make`，也不把 LKH 链接进 `tsp_bb`。`tsp_bb` 与 provider 通过
+管道通信；批处理期间 provider 父进程只启动一次，每个实例再 fork 独立子进程
+调用 LKH，避免 LKH 的全局/静态状态跨实例残留，同时省去逐实例 exec 的装载
+开销。临时 `.par`、tour、PI 和日志位于独立临时目录，正常结束时自动清理。
+
+默认 provider 运行一次、`MAX_TRIALS=dimension`、seed 为 1，生成的 tour
+作为可行上界，PI 以 warm start 进入本地 64 轮 Polyak 精修。普通路径严格
+沿用 PHKMST 的单起点 8-NN CLK；provider 路径自动关闭内部 CLK，NN+2-opt
+仍作为可行性兜底：
+
+```bash
+# 推荐：LKH tour + PI warm start + 少量本地精修
+./build-lkh/tsp_bb --lkh-provider auto \
+  --lkh-pi-mode warm-start --root-pi-refine-iterations 16 input.tsp
+
+# 直接采用 LKH PI，不做本地根势上升
+./build-lkh/tsp_bb --lkh-provider auto --lkh-pi-mode replace input.tsp
+
+# 只取 LKH tour；本地按普通 --hk-ascent 配置计算根势
+./build-lkh/tsp_bb --lkh-provider auto --lkh-pi-mode off input.tsp
+
+# 自定义预算；0 表示 MAX_TRIALS 使用实例维数
+./build-lkh/tsp_bb --lkh-provider auto \
+  --lkh-runs 1 --lkh-max-trials 128 --lkh-seed 7 \
+  --lkh-time-limit 2 input.tsp
+```
+
+`--lkh-provider` 也可传入另行构建的 `tsp_lkh_provider` 路径。默认
+`--lkh-provider-failure error` 会明确报告子进程退出码，适合可复现实验；设为
+`fallback` 时单次 LKH 失败会回到内部初始化，批次继续执行。两种情况下 LKH
+崩溃都局限于 fork 子进程。输入文件必须是 LKH 可读取的 TSPLIB 格式；标准
+输入和本项目的简写矩阵格式不能直接交给 LKH，因而前者会被拒绝，后者可用
+`fallback` 回到内部初始化。单实例和 CSV 分别报告
+`lkh_provider_calls`、`lkh_provider_failures` 与 `lkh_provider_seconds`；后者只
+计隔离子进程中的 LKH 调用，不包含本地求解阶段。
+`--lkh-time-limit` 写入 LKH 的 `TOTAL_TIME_LIMIT`，用于限制单个实例的全部
+LKH runs；`0` 保持 LKH 的无限制默认值。
+
 四个可复现实验目标如下：
 
 | CMake 目标 / 可执行文件 | 分支策略 | 子节点 1-tree | 编译宏 |
@@ -386,34 +439,12 @@ Polyak；`--hk-node-ascent` 还支持 `helsgaun`、`polyak-smoothed` 和
   --hk-update-depth 2 --hk-update-gap-ratio 0.02 \
   --hk-update-iterations 16 --hk-update-budget 5000 input.tsp
 
-# 关闭跨兄弟节点的势 warm start，复现原始父 epoch 起点
-./build/tsp_bb --hk-sibling-warm-start off \
-  --hk-potential-update subtree-adaptive input.tsp
-
-# 复现此前不做准入验证、直接使用混合势的行为
-./build/tsp_bb --hk-sibling-warm-start blend \
-  --hk-sibling-warm-weight 0.25 \
-  --hk-potential-update subtree-adaptive input.tsp
-
-# 初始 CLK：先跑一个起点，根相对 gap 至少 2% 时再追加最多两个起点
-./build/tsp_bb --initial-clk adaptive \
-  --adaptive-clk-gap-ratio 0.02 \
-  --adaptive-clk-additional-starts 2 input.tsp
-
-# LKH 风格根引导：根势/1-tree 后以 alpha-nearness 8 候选再做一次 LK；
-# 默认不重复根上升，已有根下界证书仍然有效
-./build/tsp_bb --initial-clk single \
-  --lk-candidate-set alpha --lk-candidates 8 \
-  --root-guided-lk once --root-guided-lk-reascent off input.tsp
-
-# 外部 LKH tour 作为 incumbent 时关闭内部 CLK；NN+2-opt 仍作可行性兜底
-./build/tsp_bb --initial-clk off \
-  --initial-tour /tmp/lkh-tour-zero-based.txt input.tsp
+# 外部 LKH tour 作为 incumbent；NN+2-opt 仍作可行性兜底
+./build/tsp_bb --initial-tour /tmp/lkh-tour-zero-based.txt input.tsp
 
 # 同时复用 LKH 的 PI_FILE：默认按第一条记录重标号内部 1-tree 根，
 # 以外部势 warm start，再用独立的 64 轮小预算作本地 Polyak 精修
-./build/tsp_bb --initial-clk off \
-  --initial-tour /tmp/lkh-tour-zero-based.txt \
+./build/tsp_bb --initial-tour /tmp/lkh-tour-zero-based.txt \
   --root-pi /tmp/lkh.pi --root-pi-scale 100 \
   --root-pi-mode warm-start --root-pi-refine-ascent polyak \
   --root-pi-refine-iterations 64 input.tsp
@@ -487,22 +518,10 @@ Polyak；`--hk-node-ascent` 还支持 `helsgaun`、`polyak-smoothed` 和
 - 节点平滑参数与根平滑参数相互独立。默认基准权重为 `0.7`、动态余弦缩放
   为 `0.2`、动态范围为 `0.5--0.9`；三个权重必须满足
   `0 <= 最小值 <= 基准值 <= 最大值 <= 1`，余弦缩放必须非负；
-- `--hk-sibling-warm-start` 支持 `off|blend|guarded`，默认 `guarded`；
-  `--hk-sibling-warm-weight` 控制最近节点势注入父 epoch 势的比例，默认
-  `0.25`，范围 `[0,1]`，设为 `0` 可完全关闭。无论取值如何，每个节点仍会
-  重新计算受约束 1-tree 后才接受下界。Guarded 接受的验证评估直接复用于
-  首轮上升；拒绝时该验证是配置迭代上限之外的一次额外评估；
-- `--initial-clk` 支持 `off|single|triple|adaptive`，默认 `adaptive`；`off`
-  跳过内部 CLK，但仍运行 NN+2-opt 并接受 `--initial-tour` 外部上界。Adaptive
-  首先只运行一个 CLK；首个根 1-tree 的相对 gap 达到
-  `--adaptive-clk-gap-ratio` 后，最多追加
-  `--adaptive-clk-additional-starts` 个不同起点；若 UB 改善则重新运行根势上升；
-- `--lk-candidate-set` 支持 `nearest|alpha|hybrid`，每点数量由
-  `--lk-candidates` 控制。Alpha/Hybrid 在根 1-tree 尚不可用的首次 CLK
-  自动使用历史 8-NN，因此根候选消融不会改变基线起点；
-- `--root-guided-lk once` 在根势上升和根 1-tree 后只追加一次 LK，默认
-  `off`。`--root-guided-lk-reascent off` 直接沿用已有合法根下界并使用更紧
-  UB 继续 fixing/BP；设为 `on` 才在改善后重新优化根势；
+- 普通初始化与 PHKMST 一致：多起点 NN+2-opt 后只对最佳回路执行一次
+  确定性 8-NN CLK；搜索达到原 PHKMST 困难阈值后，仍沿用其后置
+  diversified CLK。此前 CPHKMST 的 adaptive/triple CLK、root-guided LK、
+  alpha/hybrid LK 候选参数及 sibling-potential warm start 已从 CLI 移除；
 - `--root-pi` 读取 LKH `PI_FILE` 格式的 1-based 节点势；LKH 默认
   `PRECISION=100`，因此默认 `--root-pi-scale 100`。`replace` 直接使用外部
   势并跳过本地上升，默认的 `warm-start` 则以其为初值继续本地算法；本地

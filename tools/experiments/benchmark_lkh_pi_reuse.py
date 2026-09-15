@@ -17,7 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIGS = (
-    "single-knn8", "root-alpha8", "lkh-exec", "lkh-worker",
+    "single-knn8", "lkh-exec", "lkh-worker",
     "provider-local-ascent", "provider-pi-replace", "provider-pi-warm16",
 )
 FIELDS = (
@@ -30,7 +30,9 @@ def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--solver", type=Path, required=True)
     parser.add_argument("--lkh", type=Path, required=True)
-    parser.add_argument("--worker", type=Path, required=True)
+    parser.add_argument(
+        "--worker", type=Path, required=True,
+        help="CMake-built isolated tsp_lkh_provider executable")
     parser.add_argument(
         "--batch", type=Path, default=ROOT / "data/classic/batch-n200.txt")
     parser.add_argument(
@@ -67,7 +69,7 @@ def dimension(path: Path) -> int:
 def internal_batch(args: argparse.Namespace, extra: tuple[str, ...]) -> list[dict[str, object]]:
     completed = subprocess.run([
         str(args.solver), "--root-bound-only", "--hk-ascent", "hybrid-reverse",
-        "--initial-clk", "single", "--exact-max-n", "199", *extra,
+        "--exact-max-n", "199", *extra,
         "--batch", str(args.batch),
     ], cwd=ROOT, text=True, capture_output=True, check=False)
     if completed.returncode:
@@ -159,24 +161,25 @@ def label(output: str, name: str) -> float:
 
 
 def solver_provider(
-    args: argparse.Namespace, instance: Path, initial: Path,
-    pi: Path | None, mode: str,
+    args: argparse.Namespace, instance: Path, repeat: int, mode: str,
 ) -> dict[str, object]:
     command = [
-        str(args.solver), "--root-bound-only", "--initial-clk", "off",
-        "--initial-tour", str(initial), "--exact-max-n", "199",
+        str(args.solver), "--root-bound-only", "--exact-max-n", "199",
+        "--lkh-provider", str(args.worker), "--lkh-provider-failure", "error",
+        "--lkh-runs", "1", "--lkh-max-trials", str(dimension(instance)),
+        "--lkh-seed", str(repeat),
     ]
     if mode == "local":
-        command.extend(("--hk-ascent", "hybrid-reverse"))
+        command.extend((
+            "--lkh-pi-mode", "off", "--hk-ascent", "hybrid-reverse"))
     elif mode == "replace":
         command.extend((
-            "--hk-ascent", "hybrid-reverse", "--root-pi", str(pi),
-            "--root-pi-mode", "replace"))
+            "--hk-ascent", "hybrid-reverse", "--lkh-pi-mode", "replace"))
     elif mode == "warm16":
         command.extend((
+            "--lkh-pi-mode", "warm-start",
             "--root-pi-refine-ascent", "polyak",
-            "--root-pi-refine-iterations", "16",
-            "--root-pi", str(pi), "--root-pi-mode", "warm-start"))
+            "--root-pi-refine-iterations", "16"))
     else:
         raise ValueError(mode)
     command.append(str(instance))
@@ -184,12 +187,14 @@ def solver_provider(
         command, cwd=ROOT, text=True, capture_output=True, check=False)
     if completed.returncode:
         raise RuntimeError(completed.stderr[-2000:])
+    provider_seconds = label(completed.stdout, "LKH provider seconds")
     return {
         "instance": str(instance),
         "upper_bound": label(completed.stdout, "Final upper bound"),
         "lower_bound": label(completed.stdout, "Final lower bound"),
         "wall_seconds": label(completed.stdout, "Instance wall seconds"),
-        "heuristic_seconds": label(completed.stdout, "Initial tour seconds"),
+        "heuristic_seconds": provider_seconds
+            + label(completed.stdout, "Initial tour seconds"),
         "root_ascent_seconds": label(completed.stdout, "Root ascent seconds"),
         "root_potential_iterations": label(
             completed.stdout, "Root potential iterations"),
@@ -248,7 +253,7 @@ def reports(args: argparse.Namespace, raw: list[dict[str, object]]) -> None:
 
     lines = [
         "# LKH 势复用与长驻 worker 实验", "",
-        f"- 50 实例，{args.repeats} 次重复，逐实例取中位数；只到根证书。",
+        f"- {len(names)} 实例，{args.repeats} 次重复，逐实例取中位数；只到根证书。",
         "- worker 为长期存活父进程，每任务 fork 已链接 LKH 的子进程，消除 exec/装载。",
         "- PI replace 将 LKH PI_FILE 第一节点重标号为内部根 0，跳过本地上升。",
         "- PI warm16 从外部势开始执行最多 16 轮本地 Polyak。", "",
@@ -270,7 +275,6 @@ def reports(args: argparse.Namespace, raw: list[dict[str, object]]) -> None:
     worker_time = by_config["lkh-worker"]["total_wall_seconds"]
     local_time = by_config["provider-local-ascent"]["total_wall_seconds"]
     replace_time = by_config["provider-pi-replace"]["total_wall_seconds"]
-    alpha_time = by_config["root-alpha8"]["total_wall_seconds"]
     lb_deltas = [
         values[("provider-pi-replace", name)]["lower_bound"]
         - values[("provider-local-ascent", name)]["lower_bound"]
@@ -282,8 +286,7 @@ def reports(args: argparse.Namespace, raw: list[dict[str, object]]) -> None:
         f"（{100.0 * (exec_time - worker_time) / exec_time:.2f}%）。",
         f"- PI replace 比原 provider 本地完整上升节省 "
         f"{local_time - replace_time:.6f}s（"
-        f"{100.0 * (local_time - replace_time) / local_time:.2f}%），比内部 "
-        f"alpha8 根阶段节省 {alpha_time - replace_time:.6f}s。",
+        f"{100.0 * (local_time - replace_time) / local_time:.2f}%）。",
         f"- PI replace 的根 LB 相对本地完整上升：更强 "
         f"{sum(value > 1e-6 for value in lb_deltas)}、持平 "
         f"{sum(abs(value) <= 1e-6 for value in lb_deltas)}、更弱 "
@@ -301,12 +304,7 @@ def main() -> int:
     try:
         for repeat in range(1, args.repeats + 1):
             print(f"[{repeat}/{args.repeats}] internal", flush=True)
-            for config, extra in (
-                ("single-knn8", ()),
-                ("root-alpha8", (
-                    "--lk-candidate-set", "alpha", "--lk-candidates", "8",
-                    "--root-guided-lk", "once")),
-            ):
+            for config, extra in (("single-knn8", ()),):
                 for row in internal_batch(args, extra):
                     raw.append({"repeat": repeat, "configuration": config, **row})
             with tempfile.TemporaryDirectory(prefix="tsp-lkh-pi-") as temp_raw:
@@ -326,24 +324,19 @@ def main() -> int:
                         raise RuntimeError(f"LKH exec failed: {instance}")
                     _, exec_cost = parse_tour(exec_tour, n)
 
-                    worker_par, worker_tour, worker_pi = parameter_file(
+                    worker_par, worker_tour, _ = parameter_file(
                         temp / f"worker-{index}", instance, repeat)
                     worker_seconds = worker.run(worker_par)
-                    tour, worker_cost = parse_tour(worker_tour, n)
+                    _, worker_cost = parse_tour(worker_tour, n)
                     if worker_cost != exec_cost:
                         raise RuntimeError(f"worker changed LKH result: {instance}")
-                    initial = temp / f"initial-{index}.tour"
-                    initial.write_text(
-                        f"{n}\n" + " ".join(map(str, tour)) + "\n",
-                        encoding="utf-8")
-
                     providers = {
                         "provider-local-ascent": solver_provider(
-                            args, instance, initial, None, "local"),
+                            args, instance, repeat, "local"),
                         "provider-pi-replace": solver_provider(
-                            args, instance, initial, worker_pi, "replace"),
+                            args, instance, repeat, "replace"),
                         "provider-pi-warm16": solver_provider(
-                            args, instance, initial, worker_pi, "warm16"),
+                            args, instance, repeat, "warm16"),
                     }
                     local_lb = providers["provider-local-ascent"]["lower_bound"]
                     for config, seconds in (
@@ -358,9 +351,6 @@ def main() -> int:
                             "root_potential_iterations": 0.0,
                         })
                     for config, row in providers.items():
-                        row["wall_seconds"] = float(row["wall_seconds"]) + worker_seconds
-                        row["heuristic_seconds"] = (
-                            float(row["heuristic_seconds"]) + worker_seconds)
                         raw.append({"repeat": repeat, "configuration": config, **row})
     finally:
         worker.close()

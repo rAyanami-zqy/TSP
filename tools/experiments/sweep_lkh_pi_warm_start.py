@@ -8,12 +8,11 @@ import csv
 import re
 import statistics
 import subprocess
-import tempfile
 from collections import defaultdict
 from pathlib import Path
 
 from benchmark_lkh_pi_reuse import (
-    ROOT, Worker, dimension, instances, parameter_file, parse_tour,
+    ROOT, dimension, instances,
 )
 
 
@@ -47,7 +46,9 @@ FIELDS = (
 def args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--solver", type=Path, required=True)
-    parser.add_argument("--worker", type=Path, required=True)
+    parser.add_argument(
+        "--worker", type=Path, required=True,
+        help="CMake-built isolated tsp_lkh_provider executable")
     parser.add_argument(
         "--batch", type=Path, default=ROOT / "data/classic/batch-n200.txt")
     parser.add_argument(
@@ -69,23 +70,26 @@ def field(output: str, label: str) -> float:
 
 
 def run_solver(
-    solver: Path, instance: Path, initial: Path, pi: Path,
+    solver: Path, provider: Path, instance: Path, repeat: int,
     strategy: str, iterations: int,
 ) -> dict[str, float]:
     command = [
-        str(solver), "--root-bound-only", "--initial-clk", "off",
-        "--initial-tour", str(initial), "--exact-max-n", "199",
+        str(solver), "--root-bound-only", "--exact-max-n", "199",
+        "--lkh-provider", str(provider), "--lkh-provider-failure", "error",
+        "--lkh-runs", "1", "--lkh-max-trials", str(dimension(instance)),
+        "--lkh-seed", str(repeat),
     ]
     if iterations == 0:
-        command.extend(("--root-pi", str(pi), "--root-pi-mode", "replace"))
+        command.extend(("--lkh-pi-mode", "replace"))
     elif iterations == 400:
         # Reference: same LKH tour, but original local ascent from zero.
-        command.extend(("--hk-ascent", strategy))
+        command.extend((
+            "--lkh-pi-mode", "off", "--hk-ascent", strategy))
     else:
         command.extend((
+            "--lkh-pi-mode", "warm-start",
             "--root-pi-refine-ascent", strategy,
-            "--root-pi-refine-iterations", str(iterations),
-            "--root-pi", str(pi), "--root-pi-mode", "warm-start"))
+            "--root-pi-refine-iterations", str(iterations)))
     command.append(str(instance))
     completed = subprocess.run(
         command, cwd=ROOT, text=True, capture_output=True, check=False)
@@ -154,7 +158,8 @@ def write(args: argparse.Namespace, raw: list[dict[str, object]]) -> None:
     lines = [
         "# LKH PI warm-start 小预算扫描", "",
         f"{len(names)} 实例，{args.repeats} 次重复取逐实例中位数；"
-        "时间不含已经共同支付的 LKH worker。",
+        "每个配置均通过隔离式 provider 独立调用 LKH，墙钟包含该调用；"
+        "根上升列只统计本地精修。",
         "", "| 配置 | 改善/变差 vs replace | LB总增益 | 强/平/弱 vs 本地完整 | 总时间(s) | 上升(s) | 迭代 | 最大LB损失 |",
         "|---|---:|---:|---:|---:|---:|---:|---:|",
     ]
@@ -202,40 +207,26 @@ def main() -> int:
     options = args()
     paths = instances(options.batch)
     raw: list[dict[str, object]] = []
-    worker = Worker(options.worker)
-    try:
-        for repeat in range(1, options.repeats + 1):
-            with tempfile.TemporaryDirectory(prefix="tsp-lkh-warm-") as temp_raw:
-                temp = Path(temp_raw)
-                for index, instance in enumerate(paths, 1):
-                    if index == 1 or index % 10 == 0:
-                        print(
-                            f"[{repeat}/{options.repeats}] {index}/{len(paths)}",
-                            flush=True)
-                    parameter, tour_path, pi = parameter_file(
-                        temp / str(index), instance, repeat)
-                    worker.run(parameter)
-                    tour, _ = parse_tour(tour_path, dimension(instance))
-                    initial = temp / f"initial-{index}.tour"
-                    initial.write_text(
-                        f"{len(tour)}\n" + " ".join(map(str, tour)) + "\n",
-                        encoding="utf-8")
-                    expected_ub = None
-                    for config, strategy, iterations in CONFIGS:
-                        result = run_solver(
-                            options.solver, instance, initial, pi,
-                            strategy, iterations)
-                        if expected_ub is None:
-                            expected_ub = result["upper_bound"]
-                        elif result["upper_bound"] != expected_ub:
-                            raise RuntimeError(
-                                f"warm-start changed incumbent: {instance}")
-                        raw.append({
-                            "repeat": repeat, "configuration": config,
-                            "instance": str(instance), **result,
-                        })
-    finally:
-        worker.close()
+    for repeat in range(1, options.repeats + 1):
+        for index, instance in enumerate(paths, 1):
+            if index == 1 or index % 10 == 0:
+                print(
+                    f"[{repeat}/{options.repeats}] {index}/{len(paths)}",
+                    flush=True)
+            expected_ub = None
+            for config, strategy, iterations in CONFIGS:
+                result = run_solver(
+                    options.solver, options.worker, instance, repeat,
+                    strategy, iterations)
+                if expected_ub is None:
+                    expected_ub = result["upper_bound"]
+                elif result["upper_bound"] != expected_ub:
+                    raise RuntimeError(
+                        f"warm-start changed incumbent: {instance}")
+                raw.append({
+                    "repeat": repeat, "configuration": config,
+                    "instance": str(instance), **result,
+                })
     write(options, raw)
     print(options.output / "结论.md")
     return 0

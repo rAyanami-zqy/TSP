@@ -1006,12 +1006,12 @@ private:
     // 只作为下一次临时上升的 warm start，不直接充当下界。
     mutable std::vector<double> sibling_warm_potential_;
     // 父 epoch 势与兄弟 warm 势的混合权重；0 完全关闭跨兄弟复用。
-    double node_ascent_sibling_warm_weight_ = 0.25;
-    // 默认验证 warm 势，只在当前约束图上取得更强下界时采用。
+    double node_ascent_sibling_warm_weight_ = 0.0;
+    // 与 PHKMST 默认行为对齐，不跨兄弟节点复用临时势。
     SiblingWarmStartStrategy sibling_warm_start_strategy_
-        = SiblingWarmStartStrategy::Guarded;
-    // 初始 CLK 默认按根 gap 自适应追加，避免简单实例固定支付三起点成本。
-    InitialClkStrategy initial_clk_strategy_ = InitialClkStrategy::Adaptive;
+        = SiblingWarmStartStrategy::Off;
+    // 普通初始化与 PHKMST 一致，只执行一个确定性 CLK 起点。
+    InitialClkStrategy initial_clk_strategy_ = InitialClkStrategy::Single;
     double adaptive_clk_gap_ratio_ = 0.02;
     std::size_t adaptive_clk_additional_starts_ = 2;
     bool adaptive_initial_clk_attempted_ = false;

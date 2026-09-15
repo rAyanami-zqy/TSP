@@ -1886,6 +1886,7 @@ void testSearchNodePotentialUpdates()
     }
     {
         tsp::BranchBoundSolver solver(matrix);
+        solver.setNodeAscentSiblingWarmWeight(0.25);
         solver.setNodeAscentSiblingWarmStartStrategy(
             tsp::SiblingWarmStartStrategy::Guarded);
         solver.setPotentialUpdateOptions(

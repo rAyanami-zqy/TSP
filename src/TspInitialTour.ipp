@@ -182,7 +182,8 @@ bool BranchBoundSolver::improveInitialTourDiversified(
     for (std::size_t index = 0; index < start_count; ++index) {
         std::vector<int> candidate = alternatives[index].tour;
         double candidate_cost = alternatives[index].cost;
-        linKernighan(candidate, candidate_cost, true);
+        // PHKMST 的困难实例后置 CLK 沿用与首起点相同的确定性 kick 轨迹。
+        linKernighan(candidate, candidate_cost, false);
         ++result_.stats.initial_clk_starts;
         candidate_cost = tourCost(candidate);
         ++starts_run;

@@ -32,6 +32,8 @@ ctest --test-dir build --output-on-failure
 | 文件 | 职责 | 是否独立编译 |
 |---|---|---:|
 | `src/main.cpp` | CLI 参数、单实例/批处理调度、输出 | 是 |
+| `include/LkhProvider.hpp` / `src/LkhProvider.cpp` | 可选 LKH provider 客户端、协议、tour/PI 校验和临时目录 | 是 |
+| `src/lkh_provider_worker.c` | 本地 LKH 的长驻父进程；每次请求 fork 隔离子进程 | 可选 C 目标 |
 | `include/TspSolver.hpp` | 公共 API、策略枚举、结果统计、精确搜索内部状态声明 | 头文件 |
 | `src/TspSolver.cpp` | 根势、节点势、1-tree、root fixing、BP 搜索、增量 MST 和回滚 | 是 |
 | `src/TspProblemText.ipp` | 文本清理、大小写和 TSPLIB 基础转换 | 否 |
@@ -39,7 +41,7 @@ ctest --test-dir build --output-on-failure
 | `src/TspProblemCoordinate.ipp` | EUC、CEIL、ATT、GEO 等坐标距离 | 否 |
 | `src/TspProblemModel.ipp` | `TspProblem` 查询与稠密矩阵物化 | 否 |
 | `src/TspProblemIO.ipp` | 普通矩阵/TSPLIB 自动识别和读取 | 否 |
-| `src/TspInitialTour.ipp` | 精确求解前的 NN、2-opt、初始/自适应多启动 CLK | 否 |
+| `src/TspInitialTour.ipp` | 精确求解前的 NN、2-opt、PHKMST 单起点 CLK 与后置 CLK | 否 |
 | `src/TspLinKernighan.ipp` | 2-opt、顺序 k-opt、double-bridge 和 Chained LK | 否 |
 | `src/TspHeuristicSolver.ipp` | 独立的通用近似 API；当前 `tsp_bb` 精确 CLI 不调用它 | 否 |
 
@@ -73,6 +75,9 @@ flowchart TD
     Batch --> SolveInput[solveInput]
     Single --> SolveInput
     SolveInput --> Read[readTspProblem]
+    SolveInput -. 可选 .-> Provider[LkhProvider: tour + PI]
+    Provider --> Worker[tsp_lkh_provider 长驻父进程]
+    Worker --> Child[每实例 fork 后调用 LKH_entry]
     Read --> Dense[TspProblem::toDenseMatrix]
     Dense --> Construct[BranchBoundSolver]
     Construct --> Configure[应用 CLI 策略参数]
@@ -128,12 +133,7 @@ flowchart TD
     State --> OneTree[computeOneTree]
     OneTree --> Feasible{1-tree 可行?}
     Feasible -- no --> Infeasible[返回不可行]
-    Feasible -- yes --> Adaptive{adaptive CLK 且根 gap 达阈值?}
-    Adaptive -- yes --> MoreCLK[追加 CLK starts]
-    MoreCLK --> Better{UB 改善?}
-    Better -- yes --> RootLoop
-    Better -- no --> BoundOnly
-    Adaptive -- no --> BoundOnly{root-bound-only?}
+    Feasible -- yes --> BoundOnly{root-bound-only?}
     BoundOnly -- yes --> ReturnBound[返回 UB/LB，不做精确证明]
     BoundOnly -- no --> Alpha[可选 root alpha/frequency 先验]
     Alpha --> Fix[applyRootReducedCostFixing]
@@ -145,12 +145,9 @@ flowchart TD
 
 ### 6.1 初始上界
 
-`findInitialTour()` 先构造可行 tour，再做 2-opt 和 CLK。当前默认 `adaptive`：
-
-- 先支付一个 CLK start；
-- 得到第一份根 1-tree 证书；
-- 若 `(UB-LB)/max(1,|UB|)` 达到阈值，再追加有限个 start；
-- UB 改善后重新根势上升，因为 Polyak 步长依赖 UB。
+`findInitialTour()` 与 PHKMST 对齐：枚举 NN 起点并做 2-opt，只对最佳结果执行
+一次确定性 8-NN CLK。启用 LKH provider 时，LKH tour 作为额外 incumbent，
+并关闭这一次内部 CLK，避免重复支付同类局部搜索成本。
 
 搜索节点达到困难度阈值后，`maybeImproveIncumbentDiversified()` 还可运行一次延迟多起点 LK；改善时整轮 DFS 回退并从根重启。
 
@@ -224,15 +221,14 @@ forbid(e1), forbid(e2), force(e3)
 
 “全部 B 边都 forbid”的剩余分支已经在 `bpPartition()` 构造 B 的终止测试中证明不可改善，因此不需要再建一个孩子。若 `|B|=1`，则该边在当前节点对所有改进 tour 都是必选边，直接传播，不增加逻辑深度。
 
-## 8. 节点势更新与 guarded warm start
+## 8. 节点势更新
 
 搜索节点先由 `classifyPotentialUpdate()` 检查策略、预算、数值安全、深度间隔、度违规和 gap 区间。触发后：
 
 1. `updateNodePotentialBound()` 在当前 forced/forbidden 图上运行有限轮 Prim 1-tree 势上升。
-2. guarded sibling warm start 会把父 epoch 势与最近兄弟势混合，先在当前约束图评估。
-3. 只有 warm 候选严格提高初始 LB 才接受；否则继续使用父 epoch 势。
-4. 若得到更强证书，`rebuildPotentialEpoch()` 重建候选排序和 1-tree 状态。
-5. 在该子树中递归搜索，退出时完整恢复父 epoch。
+2. 初值沿用父 epoch 势，不跨兄弟节点混合临时势，与 PHKMST 保持一致。
+3. 若得到更强证书，`rebuildPotentialEpoch()` 重建候选排序和 1-tree 状态。
+4. 在该子树中递归搜索，退出时完整恢复父 epoch。
 
 临时势从不直接作为未经验证的剪枝依据。
 

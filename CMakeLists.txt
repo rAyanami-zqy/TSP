@@ -11,6 +11,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(CTest)
 
+# LKH is research-use software and is therefore not vendored in this
+# repository. Point this cache entry at an unpacked LKH 2.x source tree to
+# build the process-isolated provider from local sources.
+set(TSP_LKH_SOURCE_DIR "" CACHE PATH
+    "Path to an unpacked LKH source tree (optional)")
+
 function(tsp_apply_common_settings target)
     target_include_directories(${target}
         PRIVATE
@@ -54,12 +60,14 @@ function(tsp_add_solver target)
     if(VARIANT_EXCLUDE_FROM_ALL)
         add_executable(${target} EXCLUDE_FROM_ALL
             src/main.cpp
+            src/LkhProvider.cpp
             ${TSP_SOLVER_SOURCES}
             ${TSP_SOLVER_IMPLEMENTATION_PARTS}
         )
     else()
         add_executable(${target}
             src/main.cpp
+            src/LkhProvider.cpp
             ${TSP_SOLVER_SOURCES}
             ${TSP_SOLVER_IMPLEMENTATION_PARTS}
         )
@@ -75,6 +83,58 @@ function(tsp_add_solver target)
     endif()
 endfunction()
 
+if(TSP_LKH_SOURCE_DIR)
+    if(NOT UNIX)
+        message(FATAL_ERROR
+            "TSP_LKH_SOURCE_DIR requires a POSIX platform (fork isolation)")
+    endif()
+    enable_language(C)
+    get_filename_component(TSP_LKH_SOURCE_DIR
+        "${TSP_LKH_SOURCE_DIR}" ABSOLUTE)
+    set(TSP_LKH_SRC_DIR "${TSP_LKH_SOURCE_DIR}/SRC")
+    if(NOT EXISTS "${TSP_LKH_SRC_DIR}/LKHmain.c"
+       OR NOT EXISTS "${TSP_LKH_SRC_DIR}/INCLUDE/LKH.h")
+        message(FATAL_ERROR
+            "TSP_LKH_SOURCE_DIR is not an LKH source tree: "
+            "${TSP_LKH_SOURCE_DIR}")
+    endif()
+
+    file(GLOB TSP_LKH_C_SOURCES CONFIGURE_DEPENDS
+        "${TSP_LKH_SRC_DIR}/*.c")
+    list(REMOVE_ITEM TSP_LKH_C_SOURCES "${TSP_LKH_SRC_DIR}/LKHmain.c")
+
+    add_library(tsp_lkh_objects OBJECT ${TSP_LKH_C_SOURCES})
+    target_include_directories(tsp_lkh_objects PRIVATE
+        "${TSP_LKH_SRC_DIR}/INCLUDE")
+    target_compile_definitions(tsp_lkh_objects PRIVATE TWO_LEVEL_TREE)
+
+    add_library(tsp_lkh_entry OBJECT "${TSP_LKH_SRC_DIR}/LKHmain.c")
+    target_include_directories(tsp_lkh_entry PRIVATE
+        "${TSP_LKH_SRC_DIR}/INCLUDE")
+    target_compile_definitions(tsp_lkh_entry PRIVATE
+        TWO_LEVEL_TREE main=LKH_entry)
+
+    foreach(lkh_target IN ITEMS tsp_lkh_objects tsp_lkh_entry)
+        set_target_properties(${lkh_target} PROPERTIES
+            C_STANDARD 11
+            C_STANDARD_REQUIRED FALSE
+            C_EXTENSIONS TRUE)
+        if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+            target_compile_options(${lkh_target} PRIVATE -O3 -fcommon)
+        endif()
+    endforeach()
+
+    add_executable(tsp_lkh_provider
+        src/lkh_provider_worker.c
+        $<TARGET_OBJECTS:tsp_lkh_objects>
+        $<TARGET_OBJECTS:tsp_lkh_entry>)
+    set_target_properties(tsp_lkh_provider PROPERTIES
+        C_STANDARD 11
+        C_STANDARD_REQUIRED TRUE
+        C_EXTENSIONS TRUE)
+    target_link_libraries(tsp_lkh_provider PRIVATE m)
+endif()
+
 # Default/main target: optimized 2026-07-20 MST implementation.
 # The archived executable keeps the `tsp_bb` name under `solver/07-20-MST/`.
 tsp_add_solver(tsp_bb)
@@ -85,6 +145,19 @@ tsp_add_solver(tsp_bb_26_07_14_deg EXCLUDE_FROM_ALL)
 tsp_add_solver(tsp_bb_26_07_14_min_edge EXCLUDE_FROM_ALL MIN_EDGE)
 tsp_add_solver(tsp_bb_26_07_14_full_deg EXCLUDE_FROM_ALL FULL_ONETREE)
 tsp_add_solver(tsp_bb_26_07_14_full_min_edge EXCLUDE_FROM_ALL MIN_EDGE FULL_ONETREE)
+
+if(TARGET tsp_lkh_provider)
+    foreach(solver_target IN ITEMS
+            tsp_bb
+            tsp_bb_26_07_14_deg
+            tsp_bb_26_07_14_min_edge
+            tsp_bb_26_07_14_full_deg
+            tsp_bb_26_07_14_full_min_edge)
+        add_dependencies(${solver_target} tsp_lkh_provider)
+        target_compile_definitions(${solver_target} PRIVATE
+            TSP_DEFAULT_LKH_PROVIDER_PATH="$<TARGET_FILE:tsp_lkh_provider>")
+    endforeach()
+endif()
 
 add_custom_target(tsp_bb_variants
     DEPENDS
@@ -169,4 +242,27 @@ if(BUILD_TESTING)
     set_tests_properties(tsp_cli_initial_tour_invalid tsp_cli_initial_tour_batch_rejected
         PROPERTIES WILL_FAIL TRUE
     )
+
+    if(TARGET tsp_lkh_provider)
+        add_test(NAME tsp_cli_local_lkh_provider
+            COMMAND $<TARGET_FILE:tsp_bb>
+                --lkh-provider auto
+                ${CMAKE_CURRENT_SOURCE_DIR}/examples/tsplib/five-node-euc.tsp
+        )
+        set_tests_properties(tsp_cli_local_lkh_provider PROPERTIES
+            PASS_REGULAR_EXPRESSION "LKH provider failures: 0")
+
+        # A malformed-for-LKH native matrix makes the isolated child fail.
+        # The provider parent and tsp_bb remain alive and the explicit fallback
+        # policy returns to the unchanged internal initialization path.
+        add_test(NAME tsp_cli_local_lkh_provider_fallback
+            COMMAND $<TARGET_FILE:tsp_bb>
+                --root-bound-only
+                --lkh-provider auto
+                --lkh-provider-failure fallback
+                ${CMAKE_CURRENT_SOURCE_DIR}/examples/five-city.txt
+        )
+        set_tests_properties(tsp_cli_local_lkh_provider_fallback PROPERTIES
+            PASS_REGULAR_EXPRESSION "LKH provider failures: 1")
+    endif()
 endif()

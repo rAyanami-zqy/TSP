@@ -1,4 +1,5 @@
 #include "TspSolver.hpp"
+#include "LkhProvider.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -9,11 +10,23 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <vector>
 
 namespace {
+
+enum class LkhProviderPiMode {
+    Off,
+    Replace,
+    WarmStart,
+};
+
+enum class LkhProviderFailureMode {
+    Error,
+    Fallback,
+};
 
 struct CliOptions {
     // 单实例文件路径；为空且未指定 batch_path 时从标准输入读取。
@@ -38,6 +51,17 @@ struct CliOptions {
     // LKH PI_FILE 的第一条节点记录是其最终 1-tree 特殊根；默认把该节点
     // 重标号为内部顶点 0，避免同一组势因根不一致损失下界。
     bool root_pi_relabel_root = true;
+    // 可选的本地 LKH provider。auto 使用同一 CMake 构建产物；provider
+    // 在批处理中长驻，但每次 LKH 调用由隔离子进程完成。
+    std::string lkh_provider_path;
+    std::size_t lkh_provider_runs = 1;
+    std::size_t lkh_provider_max_trials = 0;
+    unsigned long long lkh_provider_seed = 1;
+    double lkh_provider_time_limit_seconds = 0.0;
+    LkhProviderPiMode lkh_provider_pi_mode =
+        LkhProviderPiMode::WarmStart;
+    LkhProviderFailureMode lkh_provider_failure_mode =
+        LkhProviderFailureMode::Error;
     // 坐标实例展开为 n×n 稠密矩阵时允许的最大顶点数，防止意外耗尽内存。
     std::size_t exact_max_n = 10000;
     // 根节点 Held-Karp 势的上升算法；不影响问题可行域，只影响下界强度。
@@ -59,22 +83,6 @@ struct CliOptions {
     double node_ascent_dynamic_cosine_scale = 0.2;
     double node_ascent_dynamic_min_current_weight = 0.5;
     double node_ascent_dynamic_max_current_weight = 0.9;
-    // off/blend/guarded 控制兄弟势是否复用以及是否先验证当前节点下界。
-    tsp::SiblingWarmStartStrategy sibling_warm_start
-        = tsp::SiblingWarmStartStrategy::Guarded;
-    // 最近节点势以该权重阻尼注入下一兄弟节点；0 关闭跨兄弟 warm start。
-    double node_ascent_sibling_warm_weight = 0.25;
-    // 初始 CLK 默认先单起点，再按根 gap 决定是否追加两个起点。
-    tsp::InitialClkStrategy initial_clk = tsp::InitialClkStrategy::Adaptive;
-    double adaptive_clk_gap_ratio = 0.02;
-    std::size_t adaptive_clk_additional_starts = 2;
-    // 根 1-tree 之前仍使用历史 k-NN；启用 root-guided-lk 后可在根处切换
-    // 为 alpha 或 hybrid 候选集再做一次 LK。
-    tsp::LkCandidateSetStrategy lk_candidate_set
-        = tsp::LkCandidateSetStrategy::Nearest;
-    std::size_t lk_candidate_count = 8;
-    bool root_guided_lk = false;
-    bool root_guided_lk_reascent = false;
     // 默认沿用调整权重排序；实验策略只切换 BP 内部的分支边优先级，
     // 不改变 1-tree 下界或 Kruskal 候选顺序。
     tsp::BranchEdgeOrder branch_edge_order
@@ -118,6 +126,9 @@ struct RunResult {
     int dimension = 0;
     // 从读取实例到 solve() 返回的单实例墙钟时间；批处理逐行输出该值。
     double instance_wall_seconds = 0.0;
+    std::size_t lkh_provider_calls = 0;
+    std::size_t lkh_provider_failures = 0;
+    double lkh_provider_seconds = 0.0;
 };
 
 // 去掉 batch 清单行首尾空白，便于处理空行和注释行。
@@ -199,7 +210,10 @@ std::string formatTourLimited(const std::vector<int>& tour, std::size_t max_vert
 }
 
 // 统一的单实例求解入口：自动识别矩阵或 TSPLIB，进行精确求解。
-RunResult solveInput(std::istream& input, const CliOptions& options)
+RunResult solveInput(std::istream& input,
+                     const std::string& source_path,
+                     const CliOptions& options,
+                     tsp::LkhProvider* lkh_provider)
 {
     const auto started_at = std::chrono::steady_clock::now();
     tsp::TspProblem problem = tsp::readTspProblem(input);
@@ -216,6 +230,40 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
     }
 
     std::vector<int> supplied_tour;
+    std::vector<double> root_potentials;
+    int external_root = 0;
+    bool lkh_tour_supplied = false;
+    if (lkh_provider != nullptr) {
+        ++output.lkh_provider_calls;
+        try {
+            tsp::LkhProviderOptions provider_options;
+            provider_options.runs = options.lkh_provider_runs;
+            provider_options.max_trials = options.lkh_provider_max_trials;
+            provider_options.seed = options.lkh_provider_seed;
+            provider_options.time_limit_seconds =
+                options.lkh_provider_time_limit_seconds;
+            provider_options.produce_potentials =
+                options.lkh_provider_pi_mode != LkhProviderPiMode::Off;
+            provider_options.potential_scale = options.root_pi_scale;
+            tsp::LkhProviderResult provider_result =
+                lkh_provider->run(source_path, dimension, provider_options);
+            lkh_tour_supplied = !provider_result.tour.empty();
+            supplied_tour = std::move(provider_result.tour);
+            root_potentials = std::move(provider_result.potentials);
+            external_root = provider_result.potential_root;
+            output.lkh_provider_seconds = provider_result.provider_seconds;
+        } catch (const std::exception& ex) {
+            ++output.lkh_provider_failures;
+            if (options.lkh_provider_failure_mode
+                == LkhProviderFailureMode::Error) {
+                throw;
+            }
+            if (options.debug) {
+                std::cerr << "[tsp-debug] LKH provider failed; using internal "
+                             "initialization: " << ex.what() << '\n';
+            }
+        }
+    }
     if (!options.initial_tour_path.empty()) {
         std::ifstream tour_input(options.initial_tour_path);
         long long count = -1;
@@ -229,8 +277,6 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
         tour_input >> std::ws;
         if (!tour_input.eof()) throw std::runtime_error("extra data in initial tour file");
     }
-    std::vector<double> root_potentials;
-    int external_root = 0;
     if (!options.root_pi_path.empty()) {
         std::ifstream pi_input(options.root_pi_path);
         long long count = -1;
@@ -302,12 +348,23 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
     if (!supplied_tour.empty()) {
         solver.setInitialTour(supplied_tour);
     }
-    if (!root_potentials.empty()) {
+    const bool has_external_potentials = !root_potentials.empty();
+    if (has_external_potentials) {
+        const tsp::RootPotentialSeedStrategy seed_strategy =
+            options.lkh_provider_pi_mode == LkhProviderPiMode::Replace
+                ? tsp::RootPotentialSeedStrategy::Replace
+                : options.root_pi_mode;
         solver.setRootPotentialSeed(
-            std::move(root_potentials), options.root_pi_mode);
+            std::move(root_potentials), seed_strategy);
     }
-    const bool refine_external_potentials = !options.root_pi_path.empty()
-        && options.root_pi_mode == tsp::RootPotentialSeedStrategy::WarmStart;
+    const bool provider_supplied_potentials = has_external_potentials
+        && lkh_provider != nullptr;
+    const bool refine_external_potentials = has_external_potentials
+        && (provider_supplied_potentials
+                ? options.lkh_provider_pi_mode
+                    == LkhProviderPiMode::WarmStart
+                : options.root_pi_mode
+                    == tsp::RootPotentialSeedStrategy::WarmStart);
     solver.setRootAscentStrategy(refine_external_potentials
             ? options.root_pi_refine_ascent
             : options.root_ascent);
@@ -333,18 +390,20 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
         options.node_ascent_dynamic_cosine_scale,
         options.node_ascent_dynamic_min_current_weight,
         options.node_ascent_dynamic_max_current_weight);
-    solver.setNodeAscentSiblingWarmWeight(
-        options.node_ascent_sibling_warm_weight);
+    // 与 PHKMST 对齐：不跨兄弟节点复用临时势。
+    solver.setNodeAscentSiblingWarmWeight(0.0);
     solver.setNodeAscentSiblingWarmStartStrategy(
-        options.sibling_warm_start);
+        tsp::SiblingWarmStartStrategy::Off);
+    // 与 PHKMST 对齐：普通路径固定一次历史 8-NN CLK。只有 LKH provider
+    // 路径关闭内部 CLK，避免为同一初始化重复支付局部搜索成本。
     solver.setInitialClkStrategy(
-        options.initial_clk,
-        options.adaptive_clk_gap_ratio,
-        options.adaptive_clk_additional_starts);
+        lkh_tour_supplied
+            ? tsp::InitialClkStrategy::Off
+            : tsp::InitialClkStrategy::Single,
+        0.0, 0);
     solver.setLkCandidateSetOptions(
-        options.lk_candidate_set, options.lk_candidate_count);
-    solver.setRootGuidedLk(
-        options.root_guided_lk, options.root_guided_lk_reascent);
+        tsp::LkCandidateSetStrategy::Nearest, 8);
+    solver.setRootGuidedLk(false, false);
     // 分支顺序与势更新策略是两个正交开关，便于分别评估搜索树形状和下界质量。
     solver.setBranchEdgeOrder(options.branch_edge_order);
     solver.setPotentialUpdateOptions(
@@ -475,6 +534,9 @@ void printHumanResult(const RunResult& run)
               << result.stats.root_external_potential_replacements << '\n';
     std::cout << "Root external potential warm starts: "
               << result.stats.root_external_potential_warm_starts << '\n';
+    std::cout << "LKH provider calls: " << run.lkh_provider_calls << '\n';
+    std::cout << "LKH provider failures: " << run.lkh_provider_failures << '\n';
+    std::cout << "LKH provider seconds: " << run.lkh_provider_seconds << '\n';
     std::cout << "Instance wall seconds: " << run.instance_wall_seconds << '\n';
     std::cout << "Nodes created: " << result.stats.nodes_created << '\n';
     std::cout << "Nodes expanded: " << result.stats.nodes_expanded << '\n';
@@ -555,7 +617,9 @@ void printHumanResult(const RunResult& run)
 }
 
 // 从文件读取一个实例并求解。
-int runSingleFile(const std::string& path, const CliOptions& options)
+int runSingleFile(const std::string& path,
+                  const CliOptions& options,
+                  tsp::LkhProvider* lkh_provider)
 {
     std::ifstream file(path);
     if (!file) {
@@ -564,7 +628,7 @@ int runSingleFile(const std::string& path, const CliOptions& options)
     }
     std::cout << "Solving instance from file: " << path << '\n';
     std::cout.flush();
-    const RunResult run = solveInput(file, options);
+    const RunResult run = solveInput(file, path, options, lkh_provider);
     printHumanResult(run);
     return run.result.feasible ? 0 : 1;
 }
@@ -572,7 +636,7 @@ int runSingleFile(const std::string& path, const CliOptions& options)
 // 未传入文件时，从标准输入读取一个实例。
 int runSingleStdin(const CliOptions& options)
 {
-    const RunResult run = solveInput(std::cin, options);
+    const RunResult run = solveInput(std::cin, {}, options, nullptr);
     printHumanResult(run);
     return run.result.feasible ? 0 : 1;
 }
@@ -594,6 +658,7 @@ void printBatchHeader()
         << "root_potential_iterations,root_ascent_seconds,"
         << "root_external_potential_replacements,"
         << "root_external_potential_warm_starts,"
+        << "lkh_provider_calls,lkh_provider_failures,lkh_provider_seconds,"
         << "instance_wall_seconds,"
         << "nodes_created,nodes_expanded,pruned_by_bound,pruned_infeasible,"
         << "search_node_potential_update_candidates,"
@@ -632,9 +697,9 @@ void printBatchRow(const std::string& path,
 
     if (run == nullptr) {
         // 读取失败、解析失败等情况没有求解统计，只保留错误信息。
-        // method 到 tour 共 63 个空字段；最后一个字段保留错误消息。
+        // method 到 tour 共 66 个空字段；最后一个字段保留错误消息。
         // 新增批量列时必须同步此数量，确保错误行也与 CSV 表头严格对齐。
-        for (int field = 0; field < 63; ++field) {
+        for (int field = 0; field < 66; ++field) {
             std::cout << ',';
         }
         std::cout << csvQuote(message) << '\n';
@@ -671,6 +736,9 @@ void printBatchRow(const std::string& path,
               << formatDouble(result.stats.root_ascent_seconds) << ','
               << result.stats.root_external_potential_replacements << ','
               << result.stats.root_external_potential_warm_starts << ','
+              << run->lkh_provider_calls << ','
+              << run->lkh_provider_failures << ','
+              << formatDouble(run->lkh_provider_seconds) << ','
               << formatDouble(run->instance_wall_seconds) << ','
               << result.stats.nodes_created << ','
               << result.stats.nodes_expanded << ','
@@ -710,7 +778,9 @@ void printBatchRow(const std::string& path,
 }
 
 // 批处理清单每行一个实例路径；单个实例失败不会中断整个批次。
-int runBatch(const std::string& list_path, const CliOptions& options)
+int runBatch(const std::string& list_path,
+             const CliOptions& options,
+             tsp::LkhProvider* lkh_provider)
 {
     std::ifstream list_file(list_path);
     if (!list_file) {
@@ -747,7 +817,7 @@ int runBatch(const std::string& list_path, const CliOptions& options)
                 continue;
             }
 
-            RunResult run = solveInput(input, options);
+            RunResult run = solveInput(input, path, options, lkh_provider);
             if (run.result.feasible) {
                 printBatchRow(path, "ok", &run, "");
             } else {
@@ -788,6 +858,15 @@ void printUsage(const char* program)
               << "  --root-pi-refine-dynamic-max-current-weight <x in [0,1]>"
                  " (default 0.9)\n"
               << "  --root-pi-relabel-root <off|on> (default on)\n"
+              << "  --lkh-provider <path> (use auto for CMake-built provider)\n"
+              << "  --lkh-runs <n> (default 1)\n"
+              << "  --lkh-max-trials <n> (default 0 = dimension)\n"
+              << "  --lkh-seed <n> (default 1)\n"
+              << "  --lkh-time-limit <seconds> (default 0 = unlimited)\n"
+              << "  --lkh-pi-mode <off|replace|warm-start>"
+                 " (default warm-start)\n"
+              << "  --lkh-provider-failure <error|fallback>"
+                 " (default error)\n"
               << "  --hk-ascent <none|polyak|helsgaun|hybrid|hybrid-reverse|"
                  "polyak-smoothed|polyak-smoothed-dynamic>\n"
               << "  --root-ascent-iterations <n>\n"
@@ -802,15 +881,6 @@ void printUsage(const char* program)
               << "  --hk-node-dynamic-cosine-scale <x >= 0>\n"
               << "  --hk-node-dynamic-min-current-weight <x in [0,1]>\n"
               << "  --hk-node-dynamic-max-current-weight <x in [0,1]>\n"
-              << "  --hk-sibling-warm-start <off|blend|guarded>\n"
-              << "  --hk-sibling-warm-weight <x in [0,1]> (0 = disabled)\n"
-              << "  --initial-clk <off|single|triple|adaptive>\n"
-              << "  --adaptive-clk-gap-ratio <x >= 0>\n"
-              << "  --adaptive-clk-additional-starts <n>\n"
-              << "  --lk-candidate-set <nearest|alpha|hybrid>\n"
-              << "  --lk-candidates <n>\n"
-              << "  --root-guided-lk <off|once>\n"
-              << "  --root-guided-lk-reascent <off|on>\n"
               << "  --branch-edge-order <weight|root-alpha-asc|root-alpha-desc|"
                  "root-alpha-global-asc|root-alpha-global-desc|"
                  "forbid-delta-asc|forbid-delta-desc|forbid-degree-desc|"
@@ -872,39 +942,6 @@ tsp::NodeAscentStrategy parseNodeAscentStrategy(const std::string& value)
           "or polyak-smoothed-dynamic)");
 }
 
-tsp::SiblingWarmStartStrategy parseSiblingWarmStartStrategy(
-    const std::string& value)
-{
-    if (value == "off") return tsp::SiblingWarmStartStrategy::Off;
-    if (value == "blend") return tsp::SiblingWarmStartStrategy::Blend;
-    if (value == "guarded") return tsp::SiblingWarmStartStrategy::Guarded;
-    throw std::runtime_error(
-        "invalid value for --hk-sibling-warm-start: " + value
-        + " (expected off, blend, or guarded)");
-}
-
-tsp::InitialClkStrategy parseInitialClkStrategy(const std::string& value)
-{
-    if (value == "off") return tsp::InitialClkStrategy::Off;
-    if (value == "single") return tsp::InitialClkStrategy::Single;
-    if (value == "triple") return tsp::InitialClkStrategy::Triple;
-    if (value == "adaptive") return tsp::InitialClkStrategy::Adaptive;
-    throw std::runtime_error(
-        "invalid value for --initial-clk: " + value
-        + " (expected off, single, triple, or adaptive)");
-}
-
-tsp::LkCandidateSetStrategy parseLkCandidateSetStrategy(
-    const std::string& value)
-{
-    if (value == "nearest") return tsp::LkCandidateSetStrategy::Nearest;
-    if (value == "alpha") return tsp::LkCandidateSetStrategy::Alpha;
-    if (value == "hybrid") return tsp::LkCandidateSetStrategy::Hybrid;
-    throw std::runtime_error(
-        "invalid value for --lk-candidate-set: " + value
-        + " (expected nearest, alpha, or hybrid)");
-}
-
 bool parseOnOff(const std::string& value, const std::string& option)
 {
     if (value == "on") return true;
@@ -926,6 +963,26 @@ tsp::RootPotentialSeedStrategy parseRootPotentialSeedStrategy(
     throw std::runtime_error(
         "invalid value for --root-pi-mode: " + value
         + " (expected replace or warm-start)");
+}
+
+LkhProviderPiMode parseLkhProviderPiMode(const std::string& value)
+{
+    if (value == "off") return LkhProviderPiMode::Off;
+    if (value == "replace") return LkhProviderPiMode::Replace;
+    if (value == "warm-start") return LkhProviderPiMode::WarmStart;
+    throw std::runtime_error(
+        "invalid value for --lkh-pi-mode: " + value
+        + " (expected off, replace, or warm-start)");
+}
+
+LkhProviderFailureMode parseLkhProviderFailureMode(
+    const std::string& value)
+{
+    if (value == "error") return LkhProviderFailureMode::Error;
+    if (value == "fallback") return LkhProviderFailureMode::Fallback;
+    throw std::runtime_error(
+        "invalid value for --lkh-provider-failure: " + value
+        + " (expected error or fallback)");
 }
 
 tsp::PotentialUpdateStrategy parsePotentialUpdateStrategy(
@@ -1110,6 +1167,32 @@ CliOptions parseArgs(int argc, char** argv)
         } else if (arg == "--root-pi-relabel-root") {
             options.root_pi_relabel_root =
                 parseOnOff(require_value(arg), arg);
+        } else if (arg == "--lkh-provider") {
+            options.lkh_provider_path = require_value(arg);
+        } else if (arg == "--lkh-runs") {
+            options.lkh_provider_runs = parseSizeOption(require_value(arg), arg);
+            if (options.lkh_provider_runs == 0) {
+                throw std::runtime_error("--lkh-runs must be greater than zero");
+            }
+        } else if (arg == "--lkh-max-trials") {
+            options.lkh_provider_max_trials =
+                parseSizeOption(require_value(arg), arg);
+        } else if (arg == "--lkh-seed") {
+            options.lkh_provider_seed =
+                parseSizeOption(require_value(arg), arg);
+        } else if (arg == "--lkh-time-limit") {
+            options.lkh_provider_time_limit_seconds =
+                parseDoubleOption(require_value(arg), arg);
+            if (options.lkh_provider_time_limit_seconds < 0.0) {
+                throw std::runtime_error(
+                    "--lkh-time-limit must be non-negative");
+            }
+        } else if (arg == "--lkh-pi-mode") {
+            options.lkh_provider_pi_mode =
+                parseLkhProviderPiMode(require_value(arg));
+        } else if (arg == "--lkh-provider-failure") {
+            options.lkh_provider_failure_mode =
+                parseLkhProviderFailureMode(require_value(arg));
         } else if (arg == "--exact-max-n") {
             options.exact_max_n = parseSizeOption(require_value(arg), arg);
             if (options.exact_max_n == 0) {
@@ -1159,52 +1242,6 @@ CliOptions parseArgs(int argc, char** argv)
         } else if (arg == "--hk-node-dynamic-max-current-weight") {
             options.node_ascent_dynamic_max_current_weight =
                 parseDoubleOption(require_value(arg), arg);
-        } else if (arg == "--hk-sibling-warm-start") {
-            options.sibling_warm_start =
-                parseSiblingWarmStartStrategy(require_value(arg));
-        } else if (arg == "--hk-sibling-warm-weight") {
-            options.node_ascent_sibling_warm_weight =
-                parseDoubleOption(require_value(arg), arg);
-            if (options.node_ascent_sibling_warm_weight < 0.0
-                || options.node_ascent_sibling_warm_weight > 1.0) {
-                throw std::runtime_error(
-                    "--hk-sibling-warm-weight must be in [0, 1]");
-            }
-        } else if (arg == "--initial-clk") {
-            options.initial_clk = parseInitialClkStrategy(require_value(arg));
-        } else if (arg == "--adaptive-clk-gap-ratio") {
-            options.adaptive_clk_gap_ratio =
-                parseDoubleOption(require_value(arg), arg);
-            if (options.adaptive_clk_gap_ratio < 0.0) {
-                throw std::runtime_error(
-                    "--adaptive-clk-gap-ratio must be non-negative");
-            }
-        } else if (arg == "--adaptive-clk-additional-starts") {
-            options.adaptive_clk_additional_starts =
-                parseSizeOption(require_value(arg), arg);
-        } else if (arg == "--lk-candidate-set") {
-            options.lk_candidate_set =
-                parseLkCandidateSetStrategy(require_value(arg));
-        } else if (arg == "--lk-candidates") {
-            options.lk_candidate_count = parseSizeOption(require_value(arg), arg);
-            if (options.lk_candidate_count == 0) {
-                throw std::runtime_error(
-                    "--lk-candidates must be greater than zero");
-            }
-        } else if (arg == "--root-guided-lk") {
-            const std::string value = require_value(arg);
-            if (value == "once") {
-                options.root_guided_lk = true;
-            } else if (value == "off") {
-                options.root_guided_lk = false;
-            } else {
-                throw std::runtime_error(
-                    "invalid value for --root-guided-lk: " + value
-                    + " (expected off or once)");
-            }
-        } else if (arg == "--root-guided-lk-reascent") {
-            options.root_guided_lk_reascent =
-                parseOnOff(require_value(arg), arg);
         } else if (arg == "--branch-edge-order") {
             options.branch_edge_order =
                 parseBranchEdgeOrder(require_value(arg));
@@ -1294,6 +1331,17 @@ CliOptions parseArgs(int argc, char** argv)
     if (!options.root_pi_path.empty() && !options.batch_path.empty()) {
         throw std::runtime_error("--root-pi only supports a single instance");
     }
+    if (!options.lkh_provider_path.empty()
+        && (!options.initial_tour_path.empty()
+            || !options.root_pi_path.empty())) {
+        throw std::runtime_error(
+            "--lkh-provider cannot be combined with --initial-tour or --root-pi");
+    }
+    if (!options.lkh_provider_path.empty()
+        && options.input_path.empty() && options.batch_path.empty()) {
+        throw std::runtime_error(
+            "--lkh-provider requires a file input or --batch");
+    }
     if (options.root_pi_refine_dynamic_min_current_weight < 0.0
         || options.root_pi_refine_dynamic_min_current_weight
             > options.root_pi_refine_smoothing_current_weight
@@ -1335,20 +1383,38 @@ CliOptions parseArgs(int argc, char** argv)
     return options;
 }
 
+std::string resolveLkhProviderPath(const std::string& requested)
+{
+    if (requested != "auto") return requested;
+#ifdef TSP_DEFAULT_LKH_PROVIDER_PATH
+    return TSP_DEFAULT_LKH_PROVIDER_PATH;
+#else
+    throw std::runtime_error(
+        "--lkh-provider auto is unavailable: configure with "
+        "-DTSP_LKH_SOURCE_DIR=/path/to/LKH-2.x or pass an executable path");
+#endif
+}
+
 } // namespace
 
 int main(int argc, char** argv)
 {
     try {
         const CliOptions options = parseArgs(argc, argv);
+        std::unique_ptr<tsp::LkhProvider> lkh_provider;
+        if (!options.lkh_provider_path.empty()) {
+            lkh_provider = std::make_unique<tsp::LkhProvider>(
+                resolveLkhProviderPath(options.lkh_provider_path));
+        }
         if (!options.batch_path.empty()) {
             if (!options.input_path.empty()) {
                 throw std::runtime_error("batch mode does not accept a separate input file");
             }
-            return runBatch(options.batch_path, options);
+            return runBatch(options.batch_path, options, lkh_provider.get());
         }
         if (!options.input_path.empty()) {
-            return runSingleFile(options.input_path, options);
+            return runSingleFile(
+                options.input_path, options, lkh_provider.get());
         }
         return runSingleStdin(options);
     } catch (const std::exception& ex) {
