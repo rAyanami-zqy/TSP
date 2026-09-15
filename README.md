@@ -59,7 +59,31 @@ cmake --build build --target tsp_bb
 ### 可选：本地编译的隔离式 LKH provider
 
 LKH 的许可证声明为 research use 且作者保留全部权利，因此仓库不复制其源码。
-下载并解压 LKH 2.x 后，把源码目录通过 CMake 显式传入：
+服务器或 CI 可以显式启用固定版本下载。CMake 会从 LKH 官方下载服务取得
+2.0.11，先验证固定的 SHA-256，再从构建目录的 `_deps` 中直接编译 provider。
+官方下载端点目前只开放 HTTP，因此完整性校验不可关闭：
+
+```bash
+git switch CPHKMST
+cmake -S . -B build-lkh -DCMAKE_BUILD_TYPE=Release \
+  -DTSP_FETCH_LKH=ON
+cmake --build build-lkh --target tsp_bb -j4
+
+./build-lkh/tsp_bb --lkh-provider auto \
+  data/classic/tsplib/eil101.tsp
+```
+
+服务器不能访问外网时，只需预先上传未经修改的官方 tarball；同一个开关支持
+`file://` URI，仍会执行相同的完整性校验：
+
+```bash
+cmake -S . -B build-lkh -DCMAKE_BUILD_TYPE=Release \
+  -DTSP_FETCH_LKH=ON \
+  -DTSP_LKH_ARCHIVE_URL=file:///opt/sources/LKH-2.0.11.tgz
+cmake --build build-lkh --target tsp_bb -j4
+```
+
+也可以手工下载并解压 LKH 2.x，再把源码目录通过 CMake 显式传入：
 
 ```bash
 cmake -S . -B build-lkh -DCMAKE_BUILD_TYPE=Release \

@@ -1,4 +1,5 @@
 build/
+/build-lkh/
 cmake-build-*/
 *.obj
 *.exe

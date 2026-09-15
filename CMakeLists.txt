@@ -17,6 +17,41 @@ include(CTest)
 set(TSP_LKH_SOURCE_DIR "" CACHE PATH
     "Path to an unpacked LKH source tree (optional)")
 
+# Server/CI convenience: explicitly opt in to downloading the exact upstream
+# archive during configuration.  The source remains an external build
+# dependency under <build>/_deps and is never copied into this repository.
+option(TSP_FETCH_LKH
+    "Download the pinned upstream LKH archive and build the provider" OFF)
+set(TSP_LKH_ARCHIVE_URL
+    "http://webhotel4.ruc.dk/~keld/research/LKH/LKH-2.0.11.tgz"
+    CACHE STRING "URL or file:// URI for the pinned LKH source archive")
+set(TSP_LKH_ARCHIVE_SHA256
+    "d10e9cd49feed3c385526b2a0e802d9eb3df2658e835db20a1a2425d7934064d"
+    CACHE STRING "SHA-256 of the pinned LKH source archive")
+
+if(TSP_FETCH_LKH)
+    if(TSP_LKH_SOURCE_DIR)
+        message(FATAL_ERROR
+            "Use either TSP_FETCH_LKH or TSP_LKH_SOURCE_DIR, not both")
+    endif()
+    if(NOT UNIX)
+        message(FATAL_ERROR
+            "TSP_FETCH_LKH requires a POSIX platform (fork isolation)")
+    endif()
+
+    include(FetchContent)
+    if(POLICY CMP0135)
+        cmake_policy(SET CMP0135 NEW)
+    endif()
+    FetchContent_Declare(tsp_lkh_upstream
+        URL "${TSP_LKH_ARCHIVE_URL}"
+        URL_HASH "SHA256=${TSP_LKH_ARCHIVE_SHA256}")
+    message(STATUS
+        "Fetching pinned LKH source from ${TSP_LKH_ARCHIVE_URL}")
+    FetchContent_MakeAvailable(tsp_lkh_upstream)
+    set(TSP_LKH_SOURCE_DIR "${tsp_lkh_upstream_SOURCE_DIR}")
+endif()
+
 function(tsp_apply_common_settings target)
     target_include_directories(${target}
         PRIVATE
