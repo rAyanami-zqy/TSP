@@ -253,6 +253,36 @@ OUTPUT_STATISTICS: tuple[OutputStatistic, ...] = (
         kind="int",
         summarize=True,
     ),
+    OutputStatistic(
+        column="root_guided_lk_calls",
+        tspbb_labels=("Root-guided LK calls",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="root_guided_lk_improvements",
+        tspbb_labels=("Root-guided LK improvements",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="root_guided_lk_reascents",
+        tspbb_labels=("Root-guided LK reascents",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="root_guided_lk_seconds",
+        tspbb_labels=("Root-guided LK seconds",),
+        kind="float",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="root_guided_lk_total_gain",
+        tspbb_labels=("Root-guided LK total gain",),
+        kind="float",
+        summarize=True,
+    ),
     # 根节点势优化总轮次。
     OutputStatistic(
         column="root_potential_iterations",
@@ -264,6 +294,18 @@ OUTPUT_STATISTICS: tuple[OutputStatistic, ...] = (
         column="root_ascent_seconds",
         tspbb_labels=("Root ascent seconds",),
         kind="float",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="root_external_potential_replacements",
+        tspbb_labels=("Root external potential replacements",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="root_external_potential_warm_starts",
+        tspbb_labels=("Root external potential warm starts",),
+        kind="int",
         summarize=True,
     ),
     # 实际进入节点势更新判定的非根逻辑搜索节点数，是计算触发率的分母。
@@ -685,6 +727,16 @@ def summary_fields_for(strategy: Strategy) -> tuple[str, ...]:
 KNOWN_VALUE_OPTIONS = {
     "--branch-strategy",
     "--exact-max-n",
+    "--root-pi",
+    "--root-pi-scale",
+    "--root-pi-mode",
+    "--root-pi-refine-ascent",
+    "--root-pi-refine-iterations",
+    "--root-pi-refine-smoothing-current-weight",
+    "--root-pi-refine-dynamic-cosine-scale",
+    "--root-pi-refine-dynamic-min-current-weight",
+    "--root-pi-refine-dynamic-max-current-weight",
+    "--root-pi-relabel-root",
     "--debug-interval",
     "--hk-ascent",
     "--hk-node-ascent",
@@ -697,6 +749,10 @@ KNOWN_VALUE_OPTIONS = {
     "--initial-clk",
     "--adaptive-clk-gap-ratio",
     "--adaptive-clk-additional-starts",
+    "--lk-candidate-set",
+    "--lk-candidates",
+    "--root-guided-lk",
+    "--root-guided-lk-reascent",
     "--branch-edge-order",
     "--hk-potential-update",
     "--hk-update-depth",
@@ -1311,6 +1367,8 @@ def parse_tspbb_progress(stdout: str, stderr: str = "") -> dict[str, Any]:
         elif payload.startswith((
             "new incumbent:", "diversified incumbent:",
             "adaptive CLK improved:", "adaptive CLK retained incumbent:",
+            "root-guided LK improved:",
+            "root-guided LK retained incumbent:",
         )):
             set_float("final_upper_bound", values.get("cost"))
 

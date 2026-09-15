@@ -33,6 +33,16 @@ struct SolveStats {
     std::size_t adaptive_clk_triggers = 0;
     // 自适应追加 CLK 严格改善 incumbent 的次数；一次 solve 最多为 1。
     std::size_t adaptive_clk_improvements = 0;
+    // 根 1-tree 已生成后，使用其 alpha-nearness 候选集再次执行 CLK 的次数。
+    std::size_t root_guided_lk_calls = 0;
+    // 根引导 CLK 严格改善 incumbent 的次数。
+    std::size_t root_guided_lk_improvements = 0;
+    // 根引导 CLK 改善后显式重新执行根势上升的次数；默认策略为 0。
+    std::size_t root_guided_lk_reascents = 0;
+    // 构建 alpha 候选集和执行根引导 CLK 的累计墙钟秒数。
+    double root_guided_lk_seconds = 0.0;
+    // 根引导 CLK 带来的 incumbent 成本下降总量。
+    double root_guided_lk_total_gain = 0.0;
     // 根 reduced-cost fixing 实际执行次数。incumbent 改善导致根重启时会累加。
     std::size_t root_fixing_calls = 0;
     // 根 fixing 中测试能否固定为 x_e=0 的 active 非树边总数。
@@ -52,6 +62,10 @@ struct SolveStats {
     std::size_t root_potential_iterations = 0;
     // 根势优化的累计墙钟秒数；根搜索重启时累加。
     double root_ascent_seconds = 0.0;
+    // 直接采用外部节点势、跳过本地根势上升的次数。
+    std::size_t root_external_potential_replacements = 0;
+    // 以外部节点势为初值继续执行本地根势上升的次数。
+    std::size_t root_external_potential_warm_starts = 0;
     // 搜索节点上的势更新统计。成功改善且未立即剪枝的新势会
     // 重建候选排序和 HKMST 状态，并在该锚点子树内持续生效。
     // 实际进入势更新触发判定的非根逻辑搜索节点数。它不包含在触发判定前
@@ -181,9 +195,26 @@ enum class SiblingWarmStartStrategy {
 // 精确搜索前 CLK 的启动策略。Adaptive 先执行一个起点，再由根 1-tree
 // 相对 gap 判断是否值得追加多起点 CLK。
 enum class InitialClkStrategy {
+    Off,
     Single,
     Triple,
     Adaptive,
+};
+
+// CLK 使用的候选边评分。Alpha/Hybrid 在根 1-tree 尚未产生时自动退回
+// Nearest，因此初始单起点 CLK 与历史实现保持一致。
+enum class LkCandidateSetStrategy {
+    Nearest,
+    Alpha,
+    Hybrid,
+};
+
+// 外部（例如 LKH PI_FILE）节点势与本地根上升的组合方式。
+enum class RootPotentialSeedStrategy {
+    // 直接采用外部势构造合法根 1-tree，下界有效但不做本地精修。
+    Replace,
+    // 以外部势为初值，继续执行配置的本地根上升算法。
+    WarmStart,
 };
 
 // 搜索节点上的势更新触发策略。所有启用的策略都把新势安装成
@@ -372,6 +403,19 @@ public:
     void setInitialClkStrategy(InitialClkStrategy strategy,
                                double gap_ratio = 0.02,
                                std::size_t additional_starts = 2);
+    // 配置 CLK 每个顶点的候选数和排序依据。该集合仅供启发式局部搜索，
+    // 不会从精确分支定界的全边候选池删除任何边。
+    void setLkCandidateSetOptions(LkCandidateSetStrategy strategy,
+                                 std::size_t candidate_count = 8);
+    // 在根 1-tree 后至多执行一次根引导 LK。reascend_after_improvement=false
+    // 时直接沿用已有合法下界证书，只用更紧 UB 继续 fixing/搜索。
+    void setRootGuidedLk(bool enabled,
+                         bool reascend_after_improvement = false);
+    // 提供原始成本坐标系中的节点势。输入会减去均值以缩小数值尺度；
+    // 该规范化不改变任意 1-tree 下界。势必须与顶点数一致且全部有限。
+    void setRootPotentialSeed(std::vector<double> potentials,
+                              RootPotentialSeedStrategy strategy);
+    void clearRootPotentialSeed();
     // 设置 BP 在违规顶点内部选择分支边的比较顺序；不改变下界算法。
     void setBranchEdgeOrder(BranchEdgeOrder order);
     // 配置搜索节点势更新：depth 是深度/epoch 间隔，iterations 是小 gap
@@ -971,6 +1015,17 @@ private:
     double adaptive_clk_gap_ratio_ = 0.02;
     std::size_t adaptive_clk_additional_starts_ = 2;
     bool adaptive_initial_clk_attempted_ = false;
+    // LKH 风格启发式：根势和 1-tree 定义 alpha-nearness 候选集，再用它
+    // 对 incumbent 做一次 LK。默认关闭以完整保留历史求解行为。
+    LkCandidateSetStrategy lk_candidate_set_strategy_
+        = LkCandidateSetStrategy::Nearest;
+    std::size_t lk_candidate_count_ = 8;
+    bool root_guided_lk_enabled_ = false;
+    bool root_guided_lk_reascend_after_improvement_ = false;
+    bool root_guided_lk_attempted_ = false;
+    std::vector<double> root_potential_seed_;
+    RootPotentialSeedStrategy root_potential_seed_strategy_
+        = RootPotentialSeedStrategy::WarmStart;
     // true 时 solve() 在构造根 1-tree 后返回，不执行 reduced-cost fixing/BP。
     bool root_bound_only_ = false;
     // 原问题所有有限边均为精确整数且任意 n 边和不超过 2^53 时，tour
@@ -1040,13 +1095,13 @@ private:
     // 当前调试输出流和节点进度间隔配置。
     DebugOptions debug_;
 
-    // 每个顶点预留的 LK 最近邻候选数上限。
-    static constexpr int kLkCandidateSize = 8;
+    // 每个顶点默认预留的 LK 候选数；运行时可由参数调整。
+    static constexpr std::size_t kDefaultLkCandidateSize = 8;
     // LK 顺序 k-opt 递归允许的最大交换深度。
     static constexpr int kLkMaxDepth = 5;
     // Chained LK 尝试的 double-bridge 扰动次数上限。
     static constexpr int kLkMaxKicks = 10;
-    // candidate_set_[v] 保存 v 的近邻顶点下标，按原始距离排序。
+    // candidate_set_[v] 保存 v 的 LK 候选顶点；具体顺序由候选策略决定。
     mutable std::vector<std::vector<int>> candidate_set_;
     // candidate_set_ 是否已经针对当前 dist_ 完成惰性构建。
     mutable bool candidate_set_built_ = false;

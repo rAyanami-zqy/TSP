@@ -136,21 +136,24 @@ bool BranchBoundSolver::findInitialTour(
     // Single/Adaptive 先只支付一个 CLK 起点；Adaptive 会等首个根 1-tree
     // 证书出来后按 gap 决定是否追加。Triple 保留此前固定三起点行为，便于
     // 论文消融和历史结果复现。
-    const std::size_t immediate_lk_starts =
-        initial_clk_strategy_ == InitialClkStrategy::Triple ? 3 : 1;
-    linKernighan(best_tour, best_cost);
-    ++result_.stats.initial_clk_starts;
-    const std::size_t additional_starts = std::min(
-        alternatives.size(), immediate_lk_starts - 1);
-    for (std::size_t index = 0; index < additional_starts; ++index) {
-        std::vector<int> candidate = alternatives[index].tour;
-        double candidate_cost = alternatives[index].cost;
-        linKernighan(candidate, candidate_cost, true);
+    std::size_t additional_starts = 0;
+    if (initial_clk_strategy_ != InitialClkStrategy::Off) {
+        const std::size_t immediate_lk_starts =
+            initial_clk_strategy_ == InitialClkStrategy::Triple ? 3 : 1;
+        linKernighan(best_tour, best_cost);
         ++result_.stats.initial_clk_starts;
-        candidate_cost = tourCost(candidate);
-        if (candidate_cost + kHeuristicEps < best_cost) {
-            best_tour = std::move(candidate);
-            best_cost = candidate_cost;
+        additional_starts = std::min(
+            alternatives.size(), immediate_lk_starts - 1);
+        for (std::size_t index = 0; index < additional_starts; ++index) {
+            std::vector<int> candidate = alternatives[index].tour;
+            double candidate_cost = alternatives[index].cost;
+            linKernighan(candidate, candidate_cost, true);
+            ++result_.stats.initial_clk_starts;
+            candidate_cost = tourCost(candidate);
+            if (candidate_cost + kHeuristicEps < best_cost) {
+                best_tour = std::move(candidate);
+                best_cost = candidate_cost;
+            }
         }
     }
     alternatives.erase(

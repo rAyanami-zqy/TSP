@@ -1363,6 +1363,155 @@ void testDiversifiedInitialTourPool()
     }
 }
 
+void testRootGuidedAlphaLk()
+{
+    std::ifstream input(
+        std::string(TSP_TEST_SOURCE_DIR)
+        + "/data/classic/tsplib/gr48.tsp");
+    if (!input) {
+        throw std::runtime_error("cannot open gr48 root-guided LK regression");
+    }
+    const tsp::TspProblem problem = tsp::readTspProblem(input);
+    const auto matrix = problem.toDenseMatrix(48);
+
+    tsp::BranchBoundSolver baseline(matrix);
+    baseline.setRootAscentStrategy(tsp::RootAscentStrategy::HybridReverse);
+    baseline.setInitialClkStrategy(tsp::InitialClkStrategy::Single);
+    baseline.setRootBoundOnly(true);
+    const tsp::SolveResult baseline_result = baseline.solve();
+
+    tsp::BranchBoundSolver guided(matrix);
+    guided.setRootAscentStrategy(tsp::RootAscentStrategy::HybridReverse);
+    guided.setInitialClkStrategy(tsp::InitialClkStrategy::Single);
+    guided.setLkCandidateSetOptions(
+        tsp::LkCandidateSetStrategy::Hybrid, 8);
+    guided.setRootGuidedLk(true, false);
+    guided.setRootBoundOnly(true);
+    const tsp::SolveResult guided_result = guided.solve();
+    expectCost(guided_result.cost, 5055.0,
+               "root alpha/hybrid LK did not improve gr48 incumbent");
+    if (baseline_result.cost != 5093.0
+        || guided_result.stats.root_guided_lk_calls != 1
+        || guided_result.stats.root_guided_lk_improvements != 1
+        || guided_result.stats.root_guided_lk_reascents != 0
+        || guided_result.stats.root_guided_lk_total_gain != 38.0
+        || guided_result.stats.root_guided_lk_seconds <= 0.0
+        || guided_result.stats.initial_clk_starts != 2
+        || guided_result.stats.root_potential_iterations
+            != baseline_result.stats.root_potential_iterations) {
+        throw std::runtime_error(
+            "root-guided LK statistics or no-reascent semantics changed");
+    }
+
+    tsp::BranchBoundSolver reascended(matrix);
+    reascended.setRootAscentStrategy(tsp::RootAscentStrategy::HybridReverse);
+    reascended.setInitialClkStrategy(tsp::InitialClkStrategy::Single);
+    reascended.setLkCandidateSetOptions(
+        tsp::LkCandidateSetStrategy::Hybrid, 8);
+    reascended.setRootGuidedLk(true, true);
+    reascended.setRootBoundOnly(true);
+    const tsp::SolveResult reascended_result = reascended.solve();
+    expectCost(reascended_result.cost, guided_result.cost,
+               "root re-ascent changed the root-guided incumbent");
+    if (reascended_result.stats.root_guided_lk_reascents != 1
+        || reascended_result.stats.root_potential_iterations
+            <= guided_result.stats.root_potential_iterations) {
+        throw std::runtime_error(
+            "root-guided LK re-ascent switch did not rerun root ascent");
+    }
+
+    bool zero_candidates_rejected = false;
+    try {
+        guided.setLkCandidateSetOptions(
+            tsp::LkCandidateSetStrategy::Alpha, 0);
+    } catch (const std::invalid_argument&) {
+        zero_candidates_rejected = true;
+    }
+    if (!zero_candidates_rejected) {
+        throw std::runtime_error("zero LK candidate count was accepted");
+    }
+
+    // Alpha 候选只改变 incumbent 启发式；用小规模随机完全图确认它不改变
+    // 精确搜索的最优性证书或可行域。
+    std::mt19937 rng(209914);
+    for (int trial = 0; trial < 12; ++trial) {
+        const int n = 6 + trial % 3;
+        std::vector<std::vector<double>> random_matrix(
+            n, std::vector<double>(n, 0.0));
+        for (int u = 0; u < n; ++u) {
+            for (int v = u + 1; v < n; ++v) {
+                random_matrix[u][v] = random_matrix[v][u]
+                    = 1.0 + static_cast<double>(rng() % 100);
+            }
+        }
+        const double optimum = bruteForceOptimalCost(random_matrix);
+        tsp::BranchBoundSolver exact(std::move(random_matrix));
+        exact.setInitialClkStrategy(tsp::InitialClkStrategy::Single);
+        exact.setLkCandidateSetOptions(
+            tsp::LkCandidateSetStrategy::Alpha, 5);
+        exact.setRootGuidedLk(true, false);
+        expectCost(
+            exact.solve().cost, optimum,
+            "root-guided alpha LK changed an exact optimum");
+    }
+}
+
+void testExternalRootPotentialSeed()
+{
+    const auto matrix = replacementMatrix();
+    const double optimum = bruteForceOptimalCost(matrix);
+    std::vector<double> seed(matrix.size());
+    for (std::size_t index = 0; index < seed.size(); ++index) {
+        seed[index] = 0.75 * static_cast<double>(index)
+            - static_cast<double>(index % 2);
+    }
+
+    tsp::BranchBoundSolver replaced(matrix);
+    replaced.setRootPotentialSeed(
+        seed, tsp::RootPotentialSeedStrategy::Replace);
+    replaced.setRootBoundOnly(true);
+    const tsp::SolveResult replaced_result = replaced.solve();
+    if (replaced_result.stats.root_external_potential_replacements != 1
+        || replaced_result.stats.root_external_potential_warm_starts != 0
+        || replaced_result.stats.root_potential_iterations != 0
+        || replaced_result.stats.root_lower_bound > optimum + 1e-8) {
+        throw std::runtime_error(
+            "external root potential replacement was not a valid certificate");
+    }
+
+    tsp::BranchBoundSolver warmed(matrix);
+    warmed.setRootAscentStrategy(tsp::RootAscentStrategy::Polyak);
+    warmed.setRootAscentIterationLimit(8);
+    warmed.setRootPotentialSeed(
+        seed, tsp::RootPotentialSeedStrategy::WarmStart);
+    warmed.setRootBoundOnly(true);
+    const tsp::SolveResult warmed_result = warmed.solve();
+    if (warmed_result.stats.root_external_potential_replacements != 0
+        || warmed_result.stats.root_external_potential_warm_starts != 1
+        || warmed_result.stats.root_potential_iterations == 0
+        || warmed_result.stats.root_lower_bound > optimum + 1e-8) {
+        throw std::runtime_error(
+            "external root potential warm start was not a valid certificate");
+    }
+
+    tsp::BranchBoundSolver exact(matrix);
+    exact.setRootPotentialSeed(
+        seed, tsp::RootPotentialSeedStrategy::Replace);
+    expectCost(exact.solve().cost, optimum,
+               "external root potentials changed the exact optimum");
+
+    bool wrong_size_rejected = false;
+    try {
+        exact.setRootPotentialSeed(
+            {1.0}, tsp::RootPotentialSeedStrategy::Replace);
+    } catch (const std::invalid_argument&) {
+        wrong_size_rejected = true;
+    }
+    if (!wrong_size_rejected) {
+        throw std::runtime_error("wrong-sized root potential seed was accepted");
+    }
+}
+
 void testRootAscentStrategies()
 {
     const auto matrix = replacementMatrix();
@@ -1975,6 +2124,8 @@ int main()
         testRootAscentTraceAndIterationLimit();
         testSearchNodePotentialUpdates();
         testDiversifiedInitialTourPool();
+        testRootGuidedAlphaLk();
+        testExternalRootPotentialSeed();
         testRootReducedCostFixing();
         testCompactedEpoch();
         testSuppliedInitialTour();

@@ -1,0 +1,6 @@
+﻿configuration,wins,losses,ties,total_ub_gain,median_positive_gain,reported_improvements,total_guided_seconds,total_wall_seconds,wall_delta_vs_baseline,root_reascents
+single-knn8,0,0,50,0.0,0.0,0.0,0.0,5.897736335,0.0,0.0
+root-alpha5,10,0,40,646.0,25.0,10.0,0.220045543,6.140434164,0.24269782899999992,0.0
+root-alpha8,13,0,37,1130.0,30.0,13.0,0.375341167,6.353999504,0.45626316899999964,0.0
+root-hybrid8,11,0,39,864.0,16.0,11.0,0.367127837,6.330350246,0.4326139109999998,0.0
+root-hybrid12,11,0,39,590.0,10.0,11.0,0.749385707,6.704376163,0.8066398279999998,0.0

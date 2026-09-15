@@ -400,6 +400,39 @@ Polyak；`--hk-node-ascent` 还支持 `helsgaun`、`polyak-smoothed` 和
   --adaptive-clk-gap-ratio 0.02 \
   --adaptive-clk-additional-starts 2 input.tsp
 
+# LKH 风格根引导：根势/1-tree 后以 alpha-nearness 8 候选再做一次 LK；
+# 默认不重复根上升，已有根下界证书仍然有效
+./build/tsp_bb --initial-clk single \
+  --lk-candidate-set alpha --lk-candidates 8 \
+  --root-guided-lk once --root-guided-lk-reascent off input.tsp
+
+# 外部 LKH tour 作为 incumbent 时关闭内部 CLK；NN+2-opt 仍作可行性兜底
+./build/tsp_bb --initial-clk off \
+  --initial-tour /tmp/lkh-tour-zero-based.txt input.tsp
+
+# 同时复用 LKH 的 PI_FILE：默认按第一条记录重标号内部 1-tree 根，
+# 以外部势 warm start，再用独立的 64 轮小预算作本地 Polyak 精修
+./build/tsp_bb --initial-clk off \
+  --initial-tour /tmp/lkh-tour-zero-based.txt \
+  --root-pi /tmp/lkh.pi --root-pi-scale 100 \
+  --root-pi-mode warm-start --root-pi-refine-ascent polyak \
+  --root-pi-refine-iterations 64 input.tsp
+
+# 固定方向平滑：0.7*当前次梯度 + 0.3*上一轮次梯度
+./build/tsp_bb --root-pi /tmp/lkh.pi \
+  --root-pi-refine-ascent polyak-smoothed \
+  --root-pi-refine-smoothing-current-weight 0.7 \
+  --root-pi-refine-iterations 64 input.tsp
+
+# 动态平滑：clamp(0.7 + 0.2*cosine, 0.5, 0.9)
+./build/tsp_bb --root-pi /tmp/lkh.pi \
+  --root-pi-refine-ascent polyak-smoothed-dynamic \
+  --root-pi-refine-smoothing-current-weight 0.7 \
+  --root-pi-refine-dynamic-cosine-scale 0.2 \
+  --root-pi-refine-dynamic-min-current-weight 0.5 \
+  --root-pi-refine-dynamic-max-current-weight 0.9 \
+  --root-pi-refine-iterations 64 input.tsp
+
 # 同一触发配置下对照节点 Helsgaun 调度
 ./build/tsp_bb --hk-node-ascent helsgaun \
   --hk-potential-update subtree-adaptive \
@@ -459,10 +492,30 @@ Polyak；`--hk-node-ascent` 还支持 `helsgaun`、`polyak-smoothed` 和
   `0.25`，范围 `[0,1]`，设为 `0` 可完全关闭。无论取值如何，每个节点仍会
   重新计算受约束 1-tree 后才接受下界。Guarded 接受的验证评估直接复用于
   首轮上升；拒绝时该验证是配置迭代上限之外的一次额外评估；
-- `--initial-clk` 支持 `single|triple|adaptive`，默认 `adaptive`。Adaptive
+- `--initial-clk` 支持 `off|single|triple|adaptive`，默认 `adaptive`；`off`
+  跳过内部 CLK，但仍运行 NN+2-opt 并接受 `--initial-tour` 外部上界。Adaptive
   首先只运行一个 CLK；首个根 1-tree 的相对 gap 达到
   `--adaptive-clk-gap-ratio` 后，最多追加
   `--adaptive-clk-additional-starts` 个不同起点；若 UB 改善则重新运行根势上升；
+- `--lk-candidate-set` 支持 `nearest|alpha|hybrid`，每点数量由
+  `--lk-candidates` 控制。Alpha/Hybrid 在根 1-tree 尚不可用的首次 CLK
+  自动使用历史 8-NN，因此根候选消融不会改变基线起点；
+- `--root-guided-lk once` 在根势上升和根 1-tree 后只追加一次 LK，默认
+  `off`。`--root-guided-lk-reascent off` 直接沿用已有合法根下界并使用更紧
+  UB 继续 fixing/BP；设为 `on` 才在改善后重新优化根势；
+- `--root-pi` 读取 LKH `PI_FILE` 格式的 1-based 节点势；LKH 默认
+  `PRECISION=100`，因此默认 `--root-pi-scale 100`。`replace` 直接使用外部
+  势并跳过本地上升，默认的 `warm-start` 则以其为初值继续本地算法；本地
+  精修使用独立的 `--root-pi-refine-ascent`（默认 `polyak`）和
+  `--root-pi-refine-iterations`（默认 64），不会复用普通 `--hk-ascent` 与
+  `--root-ascent-iterations` 的完整配置。精修过程中始终保留输入
+  势对应的初始下界，所以结果不会弱于 `replace`。默认
+  `--root-pi-relabel-root on`，把 PI 文件第一条记录代表的 LKH 特殊根重标号
+  为内部顶点 0，求解结束后再恢复原城市编号。固定平滑默认当前方向权重
+  `0.7`；动态平滑默认使用 `clamp(0.7 + 0.2*cosine, 0.5, 0.9)`；
+- 外部势精修会在 1-tree 已经满足所有度约束、下界达到 UB（计入浮点容差）、
+  或步长非有限/非正时安全早停。Polyak 的停滞会逐段缩小步长；不使用短
+  patience 强制退出，因为 50 实例扫描中主要增益出现在第 32--64 轮；
 - `--hk-update-min-gap-ratio` 与 `--hk-update-gap-ratio` 分别是
   `subtree-adaptive` 触发区间的下限和上限，默认下限为 0。`subtree-*` 中
   `--hk-update-depth` 是两次成功安装 epoch 的最小层距；达到层距后，后续

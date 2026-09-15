@@ -51,30 +51,83 @@ void BranchBoundSolver::buildCandidateSets() const
     if (candidate_set_built_) {
         return;
     }
-    candidate_set_.resize(static_cast<std::size_t>(n_));
+    candidate_set_.assign(static_cast<std::size_t>(n_), {});
+    const bool alpha_available =
+        root_alpha_by_edge_id_.size()
+        == static_cast<std::size_t>(n_) * static_cast<std::size_t>(n_);
     for (int i = 0; i < n_; ++i) {
-        std::vector<std::pair<double, int>> nb;
+        struct CandidateScore {
+            double distance = 0.0;
+            double alpha = std::numeric_limits<double>::infinity();
+            int vertex = -1;
+        };
+        std::vector<CandidateScore> nb;
         nb.reserve(static_cast<std::size_t>(n_) - 1);
         for (int j = 0; j < n_; ++j) {
             if (i == j || !isFinite(dist_[i][j])) {
                 continue;
             }
-            nb.emplace_back(dist_[i][j], j);
+            const double alpha = alpha_available
+                ? root_alpha_by_edge_id_[edgeId(i, j)]
+                : std::numeric_limits<double>::infinity();
+            nb.push_back(CandidateScore{dist_[i][j], alpha, j});
         }
-        const int keep = std::min(kLkCandidateSize, static_cast<int>(nb.size()));
-        const auto neighbor_less = [](const auto& left, const auto& right) {
-            if (left.first != right.first) return left.first < right.first;
-            return left.second < right.second;
+        // Alpha/Hybrid 在根证书出现前必须严格复现历史 8-NN 初始 CLK；
+        // 用户配置的候选数只在 alpha 真正可用后生效，避免消融混入初始
+        // k-NN 宽度变化。Nearest 模式则允许显式调整其候选数。
+        const std::size_t requested_count =
+            !alpha_available
+                && lk_candidate_set_strategy_
+                    != LkCandidateSetStrategy::Nearest
+            ? kDefaultLkCandidateSize : lk_candidate_count_;
+        const std::size_t keep = std::min(requested_count, nb.size());
+        const auto distance_less = [](const CandidateScore& left,
+                                      const CandidateScore& right) {
+            if (left.distance != right.distance) {
+                return left.distance < right.distance;
+            }
+            return left.vertex < right.vertex;
         };
-        if (keep < static_cast<int>(nb.size())) {
-            std::nth_element(
-                nb.begin(), nb.begin() + keep, nb.end(), neighbor_less);
+        const auto alpha_less = [&](const CandidateScore& left,
+                                    const CandidateScore& right) {
+            if (left.alpha != right.alpha) return left.alpha < right.alpha;
+            return distance_less(left, right);
+        };
+        auto& selected = candidate_set_[static_cast<std::size_t>(i)];
+        selected.reserve(keep);
+        const bool use_alpha = alpha_available
+            && lk_candidate_set_strategy_ != LkCandidateSetStrategy::Nearest;
+        if (!use_alpha) {
+            std::sort(nb.begin(), nb.end(), distance_less);
+            for (std::size_t index = 0; index < keep; ++index) {
+                selected.push_back(nb[index].vertex);
+            }
+            continue;
         }
-        nb.resize(static_cast<std::size_t>(keep));
-        std::sort(nb.begin(), nb.end(), neighbor_less);
-        candidate_set_[static_cast<std::size_t>(i)].reserve(static_cast<std::size_t>(keep));
-        for (const auto& p : nb) {
-            candidate_set_[static_cast<std::size_t>(i)].push_back(p.second);
+
+        std::vector<CandidateScore> by_alpha = nb;
+        std::sort(by_alpha.begin(), by_alpha.end(), alpha_less);
+        if (lk_candidate_set_strategy_ == LkCandidateSetStrategy::Alpha) {
+            for (std::size_t index = 0; index < keep; ++index) {
+                selected.push_back(by_alpha[index].vertex);
+            }
+            continue;
+        }
+
+        // Hybrid 为 alpha 预留一半名额，再由几何最近邻补齐。这样根
+        // 1-tree 的非局部结构边不会被纯 k-NN 淹没，同时保留局部边密度。
+        const std::size_t alpha_quota = (keep + 1) / 2;
+        std::vector<unsigned char> chosen(static_cast<std::size_t>(n_), 0);
+        for (std::size_t index = 0; index < alpha_quota; ++index) {
+            selected.push_back(by_alpha[index].vertex);
+            chosen[static_cast<std::size_t>(by_alpha[index].vertex)] = 1;
+        }
+        std::sort(nb.begin(), nb.end(), distance_less);
+        for (const CandidateScore& score : nb) {
+            if (selected.size() >= keep) break;
+            if (chosen[static_cast<std::size_t>(score.vertex)]) continue;
+            selected.push_back(score.vertex);
+            chosen[static_cast<std::size_t>(score.vertex)] = 1;
         }
     }
 

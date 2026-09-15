@@ -1,0 +1,5 @@
+﻿configuration,wins_vs_single,losses_vs_single,wins_vs_alpha8,losses_vs_alpha8,total_gain_vs_single,total_wall_seconds,total_heuristic_seconds
+single-knn8,0,0,0,13,0.0,6.562947166,1.4367600010000001
+root-alpha8,13,0,0,0,1130.0,7.037397127,1.922426249
+official-lkh,35,0,34,0,14028.0,2.445703082368709,2.445703082368709
+lkh-provider,35,0,34,0,14028.0,8.043927832739428,3.653209917145851

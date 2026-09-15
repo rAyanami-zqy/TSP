@@ -1,0 +1,4 @@
+﻿configuration,gap_ratio,triggered_instances,improved_instances,actual_clk_starts,triple_helpful_instances,triggered_triple_helpful,missed_triple_helpful,triple_material_wall_overhead_instances,overhead_instances_not_triggered,materially_slower_than_single,total_median_wall_seconds,wall_delta_vs_single,total_median_initial_tour_seconds,initial_tour_delta_vs_single
+single,,0,0,50,21,0,21,43,43,0,5.908438165,0.0,1.29335671,0.0
+triple,,0,0,150,21,0,21,43,43,43,6.790444121,0.8820059560000004,2.0744483750000002,0.7810916650000002
+adaptive-0.014,0.014,29,20,108,21,20,1,43,20,27,9.181096666,3.2726585010000004,1.900085375,0.6067286649999999

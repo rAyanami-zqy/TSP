@@ -414,6 +414,62 @@ void BranchBoundSolver::setInitialClkStrategy(
     adaptive_clk_additional_starts_ = additional_starts;
 }
 
+void BranchBoundSolver::setLkCandidateSetOptions(
+    LkCandidateSetStrategy strategy, std::size_t candidate_count)
+{
+    if (candidate_count == 0) {
+        throw std::invalid_argument(
+            "LK candidate count must be greater than zero");
+    }
+    lk_candidate_set_strategy_ = strategy;
+    lk_candidate_count_ = candidate_count;
+    candidate_set_built_ = false;
+}
+
+void BranchBoundSolver::setRootGuidedLk(
+    bool enabled, bool reascend_after_improvement)
+{
+    root_guided_lk_enabled_ = enabled;
+    root_guided_lk_reascend_after_improvement_ =
+        reascend_after_improvement;
+}
+
+void BranchBoundSolver::setRootPotentialSeed(
+    std::vector<double> potentials, RootPotentialSeedStrategy strategy)
+{
+    if (potentials.size() != static_cast<std::size_t>(n_)) {
+        throw std::invalid_argument(
+            "root potential seed size must equal the vertex count");
+    }
+    if (!std::all_of(potentials.begin(), potentials.end(),
+                     [](double value) { return isFinite(value); })) {
+        throw std::invalid_argument(
+            "root potential seed values must be finite");
+    }
+    const double mean = std::accumulate(
+        potentials.begin(), potentials.end(), 0.0)
+        / static_cast<double>(n_);
+    for (double& value : potentials) value -= mean;
+    for (int u = 0; u < n_; ++u) {
+        for (int v = u + 1; v < n_; ++v) {
+            if (!isFinite(dist_[u][v])) continue;
+            if (!isFinite(dist_[u][v]
+                    + potentials[static_cast<std::size_t>(u)]
+                    + potentials[static_cast<std::size_t>(v)])) {
+                throw std::invalid_argument(
+                    "root potential seed overflows an adjusted edge weight");
+            }
+        }
+    }
+    root_potential_seed_ = std::move(potentials);
+    root_potential_seed_strategy_ = strategy;
+}
+
+void BranchBoundSolver::clearRootPotentialSeed()
+{
+    root_potential_seed_.clear();
+}
+
 void BranchBoundSolver::setBranchEdgeOrder(BranchEdgeOrder order)
 {
     // 此处只记录策略。root alpha 依赖最终根势和根 1-tree；root frequency
@@ -681,6 +737,56 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
         }
         writeDebugLine(debug_, line.str());
     };
+
+    auto install_potentials = [&](const std::vector<double>& potentials) {
+        vertex_potential_ = potentials;
+        potential_correction_ = 2.0 * std::accumulate(
+            vertex_potential_.begin(), vertex_potential_.end(), 0.0);
+        const bool has_nonzero_potential = std::any_of(
+            vertex_potential_.begin(), vertex_potential_.end(),
+            [](double value) { return value != 0.0; });
+        if (!has_nonzero_potential) return;
+        double largest_adjusted_weight = 0.0;
+        for (int u = 0; u < n_; ++u) {
+            for (int v = u + 1; v < n_; ++v) {
+                if (!isFinite(dist_[u][v])) continue;
+                largest_adjusted_weight = std::max(
+                    largest_adjusted_weight,
+                    std::fabs(adjustedEdgeWeight(u, v)));
+            }
+        }
+        const double modified_sum_scale =
+            static_cast<double>(n_) * largest_adjusted_weight;
+        potential_roundoff_guard_ = scaledRoundoffTolerance(
+            modified_sum_scale, potential_correction_,
+            static_cast<std::size_t>(n_));
+    };
+
+    const bool has_external_seed = root_potential_seed_.size()
+        == static_cast<std::size_t>(n_);
+    if (has_external_seed
+        && root_potential_seed_strategy_
+            == RootPotentialSeedStrategy::Replace) {
+        install_potentials(root_potential_seed_);
+        ++result_.stats.root_external_potential_replacements;
+        write_summary("external-replace", 0, 0,
+                      -std::numeric_limits<double>::infinity(),
+                      -std::numeric_limits<double>::infinity());
+        return;
+    }
+
+    // warm-start 没有可执行的本地算法或没有有限 UB 时，外部势本身仍是
+    // 合法证书；退化为直接采用比静默丢弃外部势更符合配置语义。
+    if (has_external_seed
+        && (root_ascent_strategy_ == RootAscentStrategy::None
+            || !isFinite(upper_bound))) {
+        install_potentials(root_potential_seed_);
+        ++result_.stats.root_external_potential_warm_starts;
+        write_summary("external-warm-no-refinement", 0, 0,
+                      -std::numeric_limits<double>::infinity(),
+                      -std::numeric_limits<double>::infinity());
+        return;
+    }
 
     if (root_ascent_strategy_ == RootAscentStrategy::None
         || !isFinite(upper_bound)) {
@@ -1054,23 +1160,29 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
         return best;
     };
 
-    const std::vector<double> zero_potentials(static_cast<std::size_t>(n_), 0.0);
+    const std::vector<double> zero_potentials(
+        static_cast<std::size_t>(n_), 0.0);
+    const std::vector<double>& initial_potentials = has_external_seed
+        ? root_potential_seed_ : zero_potentials;
+    if (has_external_seed) {
+        ++result_.stats.root_external_potential_warm_starts;
+    }
     AscentCandidate polyak;
     AscentCandidate helsgaun;
     AscentCandidate selected;
     std::string selected_name;
     if (root_ascent_strategy_ == RootAscentStrategy::Polyak) {
         polyak = run_polyak(
-            zero_potentials, PolyakDirectionMode::Current, "polyak");
+            initial_potentials, PolyakDirectionMode::Current, "polyak");
         selected = polyak;
         selected_name = "polyak";
     } else if (root_ascent_strategy_ == RootAscentStrategy::Helsgaun) {
-        helsgaun = run_helsgaun(zero_potentials);
+        helsgaun = run_helsgaun(initial_potentials);
         selected = helsgaun;
         selected_name = "helsgaun";
     } else if (root_ascent_strategy_ == RootAscentStrategy::Hybrid) {
         polyak = run_polyak(
-            zero_potentials, PolyakDirectionMode::Current, "polyak");
+            initial_potentials, PolyakDirectionMode::Current, "polyak");
         // 组合策略不是简单平均两组势。它从当前 Polyak 最优解继续执行
         // 论文的平滑 period 上升，并始终保留固定根下界更强的一组势。
         helsgaun = run_helsgaun(polyak.potentials);
@@ -1084,7 +1196,7 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
             selected_name = "polyak";
         }
     } else if (root_ascent_strategy_ == RootAscentStrategy::HybridReverse) {
-        helsgaun = run_helsgaun(zero_potentials);
+        helsgaun = run_helsgaun(initial_potentials);
         // 反向两阶段对照：从 Helsgaun 最优势出发，使用原始
         // Polyak 步长继续精修，仍保留两阶段中更强的证书。
         polyak = run_polyak(
@@ -1100,14 +1212,14 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
         }
     } else if (root_ascent_strategy_ == RootAscentStrategy::PolyakSmoothed) {
         polyak = run_polyak(
-            zero_potentials,
+            initial_potentials,
             PolyakDirectionMode::FixedHelsgaunSmoothing,
             "polyak-smoothed");
         selected = polyak;
         selected_name = "polyak-smoothed";
     } else {
         polyak = run_polyak(
-            zero_potentials,
+            initial_potentials,
             PolyakDirectionMode::DynamicHelsgaunSmoothing,
             "polyak-smoothed-dynamic");
         selected = polyak;
@@ -1128,27 +1240,7 @@ void BranchBoundSolver::optimizeRootPotentials(double upper_bound)
         root_one_tree_edge_counts_ = std::move(selected.edge_counts);
         root_one_tree_sample_count_ = selected.frequency_samples;
     }
-    potential_correction_ = 2.0
-        * std::accumulate(vertex_potential_.begin(), vertex_potential_.end(), 0.0);
-    const bool has_nonzero_potential = std::any_of(
-        vertex_potential_.begin(), vertex_potential_.end(),
-        [](double value) { return value != 0.0; });
-    if (has_nonzero_potential) {
-        double largest_adjusted_weight = 0.0;
-        for (int u = 0; u < n_; ++u) {
-            for (int v = u + 1; v < n_; ++v) {
-                if (!isFinite(dist_[u][v])) continue;
-                largest_adjusted_weight = std::max(
-                    largest_adjusted_weight,
-                    std::fabs(adjustedEdgeWeight(u, v)));
-            }
-        }
-        const double modified_sum_scale =
-            static_cast<double>(n_) * largest_adjusted_weight;
-        potential_roundoff_guard_ = scaledRoundoffTolerance(
-            modified_sum_scale, potential_correction_,
-            static_cast<std::size_t>(n_));
-    }
+    install_potentials(vertex_potential_);
     write_summary(selected_name,
                   polyak.iterations, helsgaun.iterations,
                   polyak.bound, helsgaun.bound);
@@ -2231,6 +2323,9 @@ SolveResult BranchBoundSolver::solve()
     initial_tour_alternatives_.clear();
     diversified_tour_attempted_ = false;
     adaptive_initial_clk_attempted_ = false;
+    root_guided_lk_attempted_ = false;
+    root_alpha_by_edge_id_.clear();
+    candidate_set_built_ = false;
     restart_search_requested_ = false;
     replacement_seconds_ = 0.0;
     candidate_undo_.clear();
@@ -2456,6 +2551,55 @@ SolveResult BranchBoundSolver::solve()
                         + " relative_gap="
                         + formatDebugDouble(relative_gap)
                         + " starts=" + std::to_string(starts_run));
+            }
+        }
+
+        // LKH 风格根引导强化：用最终根势和当前最小 1-tree 计算 alpha，
+        // 重建 LK 候选集后只从当前 incumbent 再搜索一次。已有 root_tree
+        // 始终是合法下界证书；默认不因 UB 改善重复支付根势上升成本。
+        if (root_guided_lk_enabled_ && !root_guided_lk_attempted_
+            && isFinite(best_cost_) && !best_tour_.empty()
+            && root_tree.feasible) {
+            root_guided_lk_attempted_ = true;
+            ++result_.stats.root_guided_lk_calls;
+            const auto guided_started = std::chrono::steady_clock::now();
+            if (lk_candidate_set_strategy_
+                    != LkCandidateSetStrategy::Nearest) {
+                buildRootAlphaNearness(root_tree);
+            }
+            candidate_set_built_ = false;
+            std::vector<int> candidate = best_tour_;
+            double candidate_cost = best_cost_;
+            const double old_cost = best_cost_;
+            linKernighan(candidate, candidate_cost, true);
+            ++result_.stats.initial_clk_starts;
+            candidate_cost = tourCost(candidate);
+            const double guided_seconds = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - guided_started).count();
+            result_.stats.root_guided_lk_seconds += guided_seconds;
+            result_.stats.initial_tour_seconds += guided_seconds;
+            if (candidate_cost + kHeuristicEps < best_cost_) {
+                best_tour_ = std::move(candidate);
+                best_cost_ = candidate_cost;
+                result_.stats.initial_upper_bound = best_cost_;
+                ++result_.stats.root_guided_lk_improvements;
+                result_.stats.root_guided_lk_total_gain +=
+                    old_cost - best_cost_;
+                rememberCandidateHintTour(best_tour_);
+                writeDebugLine(
+                    debug_,
+                    "root-guided LK improved: cost="
+                        + formatDebugDouble(best_cost_)
+                        + " previous=" + formatDebugDouble(old_cost));
+                if (root_guided_lk_reascend_after_improvement_) {
+                    ++result_.stats.root_guided_lk_reascents;
+                    continue;
+                }
+            } else {
+                writeDebugLine(
+                    debug_,
+                    "root-guided LK retained incumbent: cost="
+                        + formatDebugDouble(best_cost_));
             }
         }
         if (root_bound_only_) {

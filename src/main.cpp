@@ -22,6 +22,22 @@ struct CliOptions {
     std::string batch_path;
     // 外部 tour 文件：n 后接 n 个 0-based 顶点编号，适用于单实例。
     std::string initial_tour_path;
+    // LKH PI_FILE 或同格式节点势；ID 为 1-based，读入后除以 scale。
+    std::string root_pi_path;
+    double root_pi_scale = 100.0;
+    tsp::RootPotentialSeedStrategy root_pi_mode
+        = tsp::RootPotentialSeedStrategy::WarmStart;
+    // 外部势 warm start 固定使用独立的小预算算法，不受普通根上升配置影响。
+    tsp::RootAscentStrategy root_pi_refine_ascent
+        = tsp::RootAscentStrategy::Polyak;
+    std::size_t root_pi_refine_iterations = 64;
+    double root_pi_refine_smoothing_current_weight = 0.7;
+    double root_pi_refine_dynamic_cosine_scale = 0.2;
+    double root_pi_refine_dynamic_min_current_weight = 0.5;
+    double root_pi_refine_dynamic_max_current_weight = 0.9;
+    // LKH PI_FILE 的第一条节点记录是其最终 1-tree 特殊根；默认把该节点
+    // 重标号为内部顶点 0，避免同一组势因根不一致损失下界。
+    bool root_pi_relabel_root = true;
     // 坐标实例展开为 n×n 稠密矩阵时允许的最大顶点数，防止意外耗尽内存。
     std::size_t exact_max_n = 10000;
     // 根节点 Held-Karp 势的上升算法；不影响问题可行域，只影响下界强度。
@@ -52,6 +68,13 @@ struct CliOptions {
     tsp::InitialClkStrategy initial_clk = tsp::InitialClkStrategy::Adaptive;
     double adaptive_clk_gap_ratio = 0.02;
     std::size_t adaptive_clk_additional_starts = 2;
+    // 根 1-tree 之前仍使用历史 k-NN；启用 root-guided-lk 后可在根处切换
+    // 为 alpha 或 hybrid 候选集再做一次 LK。
+    tsp::LkCandidateSetStrategy lk_candidate_set
+        = tsp::LkCandidateSetStrategy::Nearest;
+    std::size_t lk_candidate_count = 8;
+    bool root_guided_lk = false;
+    bool root_guided_lk_reascent = false;
     // 默认沿用调整权重排序；实验策略只切换 BP 内部的分支边优先级，
     // 不改变 1-tree 下界或 Kruskal 候选顺序。
     tsp::BranchEdgeOrder branch_edge_order
@@ -192,29 +215,118 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
                   << " method=" << output.method << '\n';
     }
 
-    auto distance = problem.toDenseMatrix(options.exact_max_n);
-    tsp::BranchBoundSolver solver(std::move(distance));
+    std::vector<int> supplied_tour;
     if (!options.initial_tour_path.empty()) {
         std::ifstream tour_input(options.initial_tour_path);
         long long count = -1;
         if (!(tour_input >> count) || count != dimension) {
             throw std::runtime_error("initial tour file must start with the instance dimension");
         }
-        std::vector<int> tour(static_cast<std::size_t>(dimension));
-        for (int& vertex : tour) {
+        supplied_tour.resize(static_cast<std::size_t>(dimension));
+        for (int& vertex : supplied_tour) {
             if (!(tour_input >> vertex)) throw std::runtime_error("incomplete initial tour file");
         }
         tour_input >> std::ws;
         if (!tour_input.eof()) throw std::runtime_error("extra data in initial tour file");
-        solver.setInitialTour(tour);
     }
-    solver.setRootAscentStrategy(options.root_ascent);
-    solver.setRootAscentIterationLimit(options.root_ascent_iterations);
+    std::vector<double> root_potentials;
+    int external_root = 0;
+    if (!options.root_pi_path.empty()) {
+        std::ifstream pi_input(options.root_pi_path);
+        long long count = -1;
+        if (!(pi_input >> count) || count != dimension) {
+            throw std::runtime_error(
+                "root PI file must start with the instance dimension");
+        }
+        root_potentials.assign(static_cast<std::size_t>(dimension), 0.0);
+        std::vector<unsigned char> seen(
+            static_cast<std::size_t>(dimension), 0);
+        for (int index = 0; index < dimension; ++index) {
+            long long id = 0;
+            double value = 0.0;
+            if (!(pi_input >> id >> value) || id < 1 || id > dimension
+                || seen[static_cast<std::size_t>(id - 1)]) {
+                throw std::runtime_error(
+                    "root PI file contains an invalid or duplicate node ID");
+            }
+            if (index == 0) external_root = static_cast<int>(id - 1);
+            seen[static_cast<std::size_t>(id - 1)] = 1;
+            root_potentials[static_cast<std::size_t>(id - 1)] =
+                value / options.root_pi_scale;
+        }
+    }
+
+    auto distance = problem.toDenseMatrix(options.exact_max_n);
+    std::vector<int> new_to_old(static_cast<std::size_t>(dimension));
+    std::vector<int> old_to_new(static_cast<std::size_t>(dimension));
+    for (int vertex = 0; vertex < dimension; ++vertex) {
+        new_to_old[static_cast<std::size_t>(vertex)] = vertex;
+    }
+    const bool relabel_root = !root_potentials.empty()
+        && options.root_pi_relabel_root && external_root != 0;
+    if (relabel_root) {
+        std::swap(new_to_old[0],
+                  new_to_old[static_cast<std::size_t>(external_root)]);
+        for (int vertex = 0; vertex < dimension; ++vertex) {
+            old_to_new[static_cast<std::size_t>(
+                new_to_old[static_cast<std::size_t>(vertex)])] = vertex;
+        }
+        std::vector<std::vector<double>> relabeled(
+            static_cast<std::size_t>(dimension),
+            std::vector<double>(static_cast<std::size_t>(dimension)));
+        for (int u = 0; u < dimension; ++u) {
+            for (int v = 0; v < dimension; ++v) {
+                relabeled[static_cast<std::size_t>(u)]
+                         [static_cast<std::size_t>(v)] = distance[
+                    static_cast<std::size_t>(new_to_old[static_cast<std::size_t>(u)])][
+                    static_cast<std::size_t>(new_to_old[static_cast<std::size_t>(v)])];
+            }
+        }
+        distance = std::move(relabeled);
+        for (int& vertex : supplied_tour) {
+            if (vertex >= 0 && vertex < dimension) {
+                vertex = old_to_new[static_cast<std::size_t>(vertex)];
+            }
+        }
+        std::vector<double> relabeled_potentials(
+            static_cast<std::size_t>(dimension));
+        for (int vertex = 0; vertex < dimension; ++vertex) {
+            relabeled_potentials[static_cast<std::size_t>(vertex)] =
+                root_potentials[static_cast<std::size_t>(
+                    new_to_old[static_cast<std::size_t>(vertex)])];
+        }
+        root_potentials = std::move(relabeled_potentials);
+    }
+
+    tsp::BranchBoundSolver solver(std::move(distance));
+    if (!supplied_tour.empty()) {
+        solver.setInitialTour(supplied_tour);
+    }
+    if (!root_potentials.empty()) {
+        solver.setRootPotentialSeed(
+            std::move(root_potentials), options.root_pi_mode);
+    }
+    const bool refine_external_potentials = !options.root_pi_path.empty()
+        && options.root_pi_mode == tsp::RootPotentialSeedStrategy::WarmStart;
+    solver.setRootAscentStrategy(refine_external_potentials
+            ? options.root_pi_refine_ascent
+            : options.root_ascent);
+    solver.setRootAscentIterationLimit(refine_external_potentials
+            ? options.root_pi_refine_iterations
+            : options.root_ascent_iterations);
     solver.setRootAscentDirectionSmoothing(
-        options.root_ascent_smoothing_current_weight,
-        options.root_ascent_dynamic_cosine_scale,
-        options.root_ascent_dynamic_min_current_weight,
-        options.root_ascent_dynamic_max_current_weight);
+        refine_external_potentials
+            ? options.root_pi_refine_smoothing_current_weight
+            : options.root_ascent_smoothing_current_weight,
+        refine_external_potentials
+            ? options.root_pi_refine_dynamic_cosine_scale
+            : options.root_ascent_dynamic_cosine_scale,
+        refine_external_potentials
+            ? options.root_pi_refine_dynamic_min_current_weight
+            : options.root_ascent_dynamic_min_current_weight,
+        refine_external_potentials
+            ? options.root_pi_refine_dynamic_max_current_weight
+            : options.root_ascent_dynamic_max_current_weight);
     solver.setNodeAscentStrategy(options.node_ascent);
     solver.setNodeAscentDirectionSmoothing(
         options.node_ascent_smoothing_current_weight,
@@ -229,6 +341,10 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
         options.initial_clk,
         options.adaptive_clk_gap_ratio,
         options.adaptive_clk_additional_starts);
+    solver.setLkCandidateSetOptions(
+        options.lk_candidate_set, options.lk_candidate_count);
+    solver.setRootGuidedLk(
+        options.root_guided_lk, options.root_guided_lk_reascent);
     // 分支顺序与势更新策略是两个正交开关，便于分别评估搜索树形状和下界质量。
     solver.setBranchEdgeOrder(options.branch_edge_order);
     solver.setPotentialUpdateOptions(
@@ -263,6 +379,11 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
         solver.setDebugOutput(std::cerr, options.debug_interval);
     }
     output.result = solver.solve();
+    if (relabel_root) {
+        for (int& vertex : output.result.tour) {
+            vertex = new_to_old[static_cast<std::size_t>(vertex)];
+        }
+    }
     if (root_ascent_trace.is_open()) {
         root_ascent_trace.flush();
         if (!root_ascent_trace) {
@@ -324,6 +445,16 @@ void printHumanResult(const RunResult& run)
               << result.stats.adaptive_clk_triggers << '\n';
     std::cout << "Adaptive CLK improvements: "
               << result.stats.adaptive_clk_improvements << '\n';
+    std::cout << "Root-guided LK calls: "
+              << result.stats.root_guided_lk_calls << '\n';
+    std::cout << "Root-guided LK improvements: "
+              << result.stats.root_guided_lk_improvements << '\n';
+    std::cout << "Root-guided LK reascents: "
+              << result.stats.root_guided_lk_reascents << '\n';
+    std::cout << "Root-guided LK seconds: "
+              << result.stats.root_guided_lk_seconds << '\n';
+    std::cout << "Root-guided LK total gain: "
+              << result.stats.root_guided_lk_total_gain << '\n';
     std::cout << "Root fixing calls: " << result.stats.root_fixing_calls << '\n';
     std::cout << "Root fixing tested: " << result.stats.root_fixing_tested << '\n';
     std::cout << "Root fixing fixed zero: "
@@ -340,6 +471,10 @@ void printHumanResult(const RunResult& run)
               << result.stats.root_potential_iterations << '\n';
     std::cout << "Root ascent seconds: "
               << result.stats.root_ascent_seconds << '\n';
+    std::cout << "Root external potential replacements: "
+              << result.stats.root_external_potential_replacements << '\n';
+    std::cout << "Root external potential warm starts: "
+              << result.stats.root_external_potential_warm_starts << '\n';
     std::cout << "Instance wall seconds: " << run.instance_wall_seconds << '\n';
     std::cout << "Nodes created: " << result.stats.nodes_created << '\n';
     std::cout << "Nodes expanded: " << result.stats.nodes_expanded << '\n';
@@ -450,10 +585,15 @@ void printBatchHeader()
         << "final_upper_bound,final_lower_bound,final_relative_gap,"
         << "initial_tour_seconds,initial_clk_starts,adaptive_clk_triggers,"
         << "adaptive_clk_improvements,"
+        << "root_guided_lk_calls,root_guided_lk_improvements,"
+        << "root_guided_lk_reascents,root_guided_lk_seconds,"
+        << "root_guided_lk_total_gain,"
         << "root_fixing_calls,root_fixing_tested,root_fixing_fixed_zero,"
         << "root_fixing_tree_tested,root_fixing_fixed_one,root_fixing_active_after,"
         << "root_fixing_seconds,"
         << "root_potential_iterations,root_ascent_seconds,"
+        << "root_external_potential_replacements,"
+        << "root_external_potential_warm_starts,"
         << "instance_wall_seconds,"
         << "nodes_created,nodes_expanded,pruned_by_bound,pruned_infeasible,"
         << "search_node_potential_update_candidates,"
@@ -492,9 +632,9 @@ void printBatchRow(const std::string& path,
 
     if (run == nullptr) {
         // 读取失败、解析失败等情况没有求解统计，只保留错误信息。
-        // method 到 tour 共 56 个空字段；最后一个字段保留错误消息。
+        // method 到 tour 共 63 个空字段；最后一个字段保留错误消息。
         // 新增批量列时必须同步此数量，确保错误行也与 CSV 表头严格对齐。
-        for (int field = 0; field < 56; ++field) {
+        for (int field = 0; field < 63; ++field) {
             std::cout << ',';
         }
         std::cout << csvQuote(message) << '\n';
@@ -515,6 +655,11 @@ void printBatchRow(const std::string& path,
               << result.stats.initial_clk_starts << ','
               << result.stats.adaptive_clk_triggers << ','
               << result.stats.adaptive_clk_improvements << ','
+              << result.stats.root_guided_lk_calls << ','
+              << result.stats.root_guided_lk_improvements << ','
+              << result.stats.root_guided_lk_reascents << ','
+              << formatDouble(result.stats.root_guided_lk_seconds) << ','
+              << formatDouble(result.stats.root_guided_lk_total_gain) << ','
               << result.stats.root_fixing_calls << ','
               << result.stats.root_fixing_tested << ','
               << result.stats.root_fixing_fixed_zero << ','
@@ -524,6 +669,8 @@ void printBatchRow(const std::string& path,
               << formatDouble(result.stats.root_fixing_seconds) << ','
               << result.stats.root_potential_iterations << ','
               << formatDouble(result.stats.root_ascent_seconds) << ','
+              << result.stats.root_external_potential_replacements << ','
+              << result.stats.root_external_potential_warm_starts << ','
               << formatDouble(run->instance_wall_seconds) << ','
               << result.stats.nodes_created << ','
               << result.stats.nodes_expanded << ','
@@ -625,6 +772,22 @@ void printUsage(const char* program)
               << "\nOptions:\n"
               << "  --exact-max-n <n>\n"
               << "  --initial-tour <file> (n then n zero-based vertices; single instance)\n"
+              << "  --root-pi <LKH-PI-file> (single instance)\n"
+              << "  --root-pi-scale <x > 0> (default 100)\n"
+              << "  --root-pi-mode <replace|warm-start> (default warm-start)\n"
+              << "  --root-pi-refine-ascent <none|polyak|helsgaun|hybrid|"
+                 "hybrid-reverse|polyak-smoothed|polyak-smoothed-dynamic>"
+                 " (default polyak)\n"
+              << "  --root-pi-refine-iterations <n> (default 64)\n"
+              << "  --root-pi-refine-smoothing-current-weight <x in [0,1]>"
+                 " (default 0.7)\n"
+              << "  --root-pi-refine-dynamic-cosine-scale <x >= 0>"
+                 " (default 0.2)\n"
+              << "  --root-pi-refine-dynamic-min-current-weight <x in [0,1]>"
+                 " (default 0.5)\n"
+              << "  --root-pi-refine-dynamic-max-current-weight <x in [0,1]>"
+                 " (default 0.9)\n"
+              << "  --root-pi-relabel-root <off|on> (default on)\n"
               << "  --hk-ascent <none|polyak|helsgaun|hybrid|hybrid-reverse|"
                  "polyak-smoothed|polyak-smoothed-dynamic>\n"
               << "  --root-ascent-iterations <n>\n"
@@ -641,9 +804,13 @@ void printUsage(const char* program)
               << "  --hk-node-dynamic-max-current-weight <x in [0,1]>\n"
               << "  --hk-sibling-warm-start <off|blend|guarded>\n"
               << "  --hk-sibling-warm-weight <x in [0,1]> (0 = disabled)\n"
-              << "  --initial-clk <single|triple|adaptive>\n"
+              << "  --initial-clk <off|single|triple|adaptive>\n"
               << "  --adaptive-clk-gap-ratio <x >= 0>\n"
               << "  --adaptive-clk-additional-starts <n>\n"
+              << "  --lk-candidate-set <nearest|alpha|hybrid>\n"
+              << "  --lk-candidates <n>\n"
+              << "  --root-guided-lk <off|once>\n"
+              << "  --root-guided-lk-reascent <off|on>\n"
               << "  --branch-edge-order <weight|root-alpha-asc|root-alpha-desc|"
                  "root-alpha-global-asc|root-alpha-global-desc|"
                  "forbid-delta-asc|forbid-delta-desc|forbid-degree-desc|"
@@ -718,12 +885,47 @@ tsp::SiblingWarmStartStrategy parseSiblingWarmStartStrategy(
 
 tsp::InitialClkStrategy parseInitialClkStrategy(const std::string& value)
 {
+    if (value == "off") return tsp::InitialClkStrategy::Off;
     if (value == "single") return tsp::InitialClkStrategy::Single;
     if (value == "triple") return tsp::InitialClkStrategy::Triple;
     if (value == "adaptive") return tsp::InitialClkStrategy::Adaptive;
     throw std::runtime_error(
         "invalid value for --initial-clk: " + value
-        + " (expected single, triple, or adaptive)");
+        + " (expected off, single, triple, or adaptive)");
+}
+
+tsp::LkCandidateSetStrategy parseLkCandidateSetStrategy(
+    const std::string& value)
+{
+    if (value == "nearest") return tsp::LkCandidateSetStrategy::Nearest;
+    if (value == "alpha") return tsp::LkCandidateSetStrategy::Alpha;
+    if (value == "hybrid") return tsp::LkCandidateSetStrategy::Hybrid;
+    throw std::runtime_error(
+        "invalid value for --lk-candidate-set: " + value
+        + " (expected nearest, alpha, or hybrid)");
+}
+
+bool parseOnOff(const std::string& value, const std::string& option)
+{
+    if (value == "on") return true;
+    if (value == "off") return false;
+    throw std::runtime_error(
+        "invalid value for " + option + ": " + value
+        + " (expected off or on)");
+}
+
+tsp::RootPotentialSeedStrategy parseRootPotentialSeedStrategy(
+    const std::string& value)
+{
+    if (value == "replace") {
+        return tsp::RootPotentialSeedStrategy::Replace;
+    }
+    if (value == "warm-start") {
+        return tsp::RootPotentialSeedStrategy::WarmStart;
+    }
+    throw std::runtime_error(
+        "invalid value for --root-pi-mode: " + value
+        + " (expected replace or warm-start)");
 }
 
 tsp::PotentialUpdateStrategy parsePotentialUpdateStrategy(
@@ -868,6 +1070,46 @@ CliOptions parseArgs(int argc, char** argv)
             options.batch_path = require_value(arg);
         } else if (arg == "--initial-tour") {
             options.initial_tour_path = require_value(arg);
+        } else if (arg == "--root-pi") {
+            options.root_pi_path = require_value(arg);
+        } else if (arg == "--root-pi-scale") {
+            options.root_pi_scale = parseDoubleOption(require_value(arg), arg);
+            if (options.root_pi_scale <= 0.0) {
+                throw std::runtime_error(
+                    "--root-pi-scale must be greater than zero");
+            }
+        } else if (arg == "--root-pi-mode") {
+            options.root_pi_mode =
+                parseRootPotentialSeedStrategy(require_value(arg));
+        } else if (arg == "--root-pi-refine-ascent") {
+            options.root_pi_refine_ascent =
+                parseRootAscentStrategy(require_value(arg));
+        } else if (arg == "--root-pi-refine-iterations") {
+            options.root_pi_refine_iterations =
+                parseSizeOption(require_value(arg), arg);
+            if (options.root_pi_refine_iterations == 0) {
+                throw std::runtime_error(
+                    "--root-pi-refine-iterations must be greater than zero");
+            }
+        } else if (arg == "--root-pi-refine-smoothing-current-weight") {
+            options.root_pi_refine_smoothing_current_weight =
+                parseDoubleOption(require_value(arg), arg);
+        } else if (arg == "--root-pi-refine-dynamic-cosine-scale") {
+            options.root_pi_refine_dynamic_cosine_scale =
+                parseDoubleOption(require_value(arg), arg);
+            if (options.root_pi_refine_dynamic_cosine_scale < 0.0) {
+                throw std::runtime_error(
+                    "--root-pi-refine-dynamic-cosine-scale must be non-negative");
+            }
+        } else if (arg == "--root-pi-refine-dynamic-min-current-weight") {
+            options.root_pi_refine_dynamic_min_current_weight =
+                parseDoubleOption(require_value(arg), arg);
+        } else if (arg == "--root-pi-refine-dynamic-max-current-weight") {
+            options.root_pi_refine_dynamic_max_current_weight =
+                parseDoubleOption(require_value(arg), arg);
+        } else if (arg == "--root-pi-relabel-root") {
+            options.root_pi_relabel_root =
+                parseOnOff(require_value(arg), arg);
         } else if (arg == "--exact-max-n") {
             options.exact_max_n = parseSizeOption(require_value(arg), arg);
             if (options.exact_max_n == 0) {
@@ -940,6 +1182,29 @@ CliOptions parseArgs(int argc, char** argv)
         } else if (arg == "--adaptive-clk-additional-starts") {
             options.adaptive_clk_additional_starts =
                 parseSizeOption(require_value(arg), arg);
+        } else if (arg == "--lk-candidate-set") {
+            options.lk_candidate_set =
+                parseLkCandidateSetStrategy(require_value(arg));
+        } else if (arg == "--lk-candidates") {
+            options.lk_candidate_count = parseSizeOption(require_value(arg), arg);
+            if (options.lk_candidate_count == 0) {
+                throw std::runtime_error(
+                    "--lk-candidates must be greater than zero");
+            }
+        } else if (arg == "--root-guided-lk") {
+            const std::string value = require_value(arg);
+            if (value == "once") {
+                options.root_guided_lk = true;
+            } else if (value == "off") {
+                options.root_guided_lk = false;
+            } else {
+                throw std::runtime_error(
+                    "invalid value for --root-guided-lk: " + value
+                    + " (expected off or once)");
+            }
+        } else if (arg == "--root-guided-lk-reascent") {
+            options.root_guided_lk_reascent =
+                parseOnOff(require_value(arg), arg);
         } else if (arg == "--branch-edge-order") {
             options.branch_edge_order =
                 parseBranchEdgeOrder(require_value(arg));
@@ -1025,6 +1290,19 @@ CliOptions parseArgs(int argc, char** argv)
     }
     if (!options.initial_tour_path.empty() && !options.batch_path.empty()) {
         throw std::runtime_error("--initial-tour only supports a single instance");
+    }
+    if (!options.root_pi_path.empty() && !options.batch_path.empty()) {
+        throw std::runtime_error("--root-pi only supports a single instance");
+    }
+    if (options.root_pi_refine_dynamic_min_current_weight < 0.0
+        || options.root_pi_refine_dynamic_min_current_weight
+            > options.root_pi_refine_smoothing_current_weight
+        || options.root_pi_refine_smoothing_current_weight
+            > options.root_pi_refine_dynamic_max_current_weight
+        || options.root_pi_refine_dynamic_max_current_weight > 1.0) {
+        throw std::runtime_error(
+            "root PI refinement direction weights must satisfy "
+            "0 <= dynamic minimum <= fixed <= dynamic maximum <= 1");
     }
     if (options.root_ascent_dynamic_min_current_weight < 0.0
         || options.root_ascent_dynamic_min_current_weight
