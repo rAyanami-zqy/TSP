@@ -104,6 +104,21 @@ HK_UPDATE_DEPTH_OPTION = "--hk-update-depth"
 HK_UPDATE_GAP_RATIO_OPTION = "--hk-update-gap-ratio"
 COMPARISON_GROUPS = (
     (
+        "focused-p32",
+        "一、P32 与 P33/gap 区间配置对比",
+        "以 P32 为左侧基线，分别比较三个 P33 触发下限配置和五个 gap 区间配置。",
+    ),
+    (
+        "focused-p32-no-node-update",
+        "二、P32-no-node-update 与 P33/gap 区间配置对比",
+        "以关闭搜索节点势更新的 P32 为左侧基线，使用与第一部分相同的八个右侧配置。",
+    ),
+    (
+        "focused-p33-iterations",
+        "三、P33 各触发下限的 32/64/128 迭代上限对比",
+        "在 1%、2%、5% 三个触发下限内，分别以默认 32 次迭代为基线，对比 64 和 128 次迭代。",
+    ),
+    (
         "polyak-iterations",
         "一、Polyak 节点势优化：hk-update-iterations 对比",
         "保持其余参数不变，仅比较 hk-update-iterations；每组按成功实例数优先、共同成功集总运行时间次之给出结论。",
@@ -136,6 +151,43 @@ COMPARISON_GROUP_BY_ID = {
 COMPARISON_GROUP_ORDER = {
     group_id: index for index, (group_id, _, _) in enumerate(COMPARISON_GROUPS)
 }
+
+FOCUSED_P33_GAP_PROFILE = "focused-p33-gap"
+FOCUSED_P33_GAP_SECTIONS = (
+    (
+        "focused-p32",
+        tuple(
+            ("P32", right)
+            for right in (
+                "P33>1%", "P33>2%", "P33>5%",
+                "gap0.005-0.01", "gap0.005-0.015", "gap0.005-0.02",
+                "gap0.005-0.03", "gap0.005-0.04",
+            )
+        ),
+    ),
+    (
+        "focused-p32-no-node-update",
+        tuple(
+            ("P32-no-node-update", right)
+            for right in (
+                "P33>1%", "P33>2%", "P33>5%",
+                "gap0.005-0.01", "gap0.005-0.015", "gap0.005-0.02",
+                "gap0.005-0.03", "gap0.005-0.04",
+            )
+        ),
+    ),
+    (
+        "focused-p33-iterations",
+        (
+            ("P33>1%", "P33>1%64"),
+            ("P33>1%", "P33>1%128"),
+            ("P33>2%", "P33>2%64"),
+            ("P33>2%", "P33>2%128"),
+            ("P33>5%", "P33>5%64"),
+            ("P33>5%", "P33>5%128"),
+        ),
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -186,12 +238,18 @@ class Comparison:
     factor: str
     left_value: str
     right_value: str
+    group_id_override: str | None = None
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input-root", type=Path, default=DEFAULT_INPUT_ROOT)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument(
+        "--profile", choices=(FOCUSED_P33_GAP_PROFILE,),
+        help=("use a named, reproducible run filter and comparison plan; "
+              f"{FOCUSED_P33_GAP_PROFILE!r} emits the requested 8+8+6 comparisons"),
+    )
     parser.add_argument(
         "--runs", nargs="+", metavar="RUN",
         help="only include these strategy names or run ids",
@@ -594,6 +652,8 @@ def pair_option_is(comparison: Comparison, option: str, expected: str) -> bool:
 
 
 def comparison_group_id(comparison: Comparison) -> str:
+    if comparison.group_id_override is not None:
+        return comparison.group_id_override
     factor = comparison_factor_key(comparison)
     polyak_node_ascent = pair_option_is(
         comparison, HK_NODE_ASCENT_OPTION, "polyak")
@@ -748,6 +808,41 @@ def build_comparisons(
             for run in comparison_runs[1:]
         ]
     return organize_comparisons(output)
+
+
+def focused_profile_selectors(reference_selector: str) -> list[str]:
+    """Return the stable run order needed by the focused P33/gap report."""
+    selectors: list[str] = []
+    if reference_selector.lower() not in {"", "none", "off"}:
+        selectors.append(reference_selector)
+    for _, pairs in FOCUSED_P33_GAP_SECTIONS:
+        for left, right in pairs:
+            for selector in (left, right):
+                if selector not in selectors:
+                    selectors.append(selector)
+    return selectors
+
+
+def focused_profile_comparisons(runs: Sequence[Run]) -> list[Comparison]:
+    """Build exactly the three requested sections and their 22 ordered pairs."""
+    factor_keys = sorted({key for run in runs for key in run.options})
+    comparisons_found: list[Comparison] = []
+    for group_id, pairs in FOCUSED_P33_GAP_SECTIONS:
+        for left_selector, right_selector in pairs:
+            comparison = comparison_from_pair(
+                resolve_run(runs, left_selector),
+                resolve_run(runs, right_selector),
+                factor_keys,
+            )
+            comparisons_found.append(Comparison(
+                comparison.left,
+                comparison.right,
+                comparison.factor,
+                comparison.left_value,
+                comparison.right_value,
+                group_id,
+            ))
+    return comparisons_found
 
 
 def metric_order(metrics: Iterable[str]) -> list[str]:
@@ -998,6 +1093,9 @@ def pair_summary_rows(
                 continue
             row = {
                 "comparison": index,
+                "group_id": comparison_group_id(comparison),
+                "group_title": COMPARISON_GROUP_BY_ID[
+                    comparison_group_id(comparison)][0],
                 "factor": comparison.factor,
                 "left": comparison.left.label,
                 "right": comparison.right.label,
@@ -1081,7 +1179,12 @@ def pair_detail_rows(
 def write_csv(path: Path, rows: Sequence[dict[str, Any]], fields: Sequence[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8-sig", newline="") as target:
-        writer = csv.DictWriter(target, fieldnames=fields, extrasaction="ignore")
+        writer = csv.DictWriter(
+            target,
+            fieldnames=fields,
+            extrasaction="ignore",
+            lineterminator="\n",
+        )
         writer.writeheader()
         writer.writerows(rows)
 
@@ -1507,7 +1610,7 @@ def html_report(
   <p>共同成功 {coverage['common_ok']}；右侧新增 {len(coverage['right_only'])}；
   右侧丢失 {len(coverage['left_only'])}；结果不一致
   {len(coverage['result_mismatches'])}{reference_summary}。</p>
-  {verdict_html}
+{verdict_html}
   <div class="cards">{config_cards}</div>
   <div class="table-wrap"><table><thead><tr>
     <th>指标</th><th>配对数</th><th>左侧总量</th><th>右侧总量</th>
@@ -1634,7 +1737,8 @@ def write_outputs(
 
     summary = pair_summary_rows(comparisons_found, report_metrics, reference)
     summary_fields = [
-        "comparison", "factor", "left", "right", "left_value", "right_value",
+        "comparison", "group_id", "group_title", "factor", "left", "right",
+        "left_value", "right_value",
         "left_ok", "right_ok", "common_ok", "left_only", "right_only",
         "result_agreements", "result_mismatches",
         "left_reference_checked", "left_reference_mismatches",
@@ -1680,7 +1784,16 @@ def main() -> int:
         input_root = args.input_root.resolve()
         output_dir = args.output_dir.resolve()
         discovered, warnings = load_runs(input_root)
-        runs = filter_runs(discovered, args.runs)
+        incompatible_profile_options = (
+            args.runs, args.compare, args.baseline, args.all_pairs)
+        if args.profile and any(incompatible_profile_options):
+            raise ValueError(
+                "--profile 不能与 --runs、--compare、--baseline 或 --all-pairs 同时使用")
+        selectors = (
+            focused_profile_selectors(args.reference)
+            if args.profile == FOCUSED_P33_GAP_PROFILE else args.runs
+        )
+        runs = filter_runs(discovered, selectors)
         if not runs:
             raise ValueError("筛选后没有可汇总的运行")
         if args.list_runs:
@@ -1692,7 +1805,11 @@ def main() -> int:
         reference, reference_warning = select_reference(runs, args.reference)
         if reference_warning:
             warnings.append(reference_warning)
-        comparisons_found = build_comparisons(args, runs, reference)
+        comparisons_found = (
+            focused_profile_comparisons(runs)
+            if args.profile == FOCUSED_P33_GAP_PROFILE
+            else build_comparisons(args, runs, reference)
+        )
         if not comparisons_found:
             warnings.append("没有发现可比较的配置；已生成配置和逐实例汇总")
         unknown_metrics = sorted(set(args.metrics or ()) - set(all_metrics(runs)))

@@ -156,6 +156,32 @@ class AblationHtmlReportTests(unittest.TestCase):
         self.assertIn("hk-update-iterations=32 更优", verdict)
         self.assertIn("1.000 s 对 2.000 s", verdict)
 
+    def test_focused_profile_has_only_requested_three_sections(self) -> None:
+        strategies = summarizer.focused_profile_selectors("Concorde")
+        runs = [self.make_run(strategy, 1.0) for strategy in strategies]
+
+        comparisons = summarizer.focused_profile_comparisons(runs)
+
+        self.assertEqual(len(runs), 17)
+        self.assertEqual(len(comparisons), 22)
+        self.assertEqual(
+            [summarizer.comparison_group_id(item) for item in comparisons],
+            ["focused-p32"] * 8
+            + ["focused-p32-no-node-update"] * 8
+            + ["focused-p33-iterations"] * 6,
+        )
+        self.assertEqual(
+            [(item.left.strategy, item.right.strategy) for item in comparisons[-6:]],
+            [
+                ("P33>1%", "P33>1%64"),
+                ("P33>1%", "P33>1%128"),
+                ("P33>2%", "P33>2%64"),
+                ("P33>2%", "P33>2%128"),
+                ("P33>5%", "P33>5%64"),
+                ("P33>5%", "P33>5%128"),
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
