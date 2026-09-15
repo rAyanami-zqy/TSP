@@ -57,7 +57,9 @@ DEFAULT_OUTPUT_ROOT = PROJECT_ROOT / "outputs" / "phkmst-ablation"
 CONCORDE_WORK_ROOT = PROJECT_ROOT / "TS"
 DEFAULT_TIMEOUT = 120.0
 DEFAULT_WORKERS = 5
-DEFAULT_DEBUG_INTERVAL = 5_000_000
+# 超时行依赖已 flush 的进度快照恢复最终已知节点数；10k 将误差限制在一个
+# 小批次内，同时在百万节点运行中只产生百量级文本行。
+DEFAULT_DEBUG_INTERVAL = 10_000
 DEFAULT_CONCORDE_SEED = 123
 CACHE_SCHEMA = 2
 
@@ -146,6 +148,16 @@ OUTPUT_STATISTICS: tuple[OutputStatistic, ...] = (
         required=True,
     ),
     OutputStatistic(
+        "root_lower_bound", ("Root lower bound",), "float"),
+    OutputStatistic(
+        "initial_upper_bound", ("Initial upper bound",), "float"),
+    OutputStatistic(
+        "final_upper_bound", ("Final upper bound",), "float"),
+    OutputStatistic(
+        "final_lower_bound", ("Final lower bound",), "float"),
+    OutputStatistic(
+        "final_relative_gap", ("Final relative gap",), "float"),
+    OutputStatistic(
         "branches",
         ("Nodes created", "B&B nodes", "BB nodes", "Branch-and-bound nodes"),
         "int",
@@ -173,11 +185,67 @@ OUTPUT_STATISTICS: tuple[OutputStatistic, ...] = (
         kind="int",
         summarize=True,
     ),
+    # 根 reduced-cost fixing 的工作量、效果与耗时。active_after 记录最后一次
+    # 根重启完成 fixing 后保留下来的候选边数，其余计数和耗时跨重启累加。
+    OutputStatistic(
+        column="root_fixing_calls",
+        tspbb_labels=("Root fixing calls",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="root_fixing_tested",
+        tspbb_labels=("Root fixing tested",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="root_fixing_fixed_zero",
+        tspbb_labels=("Root fixing fixed zero",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="root_fixing_tree_tested",
+        tspbb_labels=("Root fixing tree tested",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="root_fixing_fixed_one",
+        tspbb_labels=("Root fixing fixed one",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="root_fixing_active_after",
+        tspbb_labels=("Root fixing active after",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="root_fixing_seconds",
+        tspbb_labels=("Root fixing seconds",),
+        kind="float",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="initial_tour_seconds",
+        tspbb_labels=("Initial tour seconds",),
+        kind="float",
+        summarize=True,
+    ),
     # 根节点势优化总轮次。
     OutputStatistic(
         column="root_potential_iterations",
         tspbb_labels=("Root potential iterations",),
         kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="root_ascent_seconds",
+        tspbb_labels=("Root ascent seconds",),
+        kind="float",
         summarize=True,
     ),
     # 实际进入节点势更新判定的非根逻辑搜索节点数，是计算触发率的分母。
@@ -267,6 +335,24 @@ OUTPUT_STATISTICS: tuple[OutputStatistic, ...] = (
             "Potential update iterations",
         ),
         kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="potential_update_seconds",
+        tspbb_labels=("Potential update seconds",),
+        kind="float",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="potential_update_rebuild_seconds",
+        tspbb_labels=("Potential update rebuild seconds",),
+        kind="float",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="replacement_seconds",
+        tspbb_labels=("Replacement seconds",),
+        kind="float",
         summarize=True,
     ),
 )
@@ -1297,6 +1383,110 @@ def parse_tspbb_statistics(stdout: str, stderr: str = "") -> dict[str, Any]:
     return parsed
 
 
+def _timeout_text(value: str | bytes | None) -> str:
+    """Normalize TimeoutExpired partial output across Python versions."""
+
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value
+
+
+def parse_tspbb_progress(stdout: str, stderr: str = "") -> dict[str, Any]:
+    """Recover the latest safe UB/LB, node counts and phase times from debug.
+
+    ``tsp_bb`` flushes every debug line. On external timeout the normal final
+    report is unavailable, but ``TimeoutExpired`` still carries this prefix.
+    The root 1-tree is used as the global lower bound; a currently visited DFS
+    node bound is deliberately not reported as a global certificate.
+    """
+
+    parsed: dict[str, Any] = {}
+    root_fixing_seconds = 0.0
+    root_ascent_seconds = 0.0
+
+    def tokens(payload: str) -> dict[str, str]:
+        return dict(re.findall(r"([A-Za-z_]+)=([^\s]+)", payload))
+
+    def set_float(column: str, raw: str | None) -> None:
+        if raw is None:
+            return
+        value = parse_statistic_value(raw, "float")
+        if value is not None:
+            parsed[column] = value
+
+    def set_int(column: str, raw: str | None) -> None:
+        if raw is None:
+            return
+        value = parse_statistic_value(raw, "int")
+        if value is not None:
+            parsed[column] = value
+
+    for line in "\n".join((stdout, stderr)).splitlines():
+        marker = "[tsp-debug] "
+        marker_at = line.find(marker)
+        if marker_at < 0:
+            continue
+        payload = line[marker_at + len(marker):].strip()
+        values = tokens(payload)
+        if payload.startswith("initial incumbent:"):
+            set_float("initial_upper_bound", values.get("cost"))
+            set_float("final_upper_bound", values.get("cost"))
+        elif payload.startswith("initial tour timing:"):
+            set_float("initial_tour_seconds", values.get("seconds"))
+        elif payload.startswith("root ascent:"):
+            seconds = parse_statistic_value(values.get("seconds", ""), "float")
+            if seconds is not None:
+                root_ascent_seconds += seconds
+                parsed["root_ascent_seconds"] = root_ascent_seconds
+        elif payload.startswith("root reduced-cost fixing:"):
+            parsed["root_fixing_calls"] = parsed.get("root_fixing_calls", 0) + 1
+            for column, token in (
+                ("root_fixing_tested", "tested"),
+                ("root_fixing_fixed_zero", "fixed_zero"),
+                ("root_fixing_tree_tested", "tree_tested"),
+                ("root_fixing_fixed_one", "fixed_one"),
+            ):
+                value = parse_statistic_value(values.get(token, ""), "int")
+                if value is not None:
+                    parsed[column] = parsed.get(column, 0) + value
+            set_int("root_fixing_active_after", values.get("active"))
+            seconds = parse_statistic_value(values.get("seconds", ""), "float")
+            if seconds is not None:
+                root_fixing_seconds += seconds
+                parsed["root_fixing_seconds"] = root_fixing_seconds
+        elif payload.startswith(("root:", "root certificate:")):
+            set_float("root_lower_bound", values.get("lower_bound"))
+            set_float("final_lower_bound", values.get("lower_bound"))
+            set_float("final_upper_bound", values.get("best"))
+            set_int("branches", values.get("created"))
+            set_int("nodes_expanded", values.get("expanded"))
+            for column in (
+                "initial_tour_seconds", "root_ascent_seconds",
+                "root_fixing_seconds", "replacement_seconds",
+            ):
+                set_float(column, values.get(column))
+        elif payload.startswith("progress:"):
+            set_int("nodes_expanded", values.get("expanded"))
+            set_int("branches", values.get("created"))
+            set_float("final_upper_bound", values.get("best"))
+            set_float("potential_update_seconds", values.get("potential_seconds"))
+            set_float(
+                "potential_update_rebuild_seconds",
+                values.get("potential_rebuild_seconds"))
+            set_float("replacement_seconds", values.get("replacement_seconds"))
+        elif payload.startswith(("new incumbent:", "diversified incumbent:")):
+            set_float("final_upper_bound", values.get("cost"))
+
+    upper = parsed.get("final_upper_bound")
+    lower = parsed.get("final_lower_bound")
+    if isinstance(upper, (int, float)) and isinstance(lower, (int, float)):
+        parsed["final_relative_gap"] = max(0.0, upper - lower) / max(
+            1.0, abs(upper))
+    return parsed
+
+
 def missing_required_statistics(
     row: dict[str, Any], strategy: Strategy,
 ) -> list[str]:
@@ -1352,10 +1542,14 @@ def run_tspbb_once(
                 + ", ".join(missing))
         row["status"] = "ok"
         return row, None
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as error:
         row = empty_result(run_id, strategy, repeat, instance)
         row["status"] = "timeout"
         row["wall_seconds"] = timeout
+        stdout = _timeout_text(error.stdout)
+        stderr = _timeout_text(error.stderr)
+        row.update(parse_tspbb_statistics(stdout, stderr))
+        row.update(parse_tspbb_progress(stdout, stderr))
         return row, f"timeout after {timeout:g}s"
     except Exception as error:  # noqa: BLE001 - stored as an error result
         row = empty_result(run_id, strategy, repeat, instance)

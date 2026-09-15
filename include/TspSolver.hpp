@@ -25,9 +25,27 @@ struct SolveStats {
     double root_lower_bound = 0.0;
     // 进入精确搜索前由 NN、2-opt 和 LK 得到的初始可行 tour 成本。
     double initial_upper_bound = 0.0;
+    // 初始 NN、2-opt 和 CLK 阶段的累计墙钟秒数；困难实例的后置 CLK 也累加。
+    double initial_tour_seconds = 0.0;
+    // 根 reduced-cost fixing 实际执行次数。incumbent 改善导致根重启时会累加。
+    std::size_t root_fixing_calls = 0;
+    // 根 fixing 中测试能否固定为 x_e=0 的 active 非树边总数。
+    std::size_t root_fixing_tested = 0;
+    // 根 fixing 证明可永久固定为 x_e=0 的边总数。
+    std::size_t root_fixing_fixed_zero = 0;
+    // 根 fixing 做单边 forbid sensitivity 的 1-tree 边总数。
+    std::size_t root_fixing_tree_tested = 0;
+    // 根 fixing 证明可永久固定为 x_e=1 的树边总数。
+    std::size_t root_fixing_fixed_one = 0;
+    // 最后一次根 fixing 完成后仍 active 的可选边数。
+    std::size_t root_fixing_active_after = 0;
+    // 根 reduced-cost fixing 的累计墙钟秒数。
+    double root_fixing_seconds = 0.0;
     // 所有根势优化实际执行的 1-tree/次梯度评估总轮数；Hybrid
     // 会累加 Polyak 和 Helsgaun 阶段，根搜索重启时也继续累加。
     std::size_t root_potential_iterations = 0;
+    // 根势优化的累计墙钟秒数；根搜索重启时累加。
+    double root_ascent_seconds = 0.0;
     // 搜索节点上的势更新统计。成功改善且未立即剪枝的新势会
     // 重建候选排序和 HKMST 状态，并在该锚点子树内持续生效。
     // 实际进入势更新触发判定的非根逻辑搜索节点数。它不包含在触发判定前
@@ -78,6 +96,9 @@ struct SolveStats {
     double potential_update_seconds = 0.0;
     // subtree 模式重建候选排序、位图和 1-tree 的累计墙钟秒数。
     double potential_update_rebuild_seconds = 0.0;
+    // fundamental-cut MST replacement 查询本体的累计墙钟秒数。该时间是
+    // root fixing / BP 搜索等阶段的子集，不能与这些阶段简单相加。
+    double replacement_seconds = 0.0;
     // 所有有效势更新带来的下界增量之和。
     double potential_update_total_gain = 0.0;
     // 单次节点势更新取得的最大下界增量。
@@ -959,6 +980,8 @@ private:
     mutable std::vector<std::vector<int>> candidate_set_;
     // candidate_set_ 是否已经针对当前 dist_ 完成惰性构建。
     mutable bool candidate_set_built_ = false;
+    // const replacement 查询使用的累计计时器；solve 返回前复制到 SolveStats。
+    mutable double replacement_seconds_ = 0.0;
 
     // 当前已知最优可行 tour 的原始成本，即分支定界上界 UB。
     double best_cost_ = std::numeric_limits<double>::infinity();

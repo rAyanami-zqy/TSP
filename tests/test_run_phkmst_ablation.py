@@ -58,7 +58,13 @@ Options:
     def test_safe_defaults_are_omitted_but_meaningful_difference_is_rejected(
         self,
     ) -> None:
-        default = runner.CONFIGURATION_BY_NAME["D0"]
+        default = replace(
+            next(iter(runner.CONFIGURATION_BY_NAME.values())),
+            name="default",
+            solver_args=runner.solver_arguments(
+                "--hk-node-ascent polyak --branch-edge-order weight "
+                "--hk-potential-update none"),
+        )
         adapted_default = runner.adapt_strategy_arguments(
             default, self.interface)
         self.assertFalse(adapted_default.incompatibilities)
@@ -84,8 +90,15 @@ Options:
             debug=True,
             debug_interval=5_000_000,
         )
+        default = replace(
+            next(iter(runner.CONFIGURATION_BY_NAME.values())),
+            name="default",
+            solver_args=runner.solver_arguments(
+                "--hk-node-ascent polyak --branch-edge-order weight "
+                "--hk-potential-update none"),
+        )
         adapted = runner.effective_args(
-            args, runner.CONFIGURATION_BY_NAME["D0"], self.interface)
+            args, default, self.interface)
         self.assertIn("--exact-max-n", adapted.arguments)
         self.assertIn("--debug", adapted.arguments)
         self.assertNotIn("--debug-interval", adapted.arguments)
@@ -94,7 +107,14 @@ Options:
 
 class OutputCompatibilityTests(unittest.TestCase):
     def test_concorde_uses_only_time_result_and_branch_outputs(self) -> None:
-        concorde = runner.CONFIGURATION_BY_NAME["Concorde"]
+        concorde = runner.Strategy(
+            name="Concorde",
+            kind="concorde",
+            category="reference",
+            executable=Path("concorde"),
+            solver_args=(),
+            description="test reference",
+        )
         self.assertEqual(
             runner.result_fields_for(concorde),
             (
@@ -113,7 +133,16 @@ class OutputCompatibilityTests(unittest.TestCase):
 
     def test_configured_statistics_are_projected_from_solver_output(self) -> None:
         parsed = runner.parse_tspbb_statistics("""\
+Initial tour seconds: 0.25
+Root fixing calls: 2
+Root fixing tested: 300
+Root fixing fixed zero: 240
+Root fixing tree tested: 55
+Root fixing fixed one: 3
+Root fixing active after: 120
+Root fixing seconds: 0.125
 Root potential iterations: 144
+Root ascent seconds: 0.375
 Nodes created: 1,234
 Nodes expanded: 987
 Pruned by bound: 201
@@ -131,15 +160,32 @@ Potential updates skipped depth interval: 8
 Potential updates skipped gap below minimum: 9
 Potential updates skipped gap above maximum: 41
 Search-node potential iterations: 91
+Potential update seconds: 0.5
+Potential update rebuild seconds: 0.125
+Replacement seconds: 0.75
 Optimal cost: 2.6e1
 """)
         self.assertEqual(parsed, {
             "result": 26.0,
+            "root_lower_bound": None,
+            "initial_upper_bound": None,
+            "final_upper_bound": None,
+            "final_lower_bound": None,
+            "final_relative_gap": None,
             "branches": 1234,
             "nodes_expanded": 987,
             "pruned_by_bound": 201,
             "pruned_infeasible": 46,
+            "root_fixing_calls": 2,
+            "root_fixing_tested": 300,
+            "root_fixing_fixed_zero": 240,
+            "root_fixing_tree_tested": 55,
+            "root_fixing_fixed_one": 3,
+            "root_fixing_active_after": 120,
+            "root_fixing_seconds": 0.125,
+            "initial_tour_seconds": 0.25,
             "root_potential_iterations": 144,
+            "root_ascent_seconds": 0.375,
             "search_node_potential_update_candidates": 103,
             "search_node_potential_updates_triggered": 17,
             "search_node_potential_updates_skipped_strategy_none": 1,
@@ -153,6 +199,9 @@ Optimal cost: 2.6e1
             "search_node_potential_updates_skipped_gap_below_minimum": 9,
             "search_node_potential_updates_skipped_gap_above_maximum": 41,
             "search_node_potential_iterations": 91,
+            "potential_update_seconds": 0.5,
+            "potential_update_rebuild_seconds": 0.125,
+            "replacement_seconds": 0.75,
         })
 
     def test_default_csv_fields_include_potential_statistics(self) -> None:
@@ -160,10 +209,17 @@ Optimal cost: 2.6e1
             runner.RESULT_FIELDS,
             (
                 "run_id", "strategy", "repeat", "instance", "status",
-                "wall_seconds", "result", "branches",
+                "wall_seconds", "result", "root_lower_bound",
+                "initial_upper_bound", "final_upper_bound",
+                "final_lower_bound", "final_relative_gap", "branches",
                 "nodes_expanded",
                 "pruned_by_bound", "pruned_infeasible",
+                "root_fixing_calls", "root_fixing_tested",
+                "root_fixing_fixed_zero", "root_fixing_tree_tested",
+                "root_fixing_fixed_one", "root_fixing_active_after",
+                "root_fixing_seconds", "initial_tour_seconds",
                 "root_potential_iterations",
+                "root_ascent_seconds",
                 "search_node_potential_update_candidates",
                 "search_node_potential_updates_triggered",
                 "search_node_potential_updates_skipped_strategy_none",
@@ -177,8 +233,40 @@ Optimal cost: 2.6e1
                 "search_node_potential_updates_skipped_gap_below_minimum",
                 "search_node_potential_updates_skipped_gap_above_maximum",
                 "search_node_potential_iterations",
+                "potential_update_seconds",
+                "potential_update_rebuild_seconds",
+                "replacement_seconds",
             ),
         )
+
+    def test_timeout_progress_recovers_latest_certificate_and_nodes(self) -> None:
+        parsed = runner.parse_tspbb_progress("", """\
+[tsp-debug] initial incumbent: cost=120
+[tsp-debug] initial tour timing: seconds=0.2
+[tsp-debug] root ascent: strategy=polyak selected=polyak seconds=0.3
+[tsp-debug] root certificate: lower_bound=100 best=120 created=1 expanded=0 initial_tour_seconds=0.2 root_ascent_seconds=0.3
+[tsp-debug] root reduced-cost fixing: tested=50 fixed_zero=40 tree_tested=10 fixed_one=2 active=80 seconds=0.1
+[tsp-debug] new incumbent: cost=110 source=bp-node depth=4
+[tsp-debug] progress: expanded=500 created=900 depth=8 bound=105 best=110 pruned_bound=3 pruned_infeasible=4 potential_seconds=0.4 potential_rebuild_seconds=0.05 replacement_seconds=0.6
+""")
+        self.assertEqual(parsed["final_upper_bound"], 110.0)
+        self.assertEqual(parsed["final_lower_bound"], 100.0)
+        self.assertAlmostEqual(parsed["final_relative_gap"], 10.0 / 110.0)
+        self.assertEqual(parsed["branches"], 900)
+        self.assertEqual(parsed["nodes_expanded"], 500)
+        self.assertEqual(parsed["root_fixing_calls"], 1)
+        self.assertEqual(parsed["root_fixing_fixed_zero"], 40)
+        self.assertEqual(parsed["root_fixing_fixed_one"], 2)
+        self.assertEqual(parsed["root_fixing_active_after"], 80)
+        self.assertAlmostEqual(parsed["initial_tour_seconds"], 0.2)
+        self.assertAlmostEqual(parsed["root_ascent_seconds"], 0.3)
+        self.assertAlmostEqual(parsed["root_fixing_seconds"], 0.1)
+        self.assertAlmostEqual(parsed["potential_update_seconds"], 0.4)
+        self.assertAlmostEqual(
+            parsed["potential_update_rebuild_seconds"], 0.05)
+        self.assertAlmostEqual(parsed["replacement_seconds"], 0.6)
+
+    def test_default_summary_fields_include_potential_statistics(self) -> None:
         self.assertEqual(
             runner.SUMMARY_FIELDS,
             (
@@ -188,8 +276,17 @@ Optimal cost: 2.6e1
                 "total_nodes_expanded", "median_nodes_expanded",
                 "total_pruned_by_bound", "median_pruned_by_bound",
                 "total_pruned_infeasible", "median_pruned_infeasible",
+                "total_root_fixing_calls", "median_root_fixing_calls",
+                "total_root_fixing_tested", "median_root_fixing_tested",
+                "total_root_fixing_fixed_zero", "median_root_fixing_fixed_zero",
+                "total_root_fixing_tree_tested", "median_root_fixing_tree_tested",
+                "total_root_fixing_fixed_one", "median_root_fixing_fixed_one",
+                "total_root_fixing_active_after", "median_root_fixing_active_after",
+                "total_root_fixing_seconds", "median_root_fixing_seconds",
+                "total_initial_tour_seconds", "median_initial_tour_seconds",
                 "total_root_potential_iterations",
                 "median_root_potential_iterations",
+                "total_root_ascent_seconds", "median_root_ascent_seconds",
                 "total_search_node_potential_update_candidates",
                 "median_search_node_potential_update_candidates",
                 "total_search_node_potential_updates_triggered",
@@ -216,6 +313,11 @@ Optimal cost: 2.6e1
                 "median_search_node_potential_updates_skipped_gap_above_maximum",
                 "total_search_node_potential_iterations",
                 "median_search_node_potential_iterations",
+                "total_potential_update_seconds",
+                "median_potential_update_seconds",
+                "total_potential_update_rebuild_seconds",
+                "median_potential_update_rebuild_seconds",
+                "total_replacement_seconds", "median_replacement_seconds",
             ),
         )
 

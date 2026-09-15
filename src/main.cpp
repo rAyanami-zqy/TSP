@@ -243,6 +243,30 @@ RunResult solveInput(std::istream& input, const CliOptions& options)
     return output;
 }
 
+double finalUpperBound(const RunResult& run)
+{
+    return run.result.feasible
+        ? run.result.cost : run.result.stats.initial_upper_bound;
+}
+
+double finalLowerBound(const RunResult& run)
+{
+    // exact 正常返回表示证明已经完成；root-bound 只拥有根 1-tree 证书。
+    return run.method == "exact" && run.result.feasible
+        ? run.result.cost : run.result.stats.root_lower_bound;
+}
+
+double finalRelativeGap(const RunResult& run)
+{
+    const double upper = finalUpperBound(run);
+    const double lower = finalLowerBound(run);
+    if (!std::isfinite(upper) || !std::isfinite(lower)) {
+        return std::numeric_limits<double>::infinity();
+    }
+    return std::max(0.0, upper - lower)
+        / std::max(1.0, std::fabs(upper));
+}
+
 // 单实例模式使用人类可读输出，方便手动观察搜索统计。
 void printHumanResult(const RunResult& run)
 {
@@ -256,8 +280,27 @@ void printHumanResult(const RunResult& run)
 
     std::cout << "Root lower bound: " << result.stats.root_lower_bound << '\n';
     std::cout << "Initial upper bound: " << result.stats.initial_upper_bound << '\n';
+    std::cout << "Final upper bound: " << finalUpperBound(run) << '\n';
+    std::cout << "Final lower bound: " << finalLowerBound(run) << '\n';
+    std::cout << "Final relative gap: " << finalRelativeGap(run) << '\n';
+    std::cout << "Initial tour seconds: "
+              << result.stats.initial_tour_seconds << '\n';
+    std::cout << "Root fixing calls: " << result.stats.root_fixing_calls << '\n';
+    std::cout << "Root fixing tested: " << result.stats.root_fixing_tested << '\n';
+    std::cout << "Root fixing fixed zero: "
+              << result.stats.root_fixing_fixed_zero << '\n';
+    std::cout << "Root fixing tree tested: "
+              << result.stats.root_fixing_tree_tested << '\n';
+    std::cout << "Root fixing fixed one: "
+              << result.stats.root_fixing_fixed_one << '\n';
+    std::cout << "Root fixing active after: "
+              << result.stats.root_fixing_active_after << '\n';
+    std::cout << "Root fixing seconds: "
+              << result.stats.root_fixing_seconds << '\n';
     std::cout << "Root potential iterations: "
               << result.stats.root_potential_iterations << '\n';
+    std::cout << "Root ascent seconds: "
+              << result.stats.root_ascent_seconds << '\n';
     std::cout << "Instance wall seconds: " << run.instance_wall_seconds << '\n';
     std::cout << "Nodes created: " << result.stats.nodes_created << '\n';
     std::cout << "Nodes expanded: " << result.stats.nodes_expanded << '\n';
@@ -309,6 +352,8 @@ void printHumanResult(const RunResult& run)
               << result.stats.potential_update_seconds << '\n';
     std::cout << "Potential update rebuild seconds: "
               << result.stats.potential_update_rebuild_seconds << '\n';
+    std::cout << "Replacement seconds: "
+              << result.stats.replacement_seconds << '\n';
     std::cout << "Potential update total gain: "
               << result.stats.potential_update_total_gain << '\n';
     std::cout << "Potential update max gain: "
@@ -357,7 +402,12 @@ void printBatchHeader()
 {
     std::cout
         << "instance,status,method,dimension,cost,root_lower_bound,initial_upper_bound,"
-        << "root_potential_iterations,"
+        << "final_upper_bound,final_lower_bound,final_relative_gap,"
+        << "initial_tour_seconds,"
+        << "root_fixing_calls,root_fixing_tested,root_fixing_fixed_zero,"
+        << "root_fixing_tree_tested,root_fixing_fixed_one,root_fixing_active_after,"
+        << "root_fixing_seconds,"
+        << "root_potential_iterations,root_ascent_seconds,"
         << "instance_wall_seconds,"
         << "nodes_created,nodes_expanded,pruned_by_bound,pruned_infeasible,"
         << "search_node_potential_update_candidates,"
@@ -380,6 +430,7 @@ void printBatchHeader()
         << "potential_update_rebuild_seconds,potential_update_total_gain,"
         << "potential_update_max_gain,potential_update_probes_started,"
         << "potential_update_probes_continued,potential_update_probes_rejected,"
+        << "replacement_seconds,"
         << "tour,message\n";
 }
 
@@ -394,9 +445,9 @@ void printBatchRow(const std::string& path,
 
     if (run == nullptr) {
         // 读取失败、解析失败等情况没有求解统计，只保留错误信息。
-        // method 到 tour 共 37 个空字段；最后一个字段保留错误消息。
+        // method 到 tour 共 50 个空字段；最后一个字段保留错误消息。
         // 新增批量列时必须同步此数量，确保错误行也与 CSV 表头严格对齐。
-        for (int field = 0; field < 37; ++field) {
+        for (int field = 0; field < 50; ++field) {
             std::cout << ',';
         }
         std::cout << csvQuote(message) << '\n';
@@ -410,7 +461,19 @@ void printBatchRow(const std::string& path,
               << formatDouble(result.cost) << ','
               << formatDouble(result.stats.root_lower_bound) << ','
               << formatDouble(result.stats.initial_upper_bound) << ','
+              << formatDouble(finalUpperBound(*run)) << ','
+              << formatDouble(finalLowerBound(*run)) << ','
+              << formatDouble(finalRelativeGap(*run)) << ','
+              << formatDouble(result.stats.initial_tour_seconds) << ','
+              << result.stats.root_fixing_calls << ','
+              << result.stats.root_fixing_tested << ','
+              << result.stats.root_fixing_fixed_zero << ','
+              << result.stats.root_fixing_tree_tested << ','
+              << result.stats.root_fixing_fixed_one << ','
+              << result.stats.root_fixing_active_after << ','
+              << formatDouble(result.stats.root_fixing_seconds) << ','
               << result.stats.root_potential_iterations << ','
+              << formatDouble(result.stats.root_ascent_seconds) << ','
               << formatDouble(run->instance_wall_seconds) << ','
               << result.stats.nodes_created << ','
               << result.stats.nodes_expanded << ','
@@ -441,6 +504,7 @@ void printBatchRow(const std::string& path,
               << result.stats.potential_update_probes_started << ','
               << result.stats.potential_update_probes_continued << ','
               << result.stats.potential_update_probes_rejected << ','
+              << formatDouble(result.stats.replacement_seconds) << ','
               << csvQuote(formatTourLimited(result.tour)) << ','
               << csvQuote(message) << '\n';
 }

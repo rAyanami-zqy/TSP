@@ -318,8 +318,13 @@ Strategy(
 
 CSV 统计列集中定义在“用户配置区 1”的 `OUTPUT_STATISTICS`。当前默认输出成本、
 创建节点数（兼容列名 `branches`）、扩展节点数、下界剪枝数、不可行剪枝数、
-根节点势优化总轮次、搜索节点势更新候选数、触发次数、十类互斥的未触发原因，
-以及搜索节点势优化总轮次，并在 `summary.csv` 中生成对应的 total/median。
+root fixing 的调用/测试/固定计数与最终 active 边数、根节点势优化总轮次、搜索
+节点势更新候选数、触发次数、十类互斥的未触发原因，以及搜索节点势优化总轮次。
+阶段耗时包含 `initial_tour_seconds`、`root_ascent_seconds`、
+`root_fixing_seconds`、`potential_update_seconds`、
+`potential_update_rebuild_seconds` 和 `replacement_seconds`，并在
+`summary.csv` 中生成对应的 total/median。`replacement_seconds` 是 root fixing
+及搜索阶段的子耗时，不能与这些外层阶段直接相加。
 继续扩充时只需增加标签、类型和是否汇总；求解器后来新增但未登记的
 `标签: 值` 会被安全忽略，不影响解析。
 
@@ -337,6 +342,8 @@ Concorde 使用独立的精简表头：逐实例结果只保留固定标识字�
 每完成一个“策略/重复/实例”调用，脚本就立即原子更新该策略的结果表、汇总、
 进度以及共享 `cache.json`，不会等待同一策略的其他实例。成功和超时结果在再次
 执行相同命令时直接复用；普通错误也保留在缓存中供检查，但下次仍会重试。
+超时行会从已 flush 的 debug 快照保留最终已知 UB、根 1-tree 全局 LB、gap、
+节点数、root fixing 统计和阶段耗时；当前 DFS 节点 bound 不会被误作全局 LB。
 二进制、策略参数、实例或运行设置变化后会使用新的指纹，不会混入旧表。需要
 清空当前实验缓存时使用 `--fresh`。
 

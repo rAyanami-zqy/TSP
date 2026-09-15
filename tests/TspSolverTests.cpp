@@ -1741,6 +1741,24 @@ void testRootReducedCostFixing()
     const tsp::SolveResult result = solver.solve();
     expectCost(result.cost, 1610.0,
                "bayg29 reduced-cost fixing changed the optimum");
+    if (result.stats.root_fixing_calls == 0
+        || result.stats.root_fixing_tested == 0
+        || result.stats.root_fixing_fixed_zero == 0
+        || result.stats.root_fixing_tree_tested == 0
+        || result.stats.root_fixing_fixed_one == 0
+        || result.stats.root_fixing_active_after == 0
+        || result.stats.root_fixing_seconds < 0.0) {
+        throw std::runtime_error(
+            "bayg29 reduced-cost fixing statistics were not exported");
+    }
+    if (result.stats.initial_tour_seconds <= 0.0
+        || result.stats.root_ascent_seconds <= 0.0
+        || result.stats.potential_update_seconds < 0.0
+        || result.stats.potential_update_rebuild_seconds < 0.0
+        || result.stats.replacement_seconds < 0.0) {
+        throw std::runtime_error(
+            "bayg29 phase timing statistics were not exported");
+    }
 
     const std::string debug_output = debug.str();
     const std::string marker = "root reduced-cost fixing: tested=";
