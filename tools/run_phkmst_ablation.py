@@ -555,8 +555,7 @@ def phkmst_args(
 # 到下方元组中，再用 ``--configs legacy current`` 选择它们。
 # ============================================================================
 SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
-    # 仅保留 Concorde 参考与第五轮并列最佳的四个 smoothed 配置
-    # （2026-09-14，CPHKMST 分支重编译验证），其余配置已删除。
+    # Concorde 参考解，用于逐例校验启发式解的费用一致性。
     Strategy(
         name="Concorde",
         kind="concorde",
@@ -564,118 +563,19 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
         executable=PROJECT_ROOT / "concorde" / "TSP" / "concorde",
         solver_args=(),
         description="Concorde exact solver with a fixed seed"),
-    Strategy(
-        name="hybrid-reverse",
-        kind="tsp_bb",
-        category="core",
-        executable=PROJECT_ROOT / "build" / "tsp_bb",
-        solver_args=solver_arguments("""
-            --hk-ascent hybrid-reverse
-            --hk-node-ascent polyak
-            --branch-edge-order weight
-            --hk-potential-update subtree-adaptive
-            --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
-            --hk-update-iterations 32
-            --hk-update-budget 0
-        """),
-        description="hybrid-reverse-32",
-    ),
-    Strategy(
-        name="PPS32",
-        kind="tsp_bb",
-        category="core",
-        executable=PROJECT_ROOT / "build" / "tsp_bb",
-        solver_args=solver_arguments("""
-            --hk-ascent polyak
-            --hk-node-ascent polyak-smoothed
-            --branch-edge-order weight
-            --hk-potential-update subtree-adaptive
-            --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
-            --hk-update-iterations 32
-            --hk-update-budget 0
-        """),
-        description="P-polyak-smoothed-32",
-    ),
-    Strategy(
-        name="PPSD32",
-        kind="tsp_bb",
-        category="core",
-        executable=PROJECT_ROOT / "build" / "tsp_bb",
-        solver_args=solver_arguments("""
-            --hk-ascent polyak
-            --hk-node-ascent polyak-smoothed-dynamic
-            --branch-edge-order weight
-            --hk-potential-update subtree-adaptive
-            --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
-            --hk-update-iterations 32
-            --hk-update-budget 0
-        """),
-        description="P-polyak-smoothed-dynamic -32",
-    ),
-    Strategy(
-        name="PS-PS32",
-        kind="tsp_bb",
-        category="core",
-        executable=PROJECT_ROOT / "build" / "tsp_bb",
-        solver_args=solver_arguments("""
-            --hk-ascent polyak-smoothed
-            --hk-node-ascent polyak-smoothed
-            --branch-edge-order weight
-            --hk-potential-update subtree-adaptive
-            --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
-            --hk-update-iterations 32
-            --hk-update-budget 0
-        """),
-        description="polyak-smoothed-polyak-smoothed-32",
-    ),
-    # --- 2026-09-15 经典 P32 分支对比：PHKMST 二进制 / CPHKMST 二进制 /
-    # CPHKMST + LKH warm-start。三者 executable 互不相同，二进制摘要参与
-    # 缓存指纹，因此绝不会互相误用缓存记录。用
-    # ``--configs PHKMST-P32 CPHKMST-P32 CPHKMST-P32-LKH`` 选择。
-    Strategy(
-        name="PHKMST-P32",
-        kind="tsp_bb",
-        category="version",
-        executable=PROJECT_ROOT / "build" / "tsp_bb_26_09_15_phkmst",
-        solver_args=solver_arguments("""
-            --hk-ascent polyak
-            --hk-node-ascent polyak
-            --branch-edge-order weight
-            --hk-potential-update subtree-adaptive
-            --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
-            --hk-update-iterations 32
-            --hk-update-budget 0
-        """),
-        description="PHKMST 分支经典 polyak-32",
-    ),
-    Strategy(
-        name="CPHKMST-P32",
-        kind="tsp_bb",
-        category="version",
-        executable=PROJECT_ROOT / "build" / "tsp_bb_26_09_15_cphkmst",
-        solver_args=solver_arguments("""
-            --hk-ascent polyak
-            --hk-node-ascent polyak
-            --branch-edge-order weight
-            --hk-potential-update subtree-adaptive
-            --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
-            --hk-update-iterations 32
-            --hk-update-budget 0
-        """),
-        description="CPHKMST 分支经典 polyak-32（与 PHKMST-P32 逐字同参）",
-    ),
+    # --- 2026-09-16 CPHKMST vs GAPMST 对比三元组。三者与 CPHKMST-P32-LKH
+    # 逐字同参（含全部 LKH warm-start 参数），只有 executable 和 gap-aware
+    # 门槛不同，用于把「新代码」与「新参数」分开归因：
+    #   CPHKMST-P32-LKH     —— 基线，09-15 CPHKMST 二进制；
+    #   GAPMST-P32-LKH-same —— GAPMST 二进制，新旋钮全部中性化
+    #                          （min-gap-change-ratio 0 / compaction off /
+    #                          max-depth 0 / skip-last-edges 0），
+    #                          用于验证新代码在门槛关闭时语义不变；
+    #   GAPMST-P32-LKH      —— GAPMST 二进制默认（gap-change 0.0001 +
+    #                          compaction on），即新特性的实际效果。
+    # 历史配置（PHKMST-P32、CPHKMST-P32、LKH128、LKH64-PS、LKH128-PS、
+    # hybrid-reverse、PPS32、PPSD32、PS-PS32）已删除，可从 PHKMST/CPHKMST
+    # 分支的对应提交取回。
     Strategy(
         name="CPHKMST-P32-LKH",
         kind="tsp_bb",
@@ -684,8 +584,8 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
         # warm-start 生效时根上升改由 --root-pi-refine-* 决定（main.cpp 的
         # refine_external_potentials 分支会整体覆盖 --hk-ascent），因此这里
         # 不写 --hk-ascent，避免留下不生效的参数；节点上升与子树势更新仍
-        # 沿用 P32 参数。LKH provider 需先按 README 用 TSP_LKH_SOURCE_DIR
-        # 编译 build-lkh/tsp_lkh_provider。
+        # 沿用 P32 参数。LKH provider 由 build-lkh/tsp_lkh_provider 提供，
+        # 可用 -DTSP_FETCH_LKH=ON 或 -DTSP_LKH_SOURCE_DIR 编译。
         solver_args=solver_arguments("""
             --hk-node-ascent polyak
             --branch-edge-order weight
@@ -706,16 +606,44 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
         """),
         description="P32 + LKH tour/PI warm-start + 64 轮 polyak 精修",
     ),
-    # --- 2026-09-16 LKH warm-start 精修预算/策略扫描：在 09-15 那轮
-    # CPHKMST-P32-LKH（polyak/64）基础上，把精修轮数提到 128，并补上
-    # polyak-smoothed 的 64/128 两档。平滑权重沿用默认 0.7，与
-    # lkh-pi-smooth-sweep-20260915 的 polyak-smoothed64/128 口径一致。
-    # 其余参数与 CPHKMST-P32-LKH 逐字相同，差别只在 --root-pi-refine-*。
     Strategy(
-        name="CPHKMST-P32-LKH128",
+        name="GAPMST-P32-LKH-same",
+        kind="tsp_bb",
+        category="version",
+        executable=PROJECT_ROOT / "build" / "tsp_bb_26_09_16_gapmst",
+        solver_args=solver_arguments("""
+            --hk-node-ascent polyak
+            --branch-edge-order weight
+            --hk-potential-update subtree-adaptive
+            --hk-update-depth 1
+            --hk-update-gap-ratio 0.02
+            --hk-update-min-gap-ratio 0.0
+            --hk-update-iterations 32
+            --hk-update-budget 0
+            --hk-update-max-depth 0
+            --hk-update-skip-last-edges 0
+            --hk-update-min-gap-change-ratio 0
+            --hk-update-gap-change-start-depth 0
+            --root-candidate-compaction off
+            --lkh-provider /home/wj/code/TSP/build-lkh/tsp_lkh_provider
+            --lkh-provider-failure error
+            --lkh-runs 1
+            --lkh-max-trials 0
+            --lkh-seed 123
+            --lkh-pi-mode warm-start
+            --root-pi-refine-ascent polyak
+            --root-pi-refine-iterations 64
+        """),
+        description="GAPMST 二进制 + gap-aware 门槛全部中性化（对齐 CPHKMST 语义）",
+    ),
+    Strategy(
+        name="GAPMST-P32-LKH",
         kind="tsp_bb",
         category="core",
-        executable=PROJECT_ROOT / "build" / "tsp_bb_26_09_15_cphkmst",
+        executable=PROJECT_ROOT / "build" / "tsp_bb_26_09_16_gapmst",
+        # 不传任何 gap-aware 选项，即 GAPMST 的默认行为：
+        # min-gap-change-ratio 0.0001 / gap-change-start-depth 2 /
+        # root-candidate-compaction on / max-depth 0 / skip-last-edges 0。
         solver_args=solver_arguments("""
             --hk-node-ascent polyak
             --branch-edge-order weight
@@ -732,40 +660,22 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
             --lkh-seed 123
             --lkh-pi-mode warm-start
             --root-pi-refine-ascent polyak
-            --root-pi-refine-iterations 128
-        """),
-        description="P32 + LKH warm-start + 128 轮 polyak 精修",
-    ),
-    Strategy(
-        name="CPHKMST-P32-LKH64-PS",
-        kind="tsp_bb",
-        category="core",
-        executable=PROJECT_ROOT / "build" / "tsp_bb_26_09_15_cphkmst",
-        solver_args=solver_arguments("""
-            --hk-node-ascent polyak
-            --branch-edge-order weight
-            --hk-potential-update subtree-adaptive
-            --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
-            --hk-update-iterations 32
-            --hk-update-budget 0
-            --lkh-provider /home/wj/code/TSP/build-lkh/tsp_lkh_provider
-            --lkh-provider-failure error
-            --lkh-runs 1
-            --lkh-max-trials 0
-            --lkh-seed 123
-            --lkh-pi-mode warm-start
-            --root-pi-refine-ascent polyak-smoothed
             --root-pi-refine-iterations 64
         """),
-        description="P32 + LKH warm-start + 64 轮 polyak-smoothed 精修",
+        description="GAPMST 二进制默认（gap-change 0.0001 + compaction on）",
     ),
+    # --- 2026-09-16 GAPMST gap-change 门槛扫描。基线为上面的
+    # GAPMST-P32-LKH-same（新旋钮全部中性化），本节把
+    # --root-candidate-compaction 打开，并扫描 --hk-update-min-gap-change-ratio。
+    # 其余旋钮保持 -same 的中性值：max-depth 0 / skip-last-edges 0 /
+    # gap-change-start-depth 0。注意 start-depth 0 表示门槛对所有非根候选
+    # 节点生效，与 GAPMST 默认的 2（浅层旁路）不同；要对齐默认行为把它
+    # 改成 2 即可。首个配置不设 ratio（保持 0），只隔离 compaction 的影响。
     Strategy(
-        name="CPHKMST-P32-LKH128-PS",
+        name="GAPMST-P32-LKH-compact",
         kind="tsp_bb",
         category="core",
-        executable=PROJECT_ROOT / "build" / "tsp_bb_26_09_15_cphkmst",
+        executable=PROJECT_ROOT / "build" / "tsp_bb_26_09_16_gapmst",
         solver_args=solver_arguments("""
             --hk-node-ascent polyak
             --branch-edge-order weight
@@ -775,16 +685,291 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
             --hk-update-min-gap-ratio 0.0
             --hk-update-iterations 32
             --hk-update-budget 0
+            --hk-update-max-depth 0
+            --hk-update-skip-last-edges 0
+            --hk-update-min-gap-change-ratio 0
+            --hk-update-gap-change-start-depth 0
+            --root-candidate-compaction on
             --lkh-provider /home/wj/code/TSP/build-lkh/tsp_lkh_provider
             --lkh-provider-failure error
             --lkh-runs 1
             --lkh-max-trials 0
             --lkh-seed 123
             --lkh-pi-mode warm-start
-            --root-pi-refine-ascent polyak-smoothed
-            --root-pi-refine-iterations 128
+            --root-pi-refine-ascent polyak
+            --root-pi-refine-iterations 64
         """),
-        description="P32 + LKH warm-start + 128 轮 polyak-smoothed 精修",
+        description="GAPMST + compaction on（gap-change 仍为 0）",
+    ),
+    Strategy(
+        name="GAPMST-P32-LKH-gc0.0001",
+        kind="tsp_bb",
+        category="core",
+        executable=PROJECT_ROOT / "build" / "tsp_bb_26_09_16_gapmst",
+        solver_args=solver_arguments("""
+            --hk-node-ascent polyak
+            --branch-edge-order weight
+            --hk-potential-update subtree-adaptive
+            --hk-update-depth 1
+            --hk-update-gap-ratio 0.02
+            --hk-update-min-gap-ratio 0.0
+            --hk-update-iterations 32
+            --hk-update-budget 0
+            --hk-update-max-depth 0
+            --hk-update-skip-last-edges 0
+            --hk-update-min-gap-change-ratio 0.0001
+            --hk-update-gap-change-start-depth 0
+            --root-candidate-compaction on
+            --lkh-provider /home/wj/code/TSP/build-lkh/tsp_lkh_provider
+            --lkh-provider-failure error
+            --lkh-runs 1
+            --lkh-max-trials 0
+            --lkh-seed 123
+            --lkh-pi-mode warm-start
+            --root-pi-refine-ascent polyak
+            --root-pi-refine-iterations 64
+        """),
+        description="GAPMST + compaction on + gap-change 0.0001",
+    ),
+    Strategy(
+        name="GAPMST-P32-LKH-gc0.00015",
+        kind="tsp_bb",
+        category="core",
+        executable=PROJECT_ROOT / "build" / "tsp_bb_26_09_16_gapmst",
+        solver_args=solver_arguments("""
+            --hk-node-ascent polyak
+            --branch-edge-order weight
+            --hk-potential-update subtree-adaptive
+            --hk-update-depth 1
+            --hk-update-gap-ratio 0.02
+            --hk-update-min-gap-ratio 0.0
+            --hk-update-iterations 32
+            --hk-update-budget 0
+            --hk-update-max-depth 0
+            --hk-update-skip-last-edges 0
+            --hk-update-min-gap-change-ratio 0.00015
+            --hk-update-gap-change-start-depth 0
+            --root-candidate-compaction on
+            --lkh-provider /home/wj/code/TSP/build-lkh/tsp_lkh_provider
+            --lkh-provider-failure error
+            --lkh-runs 1
+            --lkh-max-trials 0
+            --lkh-seed 123
+            --lkh-pi-mode warm-start
+            --root-pi-refine-ascent polyak
+            --root-pi-refine-iterations 64
+        """),
+        description="GAPMST + compaction on + gap-change 0.00015",
+    ),
+    Strategy(
+        name="GAPMST-P32-LKH-gc0.0002",
+        kind="tsp_bb",
+        category="core",
+        executable=PROJECT_ROOT / "build" / "tsp_bb_26_09_16_gapmst",
+        solver_args=solver_arguments("""
+            --hk-node-ascent polyak
+            --branch-edge-order weight
+            --hk-potential-update subtree-adaptive
+            --hk-update-depth 1
+            --hk-update-gap-ratio 0.02
+            --hk-update-min-gap-ratio 0.0
+            --hk-update-iterations 32
+            --hk-update-budget 0
+            --hk-update-max-depth 0
+            --hk-update-skip-last-edges 0
+            --hk-update-min-gap-change-ratio 0.0002
+            --hk-update-gap-change-start-depth 0
+            --root-candidate-compaction on
+            --lkh-provider /home/wj/code/TSP/build-lkh/tsp_lkh_provider
+            --lkh-provider-failure error
+            --lkh-runs 1
+            --lkh-max-trials 0
+            --lkh-seed 123
+            --lkh-pi-mode warm-start
+            --root-pi-refine-ascent polyak
+            --root-pi-refine-iterations 64
+        """),
+        description="GAPMST + compaction on + gap-change 0.0002",
+    ),
+    Strategy(
+        name="GAPMST-P32-LKH-gc0.00025",
+        kind="tsp_bb",
+        category="core",
+        executable=PROJECT_ROOT / "build" / "tsp_bb_26_09_16_gapmst",
+        solver_args=solver_arguments("""
+            --hk-node-ascent polyak
+            --branch-edge-order weight
+            --hk-potential-update subtree-adaptive
+            --hk-update-depth 1
+            --hk-update-gap-ratio 0.02
+            --hk-update-min-gap-ratio 0.0
+            --hk-update-iterations 32
+            --hk-update-budget 0
+            --hk-update-max-depth 0
+            --hk-update-skip-last-edges 0
+            --hk-update-min-gap-change-ratio 0.00025
+            --hk-update-gap-change-start-depth 0
+            --root-candidate-compaction on
+            --lkh-provider /home/wj/code/TSP/build-lkh/tsp_lkh_provider
+            --lkh-provider-failure error
+            --lkh-runs 1
+            --lkh-max-trials 0
+            --lkh-seed 123
+            --lkh-pi-mode warm-start
+            --root-pi-refine-ascent polyak
+            --root-pi-refine-iterations 64
+        """),
+        description="GAPMST + compaction on + gap-change 0.00025",
+    ),
+    Strategy(
+        name="GAPMST-P32-LKH-gc0.0003",
+        kind="tsp_bb",
+        category="core",
+        executable=PROJECT_ROOT / "build" / "tsp_bb_26_09_16_gapmst",
+        solver_args=solver_arguments("""
+            --hk-node-ascent polyak
+            --branch-edge-order weight
+            --hk-potential-update subtree-adaptive
+            --hk-update-depth 1
+            --hk-update-gap-ratio 0.02
+            --hk-update-min-gap-ratio 0.0
+            --hk-update-iterations 32
+            --hk-update-budget 0
+            --hk-update-max-depth 0
+            --hk-update-skip-last-edges 0
+            --hk-update-min-gap-change-ratio 0.0003
+            --hk-update-gap-change-start-depth 0
+            --root-candidate-compaction on
+            --lkh-provider /home/wj/code/TSP/build-lkh/tsp_lkh_provider
+            --lkh-provider-failure error
+            --lkh-runs 1
+            --lkh-max-trials 0
+            --lkh-seed 123
+            --lkh-pi-mode warm-start
+            --root-pi-refine-ascent polyak
+            --root-pi-refine-iterations 64
+        """),
+        description="GAPMST + compaction on + gap-change 0.0003",
+    ),
+    Strategy(
+        name="GAPMST-P32-LKH-gc0.00035",
+        kind="tsp_bb",
+        category="core",
+        executable=PROJECT_ROOT / "build" / "tsp_bb_26_09_16_gapmst",
+        solver_args=solver_arguments("""
+            --hk-node-ascent polyak
+            --branch-edge-order weight
+            --hk-potential-update subtree-adaptive
+            --hk-update-depth 1
+            --hk-update-gap-ratio 0.02
+            --hk-update-min-gap-ratio 0.0
+            --hk-update-iterations 32
+            --hk-update-budget 0
+            --hk-update-max-depth 0
+            --hk-update-skip-last-edges 0
+            --hk-update-min-gap-change-ratio 0.00035
+            --hk-update-gap-change-start-depth 0
+            --root-candidate-compaction on
+            --lkh-provider /home/wj/code/TSP/build-lkh/tsp_lkh_provider
+            --lkh-provider-failure error
+            --lkh-runs 1
+            --lkh-max-trials 0
+            --lkh-seed 123
+            --lkh-pi-mode warm-start
+            --root-pi-refine-ascent polyak
+            --root-pi-refine-iterations 64
+        """),
+        description="GAPMST + compaction on + gap-change 0.00035",
+    ),
+    Strategy(
+        name="GAPMST-P32-LKH-gc0.0004",
+        kind="tsp_bb",
+        category="core",
+        executable=PROJECT_ROOT / "build" / "tsp_bb_26_09_16_gapmst",
+        solver_args=solver_arguments("""
+            --hk-node-ascent polyak
+            --branch-edge-order weight
+            --hk-potential-update subtree-adaptive
+            --hk-update-depth 1
+            --hk-update-gap-ratio 0.02
+            --hk-update-min-gap-ratio 0.0
+            --hk-update-iterations 32
+            --hk-update-budget 0
+            --hk-update-max-depth 0
+            --hk-update-skip-last-edges 0
+            --hk-update-min-gap-change-ratio 0.0004
+            --hk-update-gap-change-start-depth 0
+            --root-candidate-compaction on
+            --lkh-provider /home/wj/code/TSP/build-lkh/tsp_lkh_provider
+            --lkh-provider-failure error
+            --lkh-runs 1
+            --lkh-max-trials 0
+            --lkh-seed 123
+            --lkh-pi-mode warm-start
+            --root-pi-refine-ascent polyak
+            --root-pi-refine-iterations 64
+        """),
+        description="GAPMST + compaction on + gap-change 0.0004",
+    ),
+    Strategy(
+        name="GAPMST-P32-LKH-gc0.00045",
+        kind="tsp_bb",
+        category="core",
+        executable=PROJECT_ROOT / "build" / "tsp_bb_26_09_16_gapmst",
+        solver_args=solver_arguments("""
+            --hk-node-ascent polyak
+            --branch-edge-order weight
+            --hk-potential-update subtree-adaptive
+            --hk-update-depth 1
+            --hk-update-gap-ratio 0.02
+            --hk-update-min-gap-ratio 0.0
+            --hk-update-iterations 32
+            --hk-update-budget 0
+            --hk-update-max-depth 0
+            --hk-update-skip-last-edges 0
+            --hk-update-min-gap-change-ratio 0.00045
+            --hk-update-gap-change-start-depth 0
+            --root-candidate-compaction on
+            --lkh-provider /home/wj/code/TSP/build-lkh/tsp_lkh_provider
+            --lkh-provider-failure error
+            --lkh-runs 1
+            --lkh-max-trials 0
+            --lkh-seed 123
+            --lkh-pi-mode warm-start
+            --root-pi-refine-ascent polyak
+            --root-pi-refine-iterations 64
+        """),
+        description="GAPMST + compaction on + gap-change 0.00045",
+    ),
+    Strategy(
+        name="GAPMST-P32-LKH-gc0.0005",
+        kind="tsp_bb",
+        category="core",
+        executable=PROJECT_ROOT / "build" / "tsp_bb_26_09_16_gapmst",
+        solver_args=solver_arguments("""
+            --hk-node-ascent polyak
+            --branch-edge-order weight
+            --hk-potential-update subtree-adaptive
+            --hk-update-depth 1
+            --hk-update-gap-ratio 0.02
+            --hk-update-min-gap-ratio 0.0
+            --hk-update-iterations 32
+            --hk-update-budget 0
+            --hk-update-max-depth 0
+            --hk-update-skip-last-edges 0
+            --hk-update-min-gap-change-ratio 0.0005
+            --hk-update-gap-change-start-depth 0
+            --root-candidate-compaction on
+            --lkh-provider /home/wj/code/TSP/build-lkh/tsp_lkh_provider
+            --lkh-provider-failure error
+            --lkh-runs 1
+            --lkh-max-trials 0
+            --lkh-seed 123
+            --lkh-pi-mode warm-start
+            --root-pi-refine-ascent polyak
+            --root-pi-refine-iterations 64
+        """),
+        description="GAPMST + compaction on + gap-change 0.0005",
     ),
 )
 

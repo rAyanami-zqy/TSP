@@ -1,0 +1,2 @@
+run_id,strategy,status,rows,successful,timeouts,errors,total_wall_seconds,median_wall_seconds,total_branches,median_branches
+Concorde-07deea4ce57e,Concorde,complete,50,50,0,0,15.501123564317822,0.13121425919234753,56,1.0

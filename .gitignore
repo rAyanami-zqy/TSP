@@ -21,3 +21,4 @@ solver/NEWHKMST/tsp_bb
 *.bak
 build-phkmst-release/
 build-cphkmst-release/
+build-gapmst-release/
