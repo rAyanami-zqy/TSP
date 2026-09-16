@@ -587,6 +587,156 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
         """),
         description="polyak-smoothed-polyak-smoothed-32",
     ),
+    # --- 2026-09-15 经典 P32 分支对比：PHKMST 二进制 / CPHKMST 二进制 /
+    # CPHKMST + LKH warm-start。三者 executable 互不相同，二进制摘要参与
+    # 缓存指纹，因此绝不会互相误用缓存记录。用
+    # ``--configs PHKMST-P32 CPHKMST-P32 CPHKMST-P32-LKH`` 选择。
+    Strategy(
+        name="PHKMST-P32",
+        kind="tsp_bb",
+        category="version",
+        executable=PROJECT_ROOT / "build" / "tsp_bb_26_09_15_phkmst",
+        solver_args=solver_arguments("""
+            --hk-ascent polyak
+            --hk-node-ascent polyak
+            --branch-edge-order weight
+            --hk-potential-update subtree-adaptive
+            --hk-update-depth 1
+            --hk-update-gap-ratio 0.02
+            --hk-update-min-gap-ratio 0.0
+            --hk-update-iterations 32
+            --hk-update-budget 0
+        """),
+        description="PHKMST 分支经典 polyak-32",
+    ),
+    Strategy(
+        name="CPHKMST-P32",
+        kind="tsp_bb",
+        category="version",
+        executable=PROJECT_ROOT / "build" / "tsp_bb_26_09_15_cphkmst",
+        solver_args=solver_arguments("""
+            --hk-ascent polyak
+            --hk-node-ascent polyak
+            --branch-edge-order weight
+            --hk-potential-update subtree-adaptive
+            --hk-update-depth 1
+            --hk-update-gap-ratio 0.02
+            --hk-update-min-gap-ratio 0.0
+            --hk-update-iterations 32
+            --hk-update-budget 0
+        """),
+        description="CPHKMST 分支经典 polyak-32（与 PHKMST-P32 逐字同参）",
+    ),
+    Strategy(
+        name="CPHKMST-P32-LKH",
+        kind="tsp_bb",
+        category="core",
+        executable=PROJECT_ROOT / "build" / "tsp_bb_26_09_15_cphkmst",
+        # warm-start 生效时根上升改由 --root-pi-refine-* 决定（main.cpp 的
+        # refine_external_potentials 分支会整体覆盖 --hk-ascent），因此这里
+        # 不写 --hk-ascent，避免留下不生效的参数；节点上升与子树势更新仍
+        # 沿用 P32 参数。LKH provider 需先按 README 用 TSP_LKH_SOURCE_DIR
+        # 编译 build-lkh/tsp_lkh_provider。
+        solver_args=solver_arguments("""
+            --hk-node-ascent polyak
+            --branch-edge-order weight
+            --hk-potential-update subtree-adaptive
+            --hk-update-depth 1
+            --hk-update-gap-ratio 0.02
+            --hk-update-min-gap-ratio 0.0
+            --hk-update-iterations 32
+            --hk-update-budget 0
+            --lkh-provider /home/wj/code/TSP/build-lkh/tsp_lkh_provider
+            --lkh-provider-failure error
+            --lkh-runs 1
+            --lkh-max-trials 0
+            --lkh-seed 123
+            --lkh-pi-mode warm-start
+            --root-pi-refine-ascent polyak
+            --root-pi-refine-iterations 64
+        """),
+        description="P32 + LKH tour/PI warm-start + 64 轮 polyak 精修",
+    ),
+    # --- 2026-09-16 LKH warm-start 精修预算/策略扫描：在 09-15 那轮
+    # CPHKMST-P32-LKH（polyak/64）基础上，把精修轮数提到 128，并补上
+    # polyak-smoothed 的 64/128 两档。平滑权重沿用默认 0.7，与
+    # lkh-pi-smooth-sweep-20260915 的 polyak-smoothed64/128 口径一致。
+    # 其余参数与 CPHKMST-P32-LKH 逐字相同，差别只在 --root-pi-refine-*。
+    Strategy(
+        name="CPHKMST-P32-LKH128",
+        kind="tsp_bb",
+        category="core",
+        executable=PROJECT_ROOT / "build" / "tsp_bb_26_09_15_cphkmst",
+        solver_args=solver_arguments("""
+            --hk-node-ascent polyak
+            --branch-edge-order weight
+            --hk-potential-update subtree-adaptive
+            --hk-update-depth 1
+            --hk-update-gap-ratio 0.02
+            --hk-update-min-gap-ratio 0.0
+            --hk-update-iterations 32
+            --hk-update-budget 0
+            --lkh-provider /home/wj/code/TSP/build-lkh/tsp_lkh_provider
+            --lkh-provider-failure error
+            --lkh-runs 1
+            --lkh-max-trials 0
+            --lkh-seed 123
+            --lkh-pi-mode warm-start
+            --root-pi-refine-ascent polyak
+            --root-pi-refine-iterations 128
+        """),
+        description="P32 + LKH warm-start + 128 轮 polyak 精修",
+    ),
+    Strategy(
+        name="CPHKMST-P32-LKH64-PS",
+        kind="tsp_bb",
+        category="core",
+        executable=PROJECT_ROOT / "build" / "tsp_bb_26_09_15_cphkmst",
+        solver_args=solver_arguments("""
+            --hk-node-ascent polyak
+            --branch-edge-order weight
+            --hk-potential-update subtree-adaptive
+            --hk-update-depth 1
+            --hk-update-gap-ratio 0.02
+            --hk-update-min-gap-ratio 0.0
+            --hk-update-iterations 32
+            --hk-update-budget 0
+            --lkh-provider /home/wj/code/TSP/build-lkh/tsp_lkh_provider
+            --lkh-provider-failure error
+            --lkh-runs 1
+            --lkh-max-trials 0
+            --lkh-seed 123
+            --lkh-pi-mode warm-start
+            --root-pi-refine-ascent polyak-smoothed
+            --root-pi-refine-iterations 64
+        """),
+        description="P32 + LKH warm-start + 64 轮 polyak-smoothed 精修",
+    ),
+    Strategy(
+        name="CPHKMST-P32-LKH128-PS",
+        kind="tsp_bb",
+        category="core",
+        executable=PROJECT_ROOT / "build" / "tsp_bb_26_09_15_cphkmst",
+        solver_args=solver_arguments("""
+            --hk-node-ascent polyak
+            --branch-edge-order weight
+            --hk-potential-update subtree-adaptive
+            --hk-update-depth 1
+            --hk-update-gap-ratio 0.02
+            --hk-update-min-gap-ratio 0.0
+            --hk-update-iterations 32
+            --hk-update-budget 0
+            --lkh-provider /home/wj/code/TSP/build-lkh/tsp_lkh_provider
+            --lkh-provider-failure error
+            --lkh-runs 1
+            --lkh-max-trials 0
+            --lkh-seed 123
+            --lkh-pi-mode warm-start
+            --root-pi-refine-ascent polyak-smoothed
+            --root-pi-refine-iterations 128
+        """),
+        description="P32 + LKH warm-start + 128 轮 polyak-smoothed 精修",
+    ),
 )
 
 CONFIGURATION_BY_NAME = {

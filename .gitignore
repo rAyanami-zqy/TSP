@@ -20,3 +20,4 @@ solver/NEWHKMST/tsp_bb
 *.idx
 *.bak
 build-phkmst-release/
+build-cphkmst-release/
