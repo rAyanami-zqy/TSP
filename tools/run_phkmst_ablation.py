@@ -230,6 +230,30 @@ OUTPUT_STATISTICS: tuple[OutputStatistic, ...] = (
         summarize=True,
     ),
     OutputStatistic(
+        column="root_candidate_compaction_calls",
+        tspbb_labels=("Root candidate compaction calls",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="root_candidate_edges_before",
+        tspbb_labels=("Root candidate edges before",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="root_candidate_edges_after",
+        tspbb_labels=("Root candidate edges after",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="root_candidate_compaction_seconds",
+        tspbb_labels=("Root candidate compaction seconds",),
+        kind="float",
+        summarize=True,
+    ),
+    OutputStatistic(
         column="initial_tour_seconds",
         tspbb_labels=("Initial tour seconds",),
         kind="float",
@@ -325,7 +349,7 @@ OUTPUT_STATISTICS: tuple[OutputStatistic, ...] = (
         kind="int",
         summarize=True,
     ),
-    # 以下十项是新版求解器输出的互斥未触发原因。对每个候选节点只记录
+    # 以下各项是新版求解器输出的互斥未触发原因。对每个候选节点只记录
     # 判定顺序中的第一个原因，因此它们与 triggered 之和应等于 candidates。
     OutputStatistic(
         column="search_node_potential_updates_skipped_strategy_none",
@@ -370,6 +394,18 @@ OUTPUT_STATISTICS: tuple[OutputStatistic, ...] = (
         summarize=True,
     ),
     OutputStatistic(
+        column="search_node_potential_updates_skipped_max_depth",
+        tspbb_labels=("Potential updates skipped max depth",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="search_node_potential_updates_skipped_near_leaf",
+        tspbb_labels=("Potential updates skipped near leaf",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
         column="search_node_potential_updates_skipped_depth_interval",
         tspbb_labels=("Potential updates skipped depth interval",),
         kind="int",
@@ -384,6 +420,19 @@ OUTPUT_STATISTICS: tuple[OutputStatistic, ...] = (
     OutputStatistic(
         column="search_node_potential_updates_skipped_gap_above_maximum",
         tspbb_labels=("Potential updates skipped gap above maximum",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="search_node_potential_updates_skipped_gap_change_below_minimum",
+        tspbb_labels=(
+            "Potential updates skipped gap change below minimum",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="potential_update_gap_change_shallow_bypasses",
+        tspbb_labels=("Potential update gap-change shallow bypasses",),
         kind="int",
         summarize=True,
     ),
@@ -875,10 +924,15 @@ KNOWN_VALUE_OPTIONS = {
     "--hk-node-dynamic-min-current-weight",
     "--hk-node-dynamic-max-current-weight",
     "--branch-edge-order",
+    "--root-candidate-compaction",
     "--hk-potential-update",
     "--hk-update-depth",
+    "--hk-update-max-depth",
+    "--hk-update-skip-last-edges",
     "--hk-update-gap-ratio",
     "--hk-update-iterations",
+    "--hk-update-min-gap-change-ratio",
+    "--hk-update-gap-change-start-depth",
     "--hk-update-budget",
 }
 
@@ -1424,6 +1478,7 @@ def parse_tspbb_progress(stdout: str, stderr: str = "") -> dict[str, Any]:
     parsed: dict[str, Any] = {}
     root_fixing_seconds = 0.0
     root_ascent_seconds = 0.0
+    root_candidate_compaction_seconds = 0.0
 
     def tokens(payload: str) -> dict[str, str]:
         return dict(re.findall(r"([A-Za-z_]+)=([^\s]+)", payload))
@@ -1461,10 +1516,31 @@ def parse_tspbb_progress(stdout: str, stderr: str = "") -> dict[str, Any]:
                 root_ascent_seconds += seconds
                 parsed["root_ascent_seconds"] = root_ascent_seconds
         elif payload.startswith("root reduced-cost fixing:"):
+            parsed["root_fixing_calls"] = parsed.get("root_fixing_calls", 0) + 1
+            for column, token in (
+                ("root_fixing_tested", "tested"),
+                ("root_fixing_fixed_zero", "fixed_zero"),
+                ("root_fixing_tree_tested", "tree_tested"),
+                ("root_fixing_fixed_one", "fixed_one"),
+            ):
+                value = parse_statistic_value(values.get(token, ""), "int")
+                if value is not None:
+                    parsed[column] = parsed.get(column, 0) + value
+            set_int("root_fixing_active_after", values.get("active"))
             seconds = parse_statistic_value(values.get("seconds", ""), "float")
             if seconds is not None:
                 root_fixing_seconds += seconds
                 parsed["root_fixing_seconds"] = root_fixing_seconds
+        elif payload.startswith("root candidate compaction:"):
+            parsed["root_candidate_compaction_calls"] = (
+                parsed.get("root_candidate_compaction_calls", 0) + 1)
+            set_int("root_candidate_edges_before", values.get("before"))
+            set_int("root_candidate_edges_after", values.get("after"))
+            seconds = parse_statistic_value(values.get("seconds", ""), "float")
+            if seconds is not None:
+                root_candidate_compaction_seconds += seconds
+                parsed["root_candidate_compaction_seconds"] = (
+                    root_candidate_compaction_seconds)
         elif payload.startswith(("root:", "root certificate:")):
             set_float("root_lower_bound", values.get("lower_bound"))
             set_float("final_lower_bound", values.get("lower_bound"))
@@ -1473,7 +1549,8 @@ def parse_tspbb_progress(stdout: str, stderr: str = "") -> dict[str, Any]:
             set_int("nodes_expanded", values.get("expanded"))
             for column in (
                 "initial_tour_seconds", "root_ascent_seconds",
-                "root_fixing_seconds", "replacement_seconds",
+                "root_fixing_seconds", "root_candidate_compaction_seconds",
+                "replacement_seconds",
             ):
                 set_float(column, values.get(column))
         elif payload.startswith("progress:"):

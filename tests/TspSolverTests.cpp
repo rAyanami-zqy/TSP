@@ -255,7 +255,8 @@ struct BranchBoundSolverTestAccess {
             solver.potential_updates_in_round_ = 1000;
             const auto limited = solver.classifyPotentialUpdate(
                 tree, 1, tree.cost,
-                tree.cost + std::max(1.0, std::fabs(tree.cost)));
+                tree.cost + std::max(1.0, std::fabs(tree.cost)),
+                node.forced_edges.size());
             expect(
                 limited
                     == BranchBoundSolver::PotentialUpdateDecision::BudgetExhausted,
@@ -266,7 +267,8 @@ struct BranchBoundSolverTestAccess {
                 1, 1, 1.0, 0);
             const auto unlimited = solver.classifyPotentialUpdate(
                 tree, 1, tree.cost,
-                tree.cost + std::max(1.0, std::fabs(tree.cost)));
+                tree.cost + std::max(1.0, std::fabs(tree.cost)),
+                node.forced_edges.size());
             expect(
                 unlimited
                     != BranchBoundSolver::PotentialUpdateDecision::BudgetExhausted,
@@ -567,9 +569,13 @@ void expectPotentialUpdateDecisionAccounting(
         + stats.search_node_potential_updates_skipped_invalid_state
         + stats.search_node_potential_updates_skipped_zero_violation
         + stats.search_node_potential_updates_skipped_zero_iteration_limit
+        + stats.search_node_potential_updates_skipped_max_depth
+        + stats.search_node_potential_updates_skipped_near_leaf
         + stats.search_node_potential_updates_skipped_depth_interval
         + stats.search_node_potential_updates_skipped_gap_below_minimum
-        + stats.search_node_potential_updates_skipped_gap_above_maximum;
+        + stats.search_node_potential_updates_skipped_gap_above_maximum
+        + stats
+            .search_node_potential_updates_skipped_gap_change_below_minimum;
     if (stats.search_node_potential_update_candidates
         != stats.search_node_potential_updates_triggered + skipped) {
         throw std::runtime_error(
@@ -1801,6 +1807,90 @@ void testSearchNodePotentialUpdates()
         }
     }
 
+    // epoch-relative gap-change 门槛衡量自最近一次成功势上升以来的下界
+    // 增量。100% 对本正权实例不可达，应阻止全部更新并保持精确性。
+    {
+        tsp::BranchBoundSolver solver(matrix);
+        solver.setPotentialUpdateOptions(
+            tsp::PotentialUpdateStrategy::SubtreeAdaptive,
+            1, 8, 1.0, 100);
+        solver.setPotentialUpdateGapChangeThreshold(1.0);
+        solver.setPotentialUpdateGapChangeStartDepth(0);
+        const tsp::SolveResult result = solver.solve();
+        expectCost(result.cost, 699.0,
+                   "gap-change gate changed the exact optimum");
+        expectPotentialUpdateDecisionAccounting(
+            result.stats, "gap-change gate");
+        if (result.stats.search_node_potential_updates_triggered != 0) {
+            throw std::runtime_error(
+                "gap-change gate unexpectedly allowed an update");
+        }
+        if (result.stats
+                .search_node_potential_updates_skipped_gap_change_below_minimum
+            == 0) {
+            throw std::runtime_error(
+                "gap-change gate did not report its skipped nodes");
+        }
+    }
+
+    // 绝对最大深度门槛只允许浅层节点上升，深层节点直接展开。
+    {
+        tsp::BranchBoundSolver solver(matrix);
+        solver.setPotentialUpdateOptions(
+            tsp::PotentialUpdateStrategy::SubtreeAdaptive,
+            1, 8, 1.0, 100);
+        solver.setPotentialUpdateMaxDepth(1);
+        const tsp::SolveResult result = solver.solve();
+        expectCost(result.cost, 699.0,
+                   "maximum update depth changed the exact optimum");
+        expectPotentialUpdateDecisionAccounting(
+            result.stats, "maximum update depth");
+        if (result.stats.search_node_potential_updates_skipped_max_depth == 0) {
+            throw std::runtime_error(
+                "maximum update depth did not report its skipped nodes");
+        }
+    }
+
+    // 倒置深度门槛按剩余 tour 边而不是绝对 DFS depth 判断。阈值 n 会让
+    // 所有非根候选节点直接展开，用于验证统计与精确性。
+    {
+        tsp::BranchBoundSolver solver(matrix);
+        solver.setPotentialUpdateOptions(
+            tsp::PotentialUpdateStrategy::SubtreeAdaptive,
+            1, 8, 1.0, 100);
+        solver.setPotentialUpdateSkipLastEdges(42);
+        const tsp::SolveResult result = solver.solve();
+        expectCost(result.cost, 699.0,
+                   "near-leaf update gate changed the exact optimum");
+        expectPotentialUpdateDecisionAccounting(
+            result.stats, "near-leaf update gate");
+        if (result.stats.search_node_potential_updates_skipped_near_leaf == 0) {
+            throw std::runtime_error(
+                "near-leaf update gate did not report its skipped nodes");
+        }
+    }
+
+    // 即使 gap-change 门槛本身不可达，浅层保护区仍应允许 depth<=1 的
+    // 节点按原条件触发势上升，并保持决策统计闭合。
+    {
+        tsp::BranchBoundSolver solver(matrix);
+        solver.setPotentialUpdateOptions(
+            tsp::PotentialUpdateStrategy::SubtreeAdaptive,
+            1, 8, 1.0, 100);
+        solver.setPotentialUpdateGapChangeThreshold(1.0);
+        solver.setPotentialUpdateGapChangeStartDepth(1);
+        const tsp::SolveResult result = solver.solve();
+        expectCost(result.cost, 699.0,
+                   "gap-change shallow protection changed the exact optimum");
+        expectPotentialUpdateDecisionAccounting(
+            result.stats, "gap-change shallow protection");
+        if (result.stats.potential_update_gap_change_shallow_bypasses == 0
+            || result.stats.search_node_potential_updates_triggered == 0) {
+            throw std::runtime_error(
+                "gap-change shallow protection did not bypass the gate");
+        }
+    }
+
     // 三个实验节点策略与 Polyak 使用相同的触发与 epoch 路径，只替换一次
     // updateNodePotentialBound 内部的调度或方向。这里要求它们实际进入更新
     // 循环并保持精确最优值不变；是否改善/剪枝属于后续 A/B 的性能指标。
@@ -2002,9 +2092,32 @@ void testRootReducedCostFixing()
         || result.stats.root_fixing_tree_tested == 0
         || result.stats.root_fixing_fixed_one == 0
         || result.stats.root_fixing_active_after == 0
-        || result.stats.root_fixing_seconds < 0.0) {
+        || result.stats.root_fixing_seconds < 0.0
+        || result.stats.root_candidate_compaction_calls == 0
+        || result.stats.root_candidate_edges_before
+            <= result.stats.root_candidate_edges_after
+        || result.stats.root_candidate_edges_after
+            != result.stats.root_fixing_active_after
+                + result.stats.root_fixing_fixed_one
+        || result.stats.root_candidate_compaction_seconds < 0.0) {
         throw std::runtime_error(
-            "bayg29 reduced-cost fixing statistics were not exported");
+            "bayg29 fixing/compaction statistics were not exported");
+    }
+
+    tsp::BranchBoundSolver baseline(problem.toDenseMatrix(29));
+    baseline.setRootCandidateCompaction(false);
+    const tsp::SolveResult baseline_result = baseline.solve();
+    expectCost(baseline_result.cost, result.cost,
+               "root candidate compaction changed the optimum");
+    if (baseline_result.stats.root_candidate_compaction_calls != 0
+        || baseline_result.stats.nodes_created != result.stats.nodes_created
+        || baseline_result.stats.nodes_expanded != result.stats.nodes_expanded
+        || baseline_result.stats.root_fixing_fixed_zero
+            != result.stats.root_fixing_fixed_zero
+        || baseline_result.stats.root_fixing_fixed_one
+            != result.stats.root_fixing_fixed_one) {
+        throw std::runtime_error(
+            "root candidate compaction changed the bayg29 search tree");
     }
 
     const std::string debug_output = debug.str();
@@ -2026,6 +2139,11 @@ void testRootReducedCostFixing()
         || std::stoull(debug_output.substr(forced_pos + 10)) == 0) {
         throw std::runtime_error(
             "bayg29 root reduced-cost fixing forced no tree edges");
+    }
+    if (debug_output.find("root candidate compaction: before=")
+        == std::string::npos) {
+        throw std::runtime_error(
+            "bayg29 did not report root candidate compaction");
     }
 }
 

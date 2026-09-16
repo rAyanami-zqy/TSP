@@ -212,6 +212,12 @@ debug 信息写到标准错误，不会破坏批处理模式的 CSV 标准输出
 
 `--debug-interval` 必须是大于 `0` 的整数。未指定 `--debug` 时不会输出 debug 信息。
 
+根 reduced-cost fixing 后默认执行 candidate epoch 压缩：稳定过滤已永久删除的边，
+重新编号候选边并重建 incident/cut 位图，但不改变稳定 `edgeId`、根 1-tree 或搜索
+决策。可用 `--root-candidate-compaction off` 保留旧的完整物理候选表做严格 A/B；
+`on` 为默认值。单实例和批处理分别输出压缩调用数、压缩前后物理候选边数及累计
+耗时。压缩后的物理边数包含 active 可选边和为保持约束状态而保留的 forced 边。
+
 ### Held-Karp 根上升策略
 
 默认策略保持当前 HKMST 的 Polyak 步长。以下选项可用于论文策略对照：
@@ -563,6 +569,21 @@ Polyak；`--hk-node-ascent` 还支持 `helsgaun`、`polyak-smoothed` 和
   `subtree-adaptive` 触发区间的下限和上限，默认下限为 0。`subtree-*` 中
   `--hk-update-depth` 是两次成功安装 epoch 的最小层距；达到层距后，后续
   子节点仍会检查 gap，并非只在深度的整数倍检查；
+- `--hk-update-max-depth` 是允许执行节点势上升的最大绝对 DFS 深度；超过
+  该深度后直接展开节点。默认 0 表示不限制，与 `--hk-update-depth` 的
+  “两次成功 epoch 最小层距”含义不同；
+- `--hk-update-skip-last-edges` 是结构化的“倒置深度”门槛。若当前 forced
+  边距离 tour 所需的 n 条边只差不超过该值，则直接展开、不再势上升。
+  它能识别不增加 DFS depth 的单子节点 degree propagation；默认 0 关闭；
+- `--hk-update-min-gap-change-ratio` 是相对最近一次成功势上升的可选门槛。
+  它计算 `(当前节点LB-epoch锚点LB)/max(1,|UB|)`；这等价于相对 gap
+  自上次上升后至少缩减多少幅度。分支约束通常令 LB 上升、gap 缩小，因此
+  这里不是等待 `(UB-LB)` 变大。GAPMST 默认 0.0001；显式设为 0 可复现
+  CPHKMST 的原触发行为；
+- `--hk-update-gap-change-start-depth` 为 gap-change 设置浅层保护区。
+  `depth<=N` 的节点旁路该门槛，仍按原有条件执行势上升，从第 N+1 层开始
+  才检查 gap-change；GAPMST 默认保护前 2 层，设为 0 表示所有非根节点
+  都检查；
 - `--hk-update-large-gap-ratio` 与 `--hk-update-large-gap-iterations` 必须成对
   使用。命中大 gap 档时，后者替换基础 `--hk-update-iterations`；基础轮数
   可为 0，从而让较小 gap 完全不更新；
@@ -611,6 +632,8 @@ initial_tour_seconds,initial_clk_starts,adaptive_clk_triggers,adaptive_clk_impro
 root_fixing_calls,root_fixing_tested,root_fixing_fixed_zero,
 root_fixing_tree_tested,root_fixing_fixed_one,root_fixing_active_after,
 root_fixing_seconds,
+root_candidate_compaction_calls,root_candidate_edges_before,
+root_candidate_edges_after,root_candidate_compaction_seconds,
 root_potential_iterations,root_ascent_seconds,
 instance_wall_seconds,nodes_created,nodes_expanded,pruned_by_bound,pruned_infeasible,
 search_node_potential_update_candidates,search_node_potential_updates_triggered,
@@ -621,12 +644,16 @@ search_node_potential_updates_skipped_numerically_unsafe,
 search_node_potential_updates_skipped_invalid_state,
 search_node_potential_updates_skipped_zero_violation,
 search_node_potential_updates_skipped_zero_iteration_limit,
+search_node_potential_updates_skipped_max_depth,
+search_node_potential_updates_skipped_near_leaf,
 search_node_potential_updates_skipped_depth_interval,
 search_node_potential_updates_skipped_gap_below_minimum,
 search_node_potential_updates_skipped_gap_above_maximum,
+search_node_potential_updates_skipped_gap_change_below_minimum,
 potential_updates_improved,potential_updates_pruned,
 potential_updates_rebuilt,potential_updates_stopped_prunable,
 potential_updates_large_gap_tier,
+potential_update_gap_change_shallow_bypasses,
 search_node_potential_iterations,potential_update_seconds,
 potential_update_rebuild_seconds,potential_update_total_gain,
 potential_update_max_gain,potential_update_probes_started,
@@ -638,6 +665,9 @@ replacement_seconds,tour,message
 `status=ok,method=exact` 表示精确求解得到最优 tour；精确搜索证实无解时为 `status=infeasible`。每个实例的 debug 信息仍只写到标准错误。
 `instance_wall_seconds` 单独计量每个实例从解析输入到 `solve()` 返回的墙钟时间；
 它不包含批处理进程启动和 CSV 输出时间。
+`root_candidate_edges_before/after` 是最后一次根压缩的物理候选边数；若 incumbent
+改善触发根搜索重启，`root_candidate_compaction_calls` 和耗时累计，而边数保留
+最近一轮值。
 `replacement_seconds` 是 root fixing、BP 和候选删除内部 replacement 查询的
 子阶段，可能与其他阶段计时重叠。外部消融运行器在超时时还会从已刷新 debug
 快照保留最终已知 UB、根全局 LB、相对 gap、created/expanded 节点数和阶段耗时。

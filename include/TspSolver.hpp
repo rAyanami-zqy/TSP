@@ -57,6 +57,16 @@ struct SolveStats {
     std::size_t root_fixing_active_after = 0;
     // 根 reduced-cost fixing 的累计墙钟秒数。
     double root_fixing_seconds = 0.0;
+    // 根 fixing 后把永久活动边重新编号为紧凑 candidate epoch 的次数。
+    // incumbent 改善导致根搜索重启时会再次压缩并累计。
+    std::size_t root_candidate_compaction_calls = 0;
+    // 最后一次根 candidate epoch 压缩前的物理候选边数。
+    std::size_t root_candidate_edges_before = 0;
+    // 最后一次根 candidate epoch 压缩后的物理候选边数；其中包含少量
+    // inactive forced 边，以便保持完整的受约束树状态。
+    std::size_t root_candidate_edges_after = 0;
+    // 根 candidate epoch 过滤、重编号和位图重建的累计秒数。
+    double root_candidate_compaction_seconds = 0.0;
     // 所有根势优化实际执行的 1-tree/次梯度评估总轮数；Hybrid
     // 会累加 Polyak 和 Helsgaun 阶段，根搜索重启时也继续累加。
     std::size_t root_potential_iterations = 0;
@@ -90,10 +100,17 @@ struct SolveStats {
     std::size_t search_node_potential_updates_skipped_zero_iteration_limit = 0;
     // 与最近一次持久化势 epoch 的深度距离小于配置的更新间隔。
     std::size_t search_node_potential_updates_skipped_depth_interval = 0;
+    // DFS 深度超过 --hk-update-max-depth；0 表示不设上限。
+    std::size_t search_node_potential_updates_skipped_max_depth = 0;
+    // 距离凑满 n 条 tour 边只剩不超过 --hk-update-skip-last-edges 条。
+    std::size_t search_node_potential_updates_skipped_near_leaf = 0;
     // 相对 gap 小于 --hk-update-min-gap-ratio。
     std::size_t search_node_potential_updates_skipped_gap_below_minimum = 0;
     // 相对 gap 大于 --hk-update-gap-ratio。
     std::size_t search_node_potential_updates_skipped_gap_above_maximum = 0;
+    // 自最近一次成功安装势 epoch 后，相对 gap 的缩减量小于
+    // --hk-update-min-gap-change-ratio。
+    std::size_t search_node_potential_updates_skipped_gap_change_below_minimum = 0;
     // 得到严格强于原节点下界的势更新次数。
     std::size_t potential_updates_improved = 0;
     // 新势下界直接达到剪枝条件的次数。
@@ -104,6 +121,8 @@ struct SolveStats {
     std::size_t potential_updates_stopped_prunable = 0;
     // 使用“大 gap”分档迭代上限的更新尝试数。
     std::size_t potential_updates_large_gap_tier = 0;
+    // gap-change 门槛因节点位于配置的浅层保护区而被旁路的更新尝试数。
+    std::size_t potential_update_gap_change_shallow_bypasses = 0;
     // 初始相对 gap 落在 probe 区间、实际进入短轮次筛选的更新次数。
     std::size_t potential_update_probes_started = 0;
     // 完成 probe 后达到最小 gap 覆盖率、继续执行完整势上升的次数。
@@ -427,6 +446,12 @@ public:
                                    std::size_t iterations,
                                    double gap_ratio,
                                    std::size_t budget);
+    // 节点势上升允许的最大绝对 DFS 深度；0 表示不设上限。该门槛独立于
+    // depth（两次成功 epoch 的最小层距），用于让深层节点直接展开。
+    void setPotentialUpdateMaxDepth(std::size_t max_depth);
+    // 基于当前 forced 边数的倒置深度门槛。若完成 tour 还需的边数
+    // n-forced_edges.size() 不超过 skip_last_edges，则不再做势上升；0 关闭。
+    void setPotentialUpdateSkipLastEdges(std::size_t skip_last_edges);
     // SubtreeAdaptive 的最小 gap 及可选分档上限。相对 gap 小于
     // min_gap_ratio 时不触发；large_gap_iterations>0 且 gap 不小于
     // large_gap_ratio 时，用该轮数替换基础 iterations。默认 (0,0,0)
@@ -434,6 +459,13 @@ public:
     void setPotentialUpdateGapSchedule(double min_gap_ratio,
                                        double large_gap_ratio,
                                        std::size_t large_gap_iterations);
+    // SubtreeAdaptive 的可选 epoch-relative 门槛。当前节点下界相对最近一次
+    // 成功势上升锚点的增量，除以 max(1, |UB|)，必须至少达到该值才触发。
+    // 这等价于相对 gap 至少缩减该幅度；0 保留原有触发行为。
+    void setPotentialUpdateGapChangeThreshold(double min_change_ratio);
+    // depth<=start_depth 的浅层节点不应用 gap-change 门槛；从下一层开始
+    // 才要求达到 min_change_ratio。0 表示所有非根候选节点都应用门槛。
+    void setPotentialUpdateGapChangeStartDepth(std::size_t start_depth);
     // 可选的两阶段节点势更新筛选。updates 是完整上升前先观察的实际势更新
     // 次数（需要 updates+1 次 1-tree 评估）；只有初始相对 gap 严格大于
     // min_gap_ratio 时启用 probe。probe 最强下界覆盖原 gap 的比例低于
@@ -444,6 +476,9 @@ public:
     // 只建立启发式上界、根势和根 1-tree，不进入精确 BP 搜索。该模式用于
     // 可复现地下界实验；返回的 cost/tour 只是可行上界，不能视作最优证明。
     void setRootBoundOnly(bool enabled);
+    // 根 reduced-cost fixing 后是否把剩余活动候选物理压缩为新的搜索 epoch。
+    // off 保留压缩前完整候选表，供同一二进制做严格 A/B 对照。
+    void setRootCandidateCompaction(bool enabled);
     // 从头执行一次求解并返回可行 tour、成本和累计统计。默认模式会完成
     // 精确 BP 证明；root-bound-only 模式只返回启发式 tour 和根下界统计。
     // 同一对象可重复调用，solve() 会重置上一次搜索的可变状态。
@@ -721,6 +756,7 @@ private:
     // classifyPotentialUpdate 中与历史 shouldUpdatePotentials 相同的检查顺序定义。
     enum class PotentialUpdateDecision {
         Trigger,
+        TriggerGapChangeBypass,
         StrategyNone,
         UpdateDepthZero,
         BudgetExhausted,
@@ -728,15 +764,19 @@ private:
         InvalidState,
         ZeroViolation,
         ZeroIterationLimit,
+        MaxDepth,
+        NearLeaf,
         DepthInterval,
         GapBelowMinimum,
         GapAboveMaximum,
+        GapChangeBelowMinimum,
     };
     // 根据策略、深度、相对 gap、次梯度是否非零和本轮预算分类当前节点。
     // 仅作判断，不消耗预算也不修改搜索状态；调用方负责累计互斥统计。
     PotentialUpdateDecision classifyPotentialUpdate(
         const OneTree& tree, int depth,
-        double bound, double upper_bound) const;
+        double bound, double upper_bound,
+        std::size_t forced_edge_count) const;
     // 按当前节点相对 gap 选择基础或大 gap 档的最大迭代数。
     std::size_t potentialUpdateIterationLimit(
         double bound, double upper_bound) const;
@@ -877,6 +917,9 @@ private:
     // 状态，结果成为本轮根搜索不参与 DFS rollback 的永久基线。
     RootReducedCostStats applyRootReducedCostFixing(
         PartialSol& root, OneTree& root_tree) const;
+    // 把根节点当前 active edgeId 集合重新物化为紧凑候选 epoch。根 1-tree
+    // 使用稳定 edgeId，压缩时保持原树对象不动，以隔离纯数据结构收益。
+    void compactRootCandidateEpoch(PartialSol& root);
     // 最近邻 + 2-opt + LK 生成可行上界，并通过输出参数写入最佳 tour/cost；
     // alternatives 保留若干不同局部最优供延迟 LK。找到回路返回 true，
     // 稀疏图上所有构造均失败时返回 false。
@@ -980,12 +1023,21 @@ private:
         = PotentialUpdateStrategy::None;
     // SubtreeDepth/SubtreeAdaptive 中两次成功安装 epoch 的最小层间隔。
     std::size_t potential_update_depth_ = 4;
+    // 允许节点势上升的最大绝对 DFS 深度；0 表示不限。
+    std::size_t potential_update_max_depth_ = 0;
+    // 剩余所需 tour 边不超过该值时跳过势上升；0 表示关闭。
+    std::size_t potential_update_skip_last_edges_ = 0;
     // 每次 updateNodePotentialBound 最多执行的次梯度轮数。
     std::size_t potential_update_iterations_ = 8;
     // SubtreeAdaptive 允许更新的最大相对 gap。
     double potential_update_gap_ratio_ = 0.05;
     // SubtreeAdaptive 允许更新的最小相对 gap；默认不设下限。
     double potential_update_min_gap_ratio_ = 0.0;
+    // 相对最近一次成功安装势 epoch 的最小 gap 缩减量；GAPMST 默认
+    // 0.0001，显式设为 0 可复现 CPHKMST 的原触发行为。
+    double potential_update_min_gap_change_ratio_ = 0.0001;
+    // depth 不超过该绝对层数时旁路 gap-change 门槛；GAPMST 默认保护前 2 层。
+    std::size_t potential_update_gap_change_start_depth_ = 2;
     // 大 gap 分档起点；只有 large_gap_iterations_>0 时生效。
     double potential_update_large_gap_ratio_ = 0.0;
     // 大 gap 分档的最大迭代数；0 完全关闭分档。
@@ -1002,6 +1054,10 @@ private:
     std::size_t potential_updates_in_round_ = 0;
     // 当前已安装势 epoch 的锚点 DFS 深度；根势 epoch 为 0。
     int current_potential_epoch_depth_ = 0;
+    // 最近一次成功势上升安装 epoch 时的下界。和当前 UB 共同换算为
+    // epoch-relative gap 变化，随 subtree epoch snapshot 一起恢复。
+    double current_potential_epoch_anchor_bound_
+        = -std::numeric_limits<double>::infinity();
     // Concorde HELDKARP 风格：最近一次节点上升结束时的势跨兄弟节点传递，
     // 只作为下一次临时上升的 warm start，不直接充当下界。
     mutable std::vector<double> sibling_warm_potential_;
@@ -1028,6 +1084,8 @@ private:
         = RootPotentialSeedStrategy::WarmStart;
     // true 时 solve() 在构造根 1-tree 后返回，不执行 reduced-cost fixing/BP。
     bool root_bound_only_ = false;
+    // 默认启用根 fixing 后的 candidate epoch 压缩；命令行可关闭以复现旧路径。
+    bool root_candidate_compaction_enabled_ = true;
     // 原问题所有有限边均为精确整数且任意 n 边和不超过 2^53 时，tour
     // 成本为精确整数；Held-Karp 浮点下界可向上取整后参与安全剪枝。
     bool exact_integer_costs_ = false;

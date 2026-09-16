@@ -138,6 +138,10 @@ Root fixing tree tested: 40
 Root fixing fixed one: 3
 Root fixing active after: 200
 Root fixing seconds: 0.125
+Root candidate compaction calls: 2
+Root candidate edges before: 1000
+Root candidate edges after: 203
+Root candidate compaction seconds: 0.015
 Search-node potential update candidates: 103
 Search-node potential updates triggered: 17
 Potential updates skipped strategy none: 1
@@ -147,9 +151,13 @@ Potential updates skipped numerically unsafe: 4
 Potential updates skipped invalid state: 5
 Potential updates skipped zero violation: 6
 Potential updates skipped zero iteration limit: 7
+Potential updates skipped max depth: 10
+Potential updates skipped near leaf: 12
 Potential updates skipped depth interval: 8
 Potential updates skipped gap below minimum: 9
 Potential updates skipped gap above maximum: 41
+Potential updates skipped gap change below minimum: 11
+Potential update gap-change shallow bypasses: 13
 Search-node potential iterations: 91
 Optimal cost: 2.6e1
 """)
@@ -166,6 +174,10 @@ Optimal cost: 2.6e1
             "root_fixing_fixed_one": 3,
             "root_fixing_active_after": 200,
             "root_fixing_seconds": 0.125,
+            "root_candidate_compaction_calls": 2,
+            "root_candidate_edges_before": 1000,
+            "root_candidate_edges_after": 203,
+            "root_candidate_compaction_seconds": 0.015,
             "root_potential_iterations": 144,
             "search_node_potential_update_candidates": 103,
             "search_node_potential_updates_triggered": 17,
@@ -176,9 +188,13 @@ Optimal cost: 2.6e1
             "search_node_potential_updates_skipped_invalid_state": 5,
             "search_node_potential_updates_skipped_zero_violation": 6,
             "search_node_potential_updates_skipped_zero_iteration_limit": 7,
+            "search_node_potential_updates_skipped_max_depth": 10,
+            "search_node_potential_updates_skipped_near_leaf": 12,
             "search_node_potential_updates_skipped_depth_interval": 8,
             "search_node_potential_updates_skipped_gap_below_minimum": 9,
             "search_node_potential_updates_skipped_gap_above_maximum": 41,
+            "search_node_potential_updates_skipped_gap_change_below_minimum": 11,
+            "potential_update_gap_change_shallow_bypasses": 13,
             "search_node_potential_iterations": 91,
         }
         for field, value in expected.items():
@@ -192,12 +208,14 @@ Optimal cost: 2.6e1
         for field in (
             "final_upper_bound", "final_lower_bound", "final_relative_gap",
             "initial_tour_seconds", "root_ascent_seconds",
+            "root_candidate_compaction_seconds",
             "potential_update_seconds", "potential_update_rebuild_seconds",
             "replacement_seconds",
         ):
             self.assertIn(field, runner.RESULT_FIELDS)
         for field in (
             "total_initial_tour_seconds", "median_root_ascent_seconds",
+            "total_root_candidate_compaction_seconds",
             "total_replacement_seconds",
         ):
             self.assertIn(field, runner.SUMMARY_FIELDS)
@@ -206,7 +224,9 @@ Optimal cost: 2.6e1
         parsed = runner.parse_tspbb_progress("", """\
 [tsp-debug] initial incumbent: cost=120
 [tsp-debug] initial tour timing: seconds=0.5 clk_starts=1
-[tsp-debug] root: lower_bound=100 best=120 created=1 expanded=0 initial_tour_seconds=0.5 root_ascent_seconds=0.2 root_fixing_seconds=0.1 replacement_seconds=0.01 search=bp-chain
+[tsp-debug] root reduced-cost fixing: tested=80 fixed_zero=30 tree_tested=40 fixed_one=3 active=200 seconds=0.1
+[tsp-debug] root candidate compaction: before=1000 after=203 active=200 forced=3 seconds=0.015
+[tsp-debug] root: lower_bound=100 best=120 created=1 expanded=0 initial_tour_seconds=0.5 root_ascent_seconds=0.2 root_fixing_seconds=0.1 root_candidate_compaction_seconds=0.015 replacement_seconds=0.01 search=bp-chain
 [tsp-debug] new incumbent: cost=110 source=bp-node depth=4
 [tsp-debug] progress: expanded=500 created=900 depth=8 bound=105 best=110 pruned_bound=3 pruned_infeasible=4 potential_seconds=2.5 potential_rebuild_seconds=0.4 replacement_seconds=1.25
 """)
@@ -215,6 +235,12 @@ Optimal cost: 2.6e1
         self.assertAlmostEqual(parsed["final_relative_gap"], 10.0 / 110.0)
         self.assertEqual(parsed["branches"], 900)
         self.assertEqual(parsed["nodes_expanded"], 500)
+        self.assertEqual(parsed["root_fixing_calls"], 1)
+        self.assertEqual(parsed["root_fixing_fixed_zero"], 30)
+        self.assertEqual(parsed["root_candidate_compaction_calls"], 1)
+        self.assertEqual(parsed["root_candidate_edges_before"], 1000)
+        self.assertEqual(parsed["root_candidate_edges_after"], 203)
+        self.assertEqual(parsed["root_candidate_compaction_seconds"], 0.015)
         self.assertEqual(parsed["replacement_seconds"], 1.25)
 
 

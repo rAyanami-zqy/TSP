@@ -496,6 +496,21 @@ void BranchBoundSolver::setPotentialUpdateOptions(
     potential_update_budget_ = budget;
 }
 
+void BranchBoundSolver::setPotentialUpdateMaxDepth(std::size_t max_depth)
+{
+    potential_update_max_depth_ = max_depth;
+}
+
+void BranchBoundSolver::setPotentialUpdateSkipLastEdges(
+    std::size_t skip_last_edges)
+{
+    if (skip_last_edges > static_cast<std::size_t>(n_)) {
+        throw std::invalid_argument(
+            "potential update skip-last-edges exceeds the tour edge count");
+    }
+    potential_update_skip_last_edges_ = skip_last_edges;
+}
+
 void BranchBoundSolver::setPotentialUpdateGapSchedule(
     double min_gap_ratio, double large_gap_ratio,
     std::size_t large_gap_iterations)
@@ -515,6 +530,22 @@ void BranchBoundSolver::setPotentialUpdateGapSchedule(
     potential_update_min_gap_ratio_ = min_gap_ratio;
     potential_update_large_gap_ratio_ = large_gap_ratio;
     potential_update_large_gap_iterations_ = large_gap_iterations;
+}
+
+void BranchBoundSolver::setPotentialUpdateGapChangeThreshold(
+    double min_change_ratio)
+{
+    if (!isFinite(min_change_ratio) || min_change_ratio < 0.0) {
+        throw std::invalid_argument(
+            "potential update minimum gap-change ratio must be finite and non-negative");
+    }
+    potential_update_min_gap_change_ratio_ = min_change_ratio;
+}
+
+void BranchBoundSolver::setPotentialUpdateGapChangeStartDepth(
+    std::size_t start_depth)
+{
+    potential_update_gap_change_start_depth_ = start_depth;
 }
 
 void BranchBoundSolver::setPotentialUpdateProbeOptions(
@@ -547,6 +578,11 @@ void BranchBoundSolver::setPotentialUpdateProbeOptions(
 void BranchBoundSolver::setRootBoundOnly(bool enabled)
 {
     root_bound_only_ = enabled;
+}
+
+void BranchBoundSolver::setRootCandidateCompaction(bool enabled)
+{
+    root_candidate_compaction_enabled_ = enabled;
 }
 
 void BranchBoundSolver::setInitialTour(const std::vector<int>& tour)
@@ -1268,7 +1304,8 @@ std::size_t BranchBoundSolver::potentialUpdateIterationLimit(
 
 BranchBoundSolver::PotentialUpdateDecision
 BranchBoundSolver::classifyPotentialUpdate(
-    const OneTree& tree, int depth, double bound, double upper_bound) const
+    const OneTree& tree, int depth, double bound, double upper_bound,
+    std::size_t forced_edge_count) const
 {
     // 初始精确搜索同时承担 diversified-LK 的困难度探测；若稍后改善
     // incumbent，该轮会整体回滚。先给它一个保守预算，探测完成或重启后
@@ -1298,6 +1335,19 @@ BranchBoundSolver::classifyPotentialUpdate(
     if (depth <= 0 || !tree.feasible
         || !isFinite(bound) || !isFinite(upper_bound)) {
         return PotentialUpdateDecision::InvalidState;
+    }
+    if (potential_update_max_depth_ != 0
+        && static_cast<std::size_t>(depth) > potential_update_max_depth_) {
+        return PotentialUpdateDecision::MaxDepth;
+    }
+    if (potential_update_skip_last_edges_ != 0) {
+        const std::size_t tour_edge_count = static_cast<std::size_t>(n_);
+        const std::size_t remaining_tour_edges =
+            forced_edge_count < tour_edge_count
+            ? tour_edge_count - forced_edge_count : 0;
+        if (remaining_tour_edges <= potential_update_skip_last_edges_) {
+            return PotentialUpdateDecision::NearLeaf;
+        }
     }
 
     // violation_norm = Σ(degree[v]-2)²；为 0 表示 1-tree 已满足 tour 度约束，
@@ -1334,6 +1384,23 @@ BranchBoundSolver::classifyPotentialUpdate(
     }
     if (relative_gap > potential_update_gap_ratio_) {
         return PotentialUpdateDecision::GapAboveMaximum;
+    }
+    if (potential_update_min_gap_change_ratio_ > 0.0) {
+        if (static_cast<std::size_t>(depth)
+            <= potential_update_gap_change_start_depth_) {
+            return PotentialUpdateDecision::TriggerGapChangeBypass;
+        }
+        if (!isFinite(current_potential_epoch_anchor_bound_)) {
+            return PotentialUpdateDecision::InvalidState;
+        }
+        // 在同一 epoch 内，分支约束只会使有效下界不降。用下界相对锚点
+        // 的增量衡量 gap 的缩减，避免 incumbent 改善改变 UB 后把门槛基准
+        // 一并扭曲。该量与 relative_gap 一样以当前 UB 尺度归一化。
+        const double gap_change = std::max(
+            0.0, bound - current_potential_epoch_anchor_bound_) / scale;
+        if (gap_change < potential_update_min_gap_change_ratio_) {
+            return PotentialUpdateDecision::GapChangeBelowMinimum;
+        }
     }
     return PotentialUpdateDecision::Trigger;
 }
@@ -2216,6 +2283,7 @@ bool BranchBoundSolver::searchSubtreeWithUpdatedPotentials(
         std::vector<OneTree> tree_snapshot_undo;
         std::vector<std::uint64_t> mst_cut_candidate_bits;
         int epoch_depth = 0;
+        double epoch_anchor_bound = -std::numeric_limits<double>::infinity();
     } snapshot;
 
     snapshot.vertex_potential = std::move(vertex_potential_);
@@ -2236,6 +2304,7 @@ bool BranchBoundSolver::searchSubtreeWithUpdatedPotentials(
     snapshot.tree_snapshot_undo = std::move(tree_snapshot_undo_);
     snapshot.mst_cut_candidate_bits = std::move(mst_cut_candidate_bits_);
     snapshot.epoch_depth = current_potential_epoch_depth_;
+    snapshot.epoch_anchor_bound = current_potential_epoch_anchor_bound_;
 
     auto restore_epoch = [&]() {
         vertex_potential_ = std::move(snapshot.vertex_potential);
@@ -2259,6 +2328,7 @@ bool BranchBoundSolver::searchSubtreeWithUpdatedPotentials(
         mst_cut_candidate_bits_ =
             std::move(snapshot.mst_cut_candidate_bits);
         current_potential_epoch_depth_ = snapshot.epoch_depth;
+        current_potential_epoch_anchor_bound_ = snapshot.epoch_anchor_bound;
     };
 
     // epoch_node 是当前约束节点的独立副本；新 epoch 内的 candidate_bits
@@ -2292,6 +2362,7 @@ bool BranchBoundSolver::searchSubtreeWithUpdatedPotentials(
     }
 #endif
     ++result_.stats.potential_updates_rebuilt;
+    current_potential_epoch_anchor_bound_ = epoch_tree.cost;
 
     try {
         // 本锚点已更新，首次进入时禁止再次触发；其后代仍可按间隔创建
@@ -2373,6 +2444,8 @@ SolveResult BranchBoundSolver::solve()
         potential_updates_in_round_ = 0;
         sibling_warm_potential_.clear();
         current_potential_epoch_depth_ = 0;
+        current_potential_epoch_anchor_bound_
+            = -std::numeric_limits<double>::infinity();
         optimizeRootPotentials(best_cost_);
         // root 是深度 0 的空约束部分解；之后 reduced-cost fixing 可能在它
         // 上永久加入 forced/forbidden 基线。
@@ -2660,6 +2733,42 @@ SolveResult BranchBoundSolver::solve()
                 }
                 writeDebugLine(debug_, line.str());
             }
+            // 根 fixing 已永久删除大部分候选。重新定基后，后续 DFS 的全局
+            // 有序边表、active/incident 位图和 cut 临时位图都只覆盖稀疏图。
+            // forced 边仍单独保存在 root.forced_edges；epoch 中保留其物理条目
+            // 但不把它们标成 active，以兼容受约束 1-tree 的稳定 edgeId。
+            const std::size_t compacted_edge_upper_bound =
+                fixing.active_after + root.forced_edges.size();
+            if (root_candidate_compaction_enabled_
+                && !fixing.proves_no_improvement
+                && insufficient_degree_count_ == 0
+                && compacted_edge_upper_bound < candidates_sorted_.size()) {
+                const std::size_t edges_before = candidates_sorted_.size();
+                const auto compaction_started =
+                    std::chrono::steady_clock::now();
+                compactRootCandidateEpoch(root);
+                const double compaction_seconds =
+                    std::chrono::duration<double>(
+                        std::chrono::steady_clock::now()
+                            - compaction_started).count();
+                ++result_.stats.root_candidate_compaction_calls;
+                result_.stats.root_candidate_edges_before = edges_before;
+                result_.stats.root_candidate_edges_after =
+                    candidates_sorted_.size();
+                result_.stats.root_candidate_compaction_seconds +=
+                    compaction_seconds;
+                writeDebugLine(
+                    debug_,
+                    "root candidate compaction: before="
+                        + std::to_string(edges_before)
+                        + " after="
+                        + std::to_string(candidates_sorted_.size())
+                        + " active=" + std::to_string(fixing.active_after)
+                        + " forced="
+                        + std::to_string(root.forced_edges.size())
+                        + " seconds="
+                        + formatDebugDouble(compaction_seconds));
+            }
         }
         {
             std::ostringstream line;
@@ -2673,6 +2782,9 @@ SolveResult BranchBoundSolver::solve()
                  << formatDebugDouble(result_.stats.root_ascent_seconds)
                  << " root_fixing_seconds="
                  << formatDebugDouble(result_.stats.root_fixing_seconds)
+                 << " root_candidate_compaction_seconds="
+                 << formatDebugDouble(
+                        result_.stats.root_candidate_compaction_seconds)
                  << " replacement_seconds="
                  << formatDebugDouble(replacement_seconds_)
                  << " search=bp-chain";
@@ -2680,6 +2792,9 @@ SolveResult BranchBoundSolver::solve()
         }
 
         restart_search_requested_ = false;
+        // 根势上升是本轮搜索的第一个 epoch 锚点；若 fixing 强化了受约束
+        // 1-tree，则使用强化后的下界作为后续 gap-change 基准。
+        current_potential_epoch_anchor_bound_ = root_tree.cost;
         if (!root_pruned
             && (fixing.proves_no_improvement
                 || insufficient_degree_count_ != 0)) {
@@ -2735,6 +2850,15 @@ SolveResult BranchBoundSolver::solve()
              << result_.stats.root_fixing_active_after
              << " root_fixing_seconds="
              << formatDebugDouble(result_.stats.root_fixing_seconds)
+             << " root_candidate_compaction_calls="
+             << result_.stats.root_candidate_compaction_calls
+             << " root_candidate_edges_before="
+             << result_.stats.root_candidate_edges_before
+             << " root_candidate_edges_after="
+             << result_.stats.root_candidate_edges_after
+             << " root_candidate_compaction_seconds="
+             << formatDebugDouble(
+                    result_.stats.root_candidate_compaction_seconds)
              << " search_node_potential_update_candidates="
              << result_.stats.search_node_potential_update_candidates
              << " search_node_potential_updates_triggered="
@@ -2755,10 +2879,17 @@ SolveResult BranchBoundSolver::solve()
              << result_.stats.search_node_potential_updates_skipped_zero_iteration_limit
              << " potential_skipped_depth_interval="
              << result_.stats.search_node_potential_updates_skipped_depth_interval
+             << " potential_skipped_max_depth="
+             << result_.stats.search_node_potential_updates_skipped_max_depth
+             << " potential_skipped_near_leaf="
+             << result_.stats.search_node_potential_updates_skipped_near_leaf
              << " potential_skipped_gap_below_minimum="
              << result_.stats.search_node_potential_updates_skipped_gap_below_minimum
              << " potential_skipped_gap_above_maximum="
              << result_.stats.search_node_potential_updates_skipped_gap_above_maximum
+             << " potential_skipped_gap_change_below_minimum="
+             << result_.stats
+                    .search_node_potential_updates_skipped_gap_change_below_minimum
              << " potential_improved="
              << result_.stats.potential_updates_improved
              << " potential_pruned="
@@ -2769,6 +2900,8 @@ SolveResult BranchBoundSolver::solve()
              << result_.stats.potential_updates_stopped_prunable
              << " potential_large_gap_tier="
              << result_.stats.potential_updates_large_gap_tier
+             << " potential_gap_change_shallow_bypasses="
+             << result_.stats.potential_update_gap_change_shallow_bypasses
              << " potential_probes_started="
              << result_.stats.potential_update_probes_started
              << " potential_probes_continued="
@@ -3682,14 +3815,20 @@ void BranchBoundSolver::search(
     if (count_node && allow_potential_anchor && depth > 0) {
         ++result_.stats.search_node_potential_update_candidates;
         const PotentialUpdateDecision decision = classifyPotentialUpdate(
-            current_tree, depth, node.bound, best_cost_);
-        update_triggered = decision == PotentialUpdateDecision::Trigger;
+            current_tree, depth, node.bound, best_cost_,
+            node.forced_edges.size());
+        update_triggered =
+            decision == PotentialUpdateDecision::Trigger
+            || decision == PotentialUpdateDecision::TriggerGapChangeBypass;
 
         // 每个候选节点只进入一个分支。求解结束时应始终满足：
         // candidates = triggered + sum(skipped reasons)。Triggered 仍在真正
         // 开始 updateNodePotentialBound 时累计，以保持原统计语义不变。
         switch (decision) {
         case PotentialUpdateDecision::Trigger:
+            break;
+        case PotentialUpdateDecision::TriggerGapChangeBypass:
+            ++result_.stats.potential_update_gap_change_shallow_bypasses;
             break;
         case PotentialUpdateDecision::StrategyNone:
             ++result_.stats.search_node_potential_updates_skipped_strategy_none;
@@ -3712,6 +3851,12 @@ void BranchBoundSolver::search(
         case PotentialUpdateDecision::ZeroIterationLimit:
             ++result_.stats.search_node_potential_updates_skipped_zero_iteration_limit;
             break;
+        case PotentialUpdateDecision::MaxDepth:
+            ++result_.stats.search_node_potential_updates_skipped_max_depth;
+            break;
+        case PotentialUpdateDecision::NearLeaf:
+            ++result_.stats.search_node_potential_updates_skipped_near_leaf;
+            break;
         case PotentialUpdateDecision::DepthInterval:
             ++result_.stats.search_node_potential_updates_skipped_depth_interval;
             break;
@@ -3720,6 +3865,10 @@ void BranchBoundSolver::search(
             break;
         case PotentialUpdateDecision::GapAboveMaximum:
             ++result_.stats.search_node_potential_updates_skipped_gap_above_maximum;
+            break;
+        case PotentialUpdateDecision::GapChangeBelowMinimum:
+            ++result_.stats
+                .search_node_potential_updates_skipped_gap_change_below_minimum;
             break;
         }
     }
@@ -6043,6 +6192,84 @@ BranchBoundSolver::applyRootReducedCostFixing(
 
     stats.active_after = candidates_sorted_.size() - candidate_undo_.size();
     return stats;
+}
+
+void BranchBoundSolver::compactRootCandidateEpoch(PartialSol& root)
+{
+    const std::size_t edge_state_size = static_cast<std::size_t>(n_)
+        * static_cast<std::size_t>(n_);
+    std::vector<unsigned char> active_by_edge_id(edge_state_size, 0);
+    for (const Edge& edge : candidates_sorted_) {
+        const std::size_t id = edgeId(edge.u, edge.v);
+        if (isCandidateActive(root, id)) active_by_edge_id[id] = 1;
+    }
+
+    // 稳定过滤保持原调整权重顺序，不重新排序，也不重算已经由 fixing 验证
+    // 的根 1-tree。forced 边保留物理条目但保持 inactive；后续节点不会把
+    // 根永久 forced 边恢复为可选边。
+    std::vector<Edge> compacted;
+    compacted.reserve(
+        std::count(active_by_edge_id.begin(), active_by_edge_id.end(), 1)
+        + root.forced_edges.size());
+    for (const Edge& edge : candidates_sorted_) {
+        const std::size_t id = edgeId(edge.u, edge.v);
+        if (active_by_edge_id[id] || root.forced[id]) {
+            compacted.push_back(edge);
+        }
+    }
+    candidates_sorted_ = std::move(compacted);
+
+    edge_rank_by_id_.assign(edge_state_size, -1);
+    candidate_word_count_ = (candidates_sorted_.size() + 63) / 64;
+    candidate_incident_bits_.assign(
+        static_cast<std::size_t>(n_) * candidate_word_count_, 0);
+    internal_candidate_bits_.assign(candidate_word_count_, 0);
+    root.candidate_mask.clear();
+    root.candidate_bit_count = candidates_sorted_.size();
+    root.candidate_bits.assign(candidate_word_count_, 0);
+    available_degree_ = root.forced_degree;
+
+    for (std::size_t index = 0; index < candidates_sorted_.size(); ++index) {
+        const Edge& edge = candidates_sorted_[index];
+        const std::size_t id = edgeId(edge.u, edge.v);
+        edge_rank_by_id_[id] = static_cast<int>(index);
+        const std::size_t word_index = index / 64;
+        const std::uint64_t bit = std::uint64_t{1} << (index % 64);
+        candidate_incident_bits_[
+            static_cast<std::size_t>(edge.u) * candidate_word_count_ + word_index]
+            |= bit;
+        candidate_incident_bits_[
+            static_cast<std::size_t>(edge.v) * candidate_word_count_ + word_index]
+            |= bit;
+        if (edge.u != 0 && edge.v != 0) {
+            internal_candidate_bits_[word_index] |= bit;
+        }
+        if (active_by_edge_id[id]) {
+            root.candidate_bits[word_index] |= bit;
+            ++available_degree_[static_cast<std::size_t>(edge.u)];
+            ++available_degree_[static_cast<std::size_t>(edge.v)];
+        }
+    }
+
+    insufficient_degree_count_ = 0;
+    for (const int degree : available_degree_) {
+        if (degree < 2) ++insufficient_degree_count_;
+    }
+
+    // 根边只有 O(n)，但同时压缩可避免后续每次从完整根边表查询已删除 eid。
+    std::vector<Edge> compacted_root_candidates;
+    compacted_root_candidates.reserve(root_candidates_sorted_.size());
+    for (const Edge& edge : root_candidates_sorted_) {
+        if (active_by_edge_id[edgeId(edge.u, edge.v)]) {
+            compacted_root_candidates.push_back(edge);
+        }
+    }
+    root_candidates_sorted_ = std::move(compacted_root_candidates);
+
+    candidate_undo_.clear();
+    candidate_undo_.reserve(candidates_sorted_.size());
+    removed_candidate_scratch_.clear();
+    mst_cut_candidate_bits_.clear();
 }
 
 #include "TspInitialTour.ipp"

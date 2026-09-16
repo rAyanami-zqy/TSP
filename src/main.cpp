@@ -92,12 +92,20 @@ struct CliOptions {
         = tsp::PotentialUpdateStrategy::None;
     // 当前节点距离上一势 epoch 至少要相隔多少层。
     std::size_t potential_update_depth = 4;
+    // 节点势上升最大绝对 DFS 深度；0 表示不限制。
+    std::size_t potential_update_max_depth = 0;
+    // 剩余所需 tour 边数不超过该值时跳过势上升；0 表示关闭。
+    std::size_t potential_update_skip_last_edges = 0;
     // 每次节点势更新最多执行的次梯度迭代轮数。
     std::size_t potential_update_iterations = 8;
     // SubtreeAdaptive 允许触发更新的最大相对 gap：(UB-LB)/max(1,|UB|)。
     double potential_update_gap_ratio = 0.05;
     // SubtreeAdaptive 的最小相对 gap；默认 0 表示不设下限。
     double potential_update_min_gap_ratio = 0.0;
+    // GAPMST 默认要求 0.0001；显式设为 0 可复现 CPHKMST 触发行为。
+    double potential_update_min_gap_change_ratio = 0.0001;
+    // GAPMST 默认保护前 2 个绝对 DFS 层；0 表示从深度 1 起应用。
+    std::size_t potential_update_gap_change_start_depth = 2;
     // 可选的大 gap 分档起点和迭代上限；iterations=0 表示关闭分档。
     double potential_update_large_gap_ratio = 0.0;
     std::size_t potential_update_large_gap_iterations = 0;
@@ -111,6 +119,8 @@ struct CliOptions {
     double potential_update_probe_min_coverage = 0.0;
     // 为 true 时只报告启发式上界和根 1-tree 下界，不进入 BP 精确搜索。
     bool root_bound_only = false;
+    // 根 fixing 后默认把剩余候选重建成紧凑搜索 epoch；off 复现旧数据结构。
+    bool root_candidate_compaction = true;
     // debug 输出写入 stderr；interval 表示每扩展多少个节点输出一次进度。
     bool debug = false;
     std::size_t debug_interval = 10000;
@@ -412,14 +422,22 @@ RunResult solveInput(std::istream& input,
         options.potential_update_iterations,
         options.potential_update_gap_ratio,
         options.potential_update_budget);
+    solver.setPotentialUpdateMaxDepth(options.potential_update_max_depth);
+    solver.setPotentialUpdateSkipLastEdges(
+        options.potential_update_skip_last_edges);
     solver.setPotentialUpdateGapSchedule(
         options.potential_update_min_gap_ratio,
         options.potential_update_large_gap_ratio,
         options.potential_update_large_gap_iterations);
+    solver.setPotentialUpdateGapChangeThreshold(
+        options.potential_update_min_gap_change_ratio);
+    solver.setPotentialUpdateGapChangeStartDepth(
+        options.potential_update_gap_change_start_depth);
     solver.setPotentialUpdateProbeOptions(
         options.potential_update_probe_updates,
         options.potential_update_probe_min_gap_ratio,
         options.potential_update_probe_min_coverage);
+    solver.setRootCandidateCompaction(options.root_candidate_compaction);
     solver.setRootBoundOnly(options.root_bound_only);
     std::ofstream root_ascent_trace;
     if (!options.root_ascent_trace_path.empty()) {
@@ -526,6 +544,14 @@ void printHumanResult(const RunResult& run)
               << result.stats.root_fixing_active_after << '\n';
     std::cout << "Root fixing seconds: "
               << result.stats.root_fixing_seconds << '\n';
+    std::cout << "Root candidate compaction calls: "
+              << result.stats.root_candidate_compaction_calls << '\n';
+    std::cout << "Root candidate edges before: "
+              << result.stats.root_candidate_edges_before << '\n';
+    std::cout << "Root candidate edges after: "
+              << result.stats.root_candidate_edges_after << '\n';
+    std::cout << "Root candidate compaction seconds: "
+              << result.stats.root_candidate_compaction_seconds << '\n';
     std::cout << "Root potential iterations: "
               << result.stats.root_potential_iterations << '\n';
     std::cout << "Root ascent seconds: "
@@ -562,10 +588,18 @@ void printHumanResult(const RunResult& run)
               << result.stats.search_node_potential_updates_skipped_zero_iteration_limit << '\n';
     std::cout << "Potential updates skipped depth interval: "
               << result.stats.search_node_potential_updates_skipped_depth_interval << '\n';
+    std::cout << "Potential updates skipped max depth: "
+              << result.stats.search_node_potential_updates_skipped_max_depth << '\n';
+    std::cout << "Potential updates skipped near leaf: "
+              << result.stats.search_node_potential_updates_skipped_near_leaf << '\n';
     std::cout << "Potential updates skipped gap below minimum: "
               << result.stats.search_node_potential_updates_skipped_gap_below_minimum << '\n';
     std::cout << "Potential updates skipped gap above maximum: "
               << result.stats.search_node_potential_updates_skipped_gap_above_maximum << '\n';
+    std::cout << "Potential updates skipped gap change below minimum: "
+              << result.stats
+                     .search_node_potential_updates_skipped_gap_change_below_minimum
+              << '\n';
     std::cout << "Potential updates improved: "
               << result.stats.potential_updates_improved << '\n';
     std::cout << "Potential updates pruned: "
@@ -576,6 +610,8 @@ void printHumanResult(const RunResult& run)
               << result.stats.potential_updates_stopped_prunable << '\n';
     std::cout << "Potential updates large-gap tier: "
               << result.stats.potential_updates_large_gap_tier << '\n';
+    std::cout << "Potential update gap-change shallow bypasses: "
+              << result.stats.potential_update_gap_change_shallow_bypasses << '\n';
     std::cout << "Potential update probes started: "
               << result.stats.potential_update_probes_started << '\n';
     std::cout << "Potential update probes continued: "
@@ -655,6 +691,8 @@ void printBatchHeader()
         << "root_fixing_calls,root_fixing_tested,root_fixing_fixed_zero,"
         << "root_fixing_tree_tested,root_fixing_fixed_one,root_fixing_active_after,"
         << "root_fixing_seconds,"
+        << "root_candidate_compaction_calls,root_candidate_edges_before,"
+        << "root_candidate_edges_after,root_candidate_compaction_seconds,"
         << "root_potential_iterations,root_ascent_seconds,"
         << "root_external_potential_replacements,"
         << "root_external_potential_warm_starts,"
@@ -670,13 +708,17 @@ void printBatchHeader()
         << "search_node_potential_updates_skipped_invalid_state,"
         << "search_node_potential_updates_skipped_zero_violation,"
         << "search_node_potential_updates_skipped_zero_iteration_limit,"
+        << "search_node_potential_updates_skipped_max_depth,"
+        << "search_node_potential_updates_skipped_near_leaf,"
         << "search_node_potential_updates_skipped_depth_interval,"
         << "search_node_potential_updates_skipped_gap_below_minimum,"
         << "search_node_potential_updates_skipped_gap_above_maximum,"
+        << "search_node_potential_updates_skipped_gap_change_below_minimum,"
         << "potential_updates_improved,"
         << "potential_updates_pruned,potential_updates_rebuilt,"
         << "potential_updates_stopped_prunable,"
         << "potential_updates_large_gap_tier,"
+        << "potential_update_gap_change_shallow_bypasses,"
         << "search_node_potential_iterations,potential_update_seconds,"
         << "potential_update_rebuild_seconds,potential_update_total_gain,"
         << "potential_update_max_gain,potential_update_probes_started,"
@@ -697,9 +739,9 @@ void printBatchRow(const std::string& path,
 
     if (run == nullptr) {
         // 读取失败、解析失败等情况没有求解统计，只保留错误信息。
-        // method 到 tour 共 66 个空字段；最后一个字段保留错误消息。
+        // method 到 tour 共 74 个空字段；最后一个字段保留错误消息。
         // 新增批量列时必须同步此数量，确保错误行也与 CSV 表头严格对齐。
-        for (int field = 0; field < 66; ++field) {
+        for (int field = 0; field < 74; ++field) {
             std::cout << ',';
         }
         std::cout << csvQuote(message) << '\n';
@@ -732,6 +774,11 @@ void printBatchRow(const std::string& path,
               << result.stats.root_fixing_fixed_one << ','
               << result.stats.root_fixing_active_after << ','
               << formatDouble(result.stats.root_fixing_seconds) << ','
+              << result.stats.root_candidate_compaction_calls << ','
+              << result.stats.root_candidate_edges_before << ','
+              << result.stats.root_candidate_edges_after << ','
+              << formatDouble(
+                     result.stats.root_candidate_compaction_seconds) << ','
               << result.stats.root_potential_iterations << ','
               << formatDouble(result.stats.root_ascent_seconds) << ','
               << result.stats.root_external_potential_replacements << ','
@@ -753,14 +800,20 @@ void printBatchRow(const std::string& path,
               << result.stats.search_node_potential_updates_skipped_invalid_state << ','
               << result.stats.search_node_potential_updates_skipped_zero_violation << ','
               << result.stats.search_node_potential_updates_skipped_zero_iteration_limit << ','
+              << result.stats.search_node_potential_updates_skipped_max_depth << ','
+              << result.stats.search_node_potential_updates_skipped_near_leaf << ','
               << result.stats.search_node_potential_updates_skipped_depth_interval << ','
               << result.stats.search_node_potential_updates_skipped_gap_below_minimum << ','
               << result.stats.search_node_potential_updates_skipped_gap_above_maximum << ','
+              << result.stats
+                     .search_node_potential_updates_skipped_gap_change_below_minimum
+              << ','
               << result.stats.potential_updates_improved << ','
               << result.stats.potential_updates_pruned << ','
               << result.stats.potential_updates_rebuilt << ','
               << result.stats.potential_updates_stopped_prunable << ','
               << result.stats.potential_updates_large_gap_tier << ','
+              << result.stats.potential_update_gap_change_shallow_bypasses << ','
               << result.stats.search_node_potential_iterations << ','
               << formatDouble(result.stats.potential_update_seconds) << ','
               << formatDouble(result.stats.potential_update_rebuild_seconds) << ','
@@ -891,15 +944,20 @@ void printUsage(const char* program)
                  "max-degree-min-undecided|max-degree-max-undecided>\n"
               << "  --hk-potential-update <none|subtree-depth|subtree-adaptive>\n"
               << "  --hk-update-depth <n>\n"
+              << "  --hk-update-max-depth <n> (0 = unlimited)\n"
+              << "  --hk-update-skip-last-edges <n> (0 = disabled)\n"
               << "  --hk-update-iterations <n>\n"
               << "  --hk-update-gap-ratio <x>\n"
               << "  --hk-update-min-gap-ratio <x>\n"
+              << "  --hk-update-min-gap-change-ratio <x> (default 0.0001)\n"
+              << "  --hk-update-gap-change-start-depth <n> (default 2)\n"
               << "  --hk-update-large-gap-ratio <x>\n"
               << "  --hk-update-large-gap-iterations <n>\n"
               << "  --hk-update-budget <n> (0 = unlimited)\n"
               << "  --hk-update-probe-updates <n>\n"
               << "  --hk-update-probe-min-gap-ratio <x>\n"
               << "  --hk-update-probe-min-coverage <x in [0,1]>\n"
+              << "  --root-candidate-compaction <off|on> (default on)\n"
               << "  --root-bound-only\n"
               << "  --debug\n"
               << "  --debug-interval <n>\n";
@@ -1253,6 +1311,12 @@ CliOptions parseArgs(int argc, char** argv)
             if (options.potential_update_depth == 0) {
                 throw std::runtime_error("--hk-update-depth must be greater than zero");
             }
+        } else if (arg == "--hk-update-max-depth") {
+            options.potential_update_max_depth =
+                parseSizeOption(require_value(arg), arg);
+        } else if (arg == "--hk-update-skip-last-edges") {
+            options.potential_update_skip_last_edges =
+                parseSizeOption(require_value(arg), arg);
         } else if (arg == "--hk-update-iterations") {
             options.potential_update_iterations = parseSizeOption(require_value(arg), arg);
         } else if (arg == "--hk-update-gap-ratio") {
@@ -1267,6 +1331,16 @@ CliOptions parseArgs(int argc, char** argv)
                 throw std::runtime_error(
                     "--hk-update-min-gap-ratio must be non-negative");
             }
+        } else if (arg == "--hk-update-min-gap-change-ratio") {
+            options.potential_update_min_gap_change_ratio =
+                parseDoubleOption(require_value(arg), arg);
+            if (options.potential_update_min_gap_change_ratio < 0.0) {
+                throw std::runtime_error(
+                    "--hk-update-min-gap-change-ratio must be non-negative");
+            }
+        } else if (arg == "--hk-update-gap-change-start-depth") {
+            options.potential_update_gap_change_start_depth =
+                parseSizeOption(require_value(arg), arg);
         } else if (arg == "--hk-update-large-gap-ratio") {
             options.potential_update_large_gap_ratio =
                 parseDoubleOption(require_value(arg), arg);
@@ -1303,6 +1377,9 @@ CliOptions parseArgs(int argc, char** argv)
                 throw std::runtime_error(
                     "--hk-update-probe-min-coverage must be in [0, 1]");
             }
+        } else if (arg == "--root-candidate-compaction") {
+            options.root_candidate_compaction =
+                parseOnOff(require_value(arg), arg);
         } else if (arg == "--root-bound-only") {
             options.root_bound_only = true;
         } else if (arg == "--debug") {
