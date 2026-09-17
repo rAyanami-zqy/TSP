@@ -1,0 +1,5 @@
+metric,baseline,optimized,speedup,change_percent
+median_sum_instance_wall_seconds,3.602129538,3.232252585,1.114433183445037,-10.268285720934001
+median_sum_potential_update_seconds,2.951865449,2.594079224,1.1379241704300391,-12.120682029094743
+per_instance_wall_geomean_speedup,1,1,1.0366235017670564,-3.532960781289163
+per_instance_potential_geomean_speedup,1,1,1.176841019581938,-15.026755240462242

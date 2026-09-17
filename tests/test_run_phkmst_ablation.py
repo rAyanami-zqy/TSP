@@ -59,7 +59,7 @@ Options:
         self,
     ) -> None:
         default = replace(
-            runner.CONFIGURATION_BY_NAME["PPS32"],
+            runner.CONFIGURATION_BY_NAME["GAPMST-P32-LKH"],
             name="default",
             solver_args=runner.solver_arguments(
                 "--hk-node-ascent polyak --branch-edge-order weight "
@@ -91,7 +91,7 @@ Options:
             debug_interval=5_000_000,
         )
         default = replace(
-            runner.CONFIGURATION_BY_NAME["PPS32"],
+            runner.CONFIGURATION_BY_NAME["GAPMST-P32-LKH"],
             name="default",
             solver_args=runner.solver_arguments(
                 "--hk-node-ascent polyak --branch-edge-order weight "

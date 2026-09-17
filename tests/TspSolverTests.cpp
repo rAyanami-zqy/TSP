@@ -239,6 +239,13 @@ struct BranchBoundSolverTestAccess {
             expect(compact.feasible && full.feasible, "epoch test lost its feasible cycle");
             expect(std::fabs(compact.cost - full.cost) <= 1e-9 && compact.degree == full.degree,
                    "compacted epoch differs from full-edge constrained tree");
+            const auto compact_update = solver.updateNodePotentialBound(
+                compact_node, -std::numeric_limits<double>::infinity(),
+                compact.cost + std::max(1.0, std::fabs(compact.cost)), 1);
+            expect(compact_update.feasible,
+                   "compact-candidate CSR potential evaluator rejected a feasible state");
+            expect(std::fabs(compact_update.bound - compact.cost) <= 1e-8,
+                   "compact-candidate CSR potential bound differs from rebuilt tree");
 #ifndef TSP_DISABLE_EPOCH_COMPACTION
             expect(solver.candidates_sorted_.size() == retained,
                    "epoch retained an inactive unforced edge or lost a forced edge");

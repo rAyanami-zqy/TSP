@@ -1419,29 +1419,70 @@ BranchBoundSolver::updateNodePotentialBound(
     };
 
     // 节点约束在一次势上升期间保持不变。预先收缩所有非根 forced 边，
-    // 后续每轮只需在当前有效边构成的分量图上运行 Prim；这避免了为每组势
-    // 重新收集 O(n^2) 条 Edge 并执行 O(n^2 log n) 的 Kruskal 排序。
-    // forced_components 只收缩非根 forced 边；根边不属于内部 MST。
-    DisjointSet forced_components(n_);
-    // forced_structure_feasible 在势迭代开始前一次性验证强制结构。
-    bool forced_structure_feasible = true;
-    // 根 forced 边最多 2 条，内部 forced 边最多 n-2 条。
-    int forced_root_count = 0;
-    int forced_internal_count = 0;
-    for (const Edge& edge : node.forced_edges) {
-        if (edge.u == 0 || edge.v == 0) {
-            ++forced_root_count;
-            continue;
+    // 后续每轮只需在当前有效边构成的分量图上运行 Prim。PartialSol 已维护
+    // forced DSU；没有 forced 根边时它与内部 MST 的分量完全相同，可直接
+    // 复用。存在 forced 根边时，通用 DSU 会经顶点 0 错把两个内部顶点连在
+    // 一起，因此只在这种少数状态下重建排除根边的局部 DSU。
+    const int forced_internal_count = node.forced_mst_count;
+    const int forced_root_count =
+        forced_internal_count >= 0
+            && static_cast<std::size_t>(forced_internal_count)
+                <= node.forced_edges.size()
+        ? static_cast<int>(node.forced_edges.size()) - forced_internal_count
+        : -1;
+    bool forced_structure_feasible = forced_root_count >= 0
+        && forced_root_count <= 2 && forced_internal_count <= n_ - 2;
+    const bool reuse_node_forced_dsu = forced_structure_feasible
+        && forced_root_count == 0
+        && node.forced_parent.size() == static_cast<std::size_t>(n_)
+        && node.forced_rank.size() == static_cast<std::size_t>(n_);
+    std::vector<int> internal_parent;
+    std::vector<int> internal_rank;
+    if (forced_structure_feasible && !reuse_node_forced_dsu) {
+        internal_parent.resize(static_cast<std::size_t>(n_));
+        std::iota(internal_parent.begin(), internal_parent.end(), 0);
+        internal_rank.assign(static_cast<std::size_t>(n_), 0);
+        auto internal_find = [&](int vertex) {
+            int root = vertex;
+            while (internal_parent[static_cast<std::size_t>(root)] != root) {
+                root = internal_parent[static_cast<std::size_t>(root)];
+            }
+            while (internal_parent[static_cast<std::size_t>(vertex)] != vertex) {
+                const int parent =
+                    internal_parent[static_cast<std::size_t>(vertex)];
+                internal_parent[static_cast<std::size_t>(vertex)] = root;
+                vertex = parent;
+            }
+            return root;
+        };
+        for (const Edge& edge : node.forced_edges) {
+            if (edge.u == 0 || edge.v == 0) continue;
+            int root_u = internal_find(edge.u);
+            int root_v = internal_find(edge.v);
+            if (root_u == root_v) {
+                forced_structure_feasible = false;
+                break;
+            }
+            if (internal_rank[static_cast<std::size_t>(root_u)]
+                < internal_rank[static_cast<std::size_t>(root_v)]) {
+                std::swap(root_u, root_v);
+            }
+            internal_parent[static_cast<std::size_t>(root_v)] = root_u;
+            if (internal_rank[static_cast<std::size_t>(root_u)]
+                == internal_rank[static_cast<std::size_t>(root_v)]) {
+                ++internal_rank[static_cast<std::size_t>(root_u)];
+            }
         }
-        if (!forced_components.unite(edge.u, edge.v)) {
-            forced_structure_feasible = false;
-            break;
+    }
+
+    auto forced_component_root = [&](int vertex) {
+        const std::vector<int>& parent = reuse_node_forced_dsu
+            ? node.forced_parent : internal_parent;
+        while (parent[static_cast<std::size_t>(vertex)] != vertex) {
+            vertex = parent[static_cast<std::size_t>(vertex)];
         }
-        ++forced_internal_count;
-    }
-    if (forced_root_count > 2 || forced_internal_count > n_ - 2) {
-        forced_structure_feasible = false;
-    }
+        return vertex;
+    };
 
     // component_by_vertex[v] 是 v 所属的紧凑 Prim 分量编号；
     // component_by_root 将 DSU 根映射为 0..component_count-1。
@@ -1450,7 +1491,7 @@ BranchBoundSolver::updateNodePotentialBound(
     int component_count = 0;
     if (forced_structure_feasible) {
         for (int vertex = 1; vertex < n_; ++vertex) {
-            const int root = forced_components.find(vertex);
+            const int root = forced_component_root(vertex);
             int& component = component_by_root[static_cast<std::size_t>(root)];
             if (component < 0) component = component_count++;
             component_by_vertex[static_cast<std::size_t>(vertex)] = component;
@@ -1472,45 +1513,75 @@ BranchBoundSolver::updateNodePotentialBound(
     }
 
     struct PrimArc {
-        // 目标顶点；弧的源顶点由它所在的 prim_head 邻接链确定。
+        // 目标顶点；弧的源顶点由 CSR 的 offsets 行确定。
         int to = -1;
-        // 同一源顶点邻接链中的下一条弧下标，-1 表示链尾。
-        int next = -1;
         // 原始距离；每轮使用时再加临时势 pi[u]+pi[v]。
         double original_weight = 0.0;
     };
-    // prim_head[u] 是 u 的第一条有效内部弧下标；每条无向边存为两条弧。
-    std::vector<int> prim_head(static_cast<std::size_t>(n_), -1);
+    // prim_offsets/prim_arcs 是一次势上升期间不可变的临时 CSR；每条无向边
+    // 存为两条连续弧。直接从当前 compact candidate epoch 过滤，避免再次
+    // 扫描完整的 O(n^2) 距离矩阵。
+    std::vector<std::size_t> prim_offsets(
+        static_cast<std::size_t>(n_) + 1, 0);
     std::vector<PrimArc> prim_arcs;
-    prim_arcs.reserve(
-        static_cast<std::size_t>(n_ - 1)
-        * static_cast<std::size_t>(n_ - 2));
     if (forced_structure_feasible) {
-        // active/forced/forbidden 状态在本次有限轮上升中不变，只过滤一次。
-        // 双向邻接使每轮 Prim 仅访问当前节点仍有效的边，而不是完整距离矩阵。
-        for (int u = 1; u < n_; ++u) {
-            for (int v = u + 1; v < n_; ++v) {
-                if (!isFinite(dist_[u][v])) continue;
-                if (component_by_vertex[static_cast<std::size_t>(u)]
-                    == component_by_vertex[static_cast<std::size_t>(v)]) {
-                    continue;
-                }
-                const std::size_t id = edgeId(u, v);
-                if (node.forced[id] || node.forbidden[id]
-                    || !isCandidateActive(node, id)) {
-                    continue;
-                }
-                prim_arcs.push_back(
-                    PrimArc{v, prim_head[static_cast<std::size_t>(u)],
-                            dist_[u][v]});
-                prim_head[static_cast<std::size_t>(u)] =
-                    static_cast<int>(prim_arcs.size() - 1);
-                prim_arcs.push_back(
-                    PrimArc{u, prim_head[static_cast<std::size_t>(v)],
-                            dist_[u][v]});
-                prim_head[static_cast<std::size_t>(v)] =
-                    static_cast<int>(prim_arcs.size() - 1);
+        struct PrimInputEdge {
+            int u = -1;
+            int v = -1;
+            double original_weight = 0.0;
+        };
+        std::vector<PrimInputEdge> input_edges;
+        const bool use_compact_candidates = node.candidate_bit_count != 0
+            && node.candidate_bit_count == candidates_sorted_.size()
+            && node.candidate_bits.size() == candidate_word_count_;
+        input_edges.reserve(use_compact_candidates
+            ? candidates_sorted_.size()
+            : static_cast<std::size_t>(n_ - 1)
+                * static_cast<std::size_t>(n_ - 2) / 2);
+
+        auto append_if_eligible = [&](int u, int v) {
+            if (u == 0 || v == 0 || !isFinite(dist_[u][v])) return;
+            if (component_by_vertex[static_cast<std::size_t>(u)]
+                == component_by_vertex[static_cast<std::size_t>(v)]) {
+                return;
             }
+            const std::size_t id = edgeId(u, v);
+            if (node.forced[id] || node.forbidden[id]
+                || !isCandidateActive(node, id)) {
+                return;
+            }
+            input_edges.push_back(PrimInputEdge{u, v, dist_[u][v]});
+            ++prim_offsets[static_cast<std::size_t>(u) + 1];
+            ++prim_offsets[static_cast<std::size_t>(v) + 1];
+        };
+
+        if (use_compact_candidates) {
+            for (std::size_t index = nextActiveCandidate(
+                     node, 0, candidates_sorted_.size());
+                 index < candidates_sorted_.size();
+                 index = nextActiveCandidate(
+                     node, index + 1, candidates_sorted_.size())) {
+                const Edge& edge = candidates_sorted_[index];
+                append_if_eligible(edge.u, edge.v);
+            }
+        } else {
+            // 局部单元测试可只提供 edgeId candidate_mask；保留完整图兼容路径。
+            for (int u = 1; u < n_; ++u) {
+                for (int v = u + 1; v < n_; ++v) {
+                    append_if_eligible(u, v);
+                }
+            }
+        }
+
+        std::partial_sum(
+            prim_offsets.begin(), prim_offsets.end(), prim_offsets.begin());
+        prim_arcs.resize(input_edges.size() * 2);
+        std::vector<std::size_t> next_offset = prim_offsets;
+        for (const PrimInputEdge& edge : input_edges) {
+            prim_arcs[next_offset[static_cast<std::size_t>(edge.u)]++] =
+                PrimArc{edge.v, edge.original_weight};
+            prim_arcs[next_offset[static_cast<std::size_t>(edge.v)]++] =
+                PrimArc{edge.u, edge.original_weight};
         }
     }
 
@@ -1580,12 +1651,13 @@ BranchBoundSolver::updateNodePotentialBound(
                      static_cast<std::size_t>(selected_component)];
                  u >= 0;
                  u = next_vertex_in_component[static_cast<std::size_t>(u)]) {
-                for (int arc_index = prim_head[static_cast<std::size_t>(u)];
-                     arc_index >= 0;
-                     arc_index = prim_arcs[
-                         static_cast<std::size_t>(arc_index)].next) {
-                    const PrimArc& arc =
-                        prim_arcs[static_cast<std::size_t>(arc_index)];
+                const std::size_t arc_begin =
+                    prim_offsets[static_cast<std::size_t>(u)];
+                const std::size_t arc_end =
+                    prim_offsets[static_cast<std::size_t>(u) + 1];
+                for (std::size_t arc_index = arc_begin;
+                     arc_index < arc_end; ++arc_index) {
+                    const PrimArc& arc = prim_arcs[arc_index];
                     const int v = arc.to;
                     const int target_component =
                         component_by_vertex[static_cast<std::size_t>(v)];
