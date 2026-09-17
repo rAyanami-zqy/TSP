@@ -540,6 +540,25 @@ Polyak；`--hk-node-ascent` 还支持 `helsgaun`、`polyak-smoothed` 和
   --hk-update-depth 2 --hk-update-iterations 0 \
   --hk-update-large-gap-ratio 0.02 \
   --hk-update-large-gap-iterations 16 input.tsp
+
+# 实验性浅层档：depth<=2 用 32 轮，其余节点仍用基础 16 轮
+./build/tsp_bb --hk-potential-update subtree-adaptive \
+  --hk-update-depth 2 --hk-update-iterations 16 \
+  --hk-update-shallow-depth 2 \
+  --hk-update-shallow-iterations 32 input.tsp
+
+# 只记录 depth<=8 的势上升汇总；不改变实际更新范围或预算
+./build/tsp_bb --hk-potential-update subtree-adaptive \
+  --hk-update-depth 2 --hk-update-iterations 16 \
+  --hk-update-trace /tmp/node-ascent.csv \
+  --hk-update-trace-max-depth 8 input.tsp
+
+# 实验性浅层慢热延长：默认 32 轮；depth<=2 且 16 轮仍无改善、
+# 到 32 轮才抬升时，继续到 64 轮
+./build/tsp_bb --hk-potential-update subtree-adaptive \
+  --hk-update-depth 2 --hk-update-iterations 32 \
+  --hk-update-slow-warm-depth 2 \
+  --hk-update-slow-warm-iterations 64 input.tsp
 ```
 
 - `none`：默认值，不在搜索节点更新势；
@@ -587,6 +606,16 @@ Polyak；`--hk-node-ascent` 还支持 `helsgaun`、`polyak-smoothed` 和
 - `--hk-update-large-gap-ratio` 与 `--hk-update-large-gap-iterations` 必须成对
   使用。命中大 gap 档时，后者替换基础 `--hk-update-iterations`；基础轮数
   可为 0，从而让较小 gap 完全不更新；
+- `--hk-update-shallow-depth` 与 `--hk-update-shallow-iterations` 必须成对
+  使用，为不超过指定绝对 DFS 深度的更新设置独立轮数。若同一节点也命中
+  大 gap 档，大 gap 档优先。该开关默认关闭；当前三实例浅层扫描中统一
+  16 轮比 `depth<=2:32 / 其余:16` 更稳，因此不建议直接设为默认；
+- `--hk-update-slow-warm-depth` 与 `--hk-update-slow-warm-iterations` 必须
+  成对使用，且延长轮数必须大于 `--hk-update-iterations`。命中深度的更新
+  可以把上限抬到延长轮数，但只有第 16 轮仍无改善、且到基础上限已经抬升
+  时才真正继续；16 轮已有改善、或到基础上限仍无改善，都停在基础轮数。
+  该开关默认关闭。15 个分歧实例上 `depth=2` 比 `depth=4` 更稳：能修掉
+  `eil76` 的有害延长，并保住 `gr120`/`rd100`/`kroA100` 的收益。
 - `--hk-update-budget` 是每轮精确 DFS 的最大更新尝试次数；设为 `0` 时
   不限制更新次数，同时关闭 diversified-LK 初始探测轮的 1000 次保护。
   正数预算下，探测轮自动封顶 1000，重启或探测结束后使用完整预算。
@@ -598,6 +627,13 @@ Polyak；`--hk-node-ascent` 还支持 `helsgaun`、`polyak-smoothed` 和
   `(probe_best_LB-original_LB)/(UB-original_LB)`；低于
   `--hk-update-probe-min-coverage` 时丢弃 probe 证书和势，否则在同一次上升中
   继续。probe 无论是否接受都算一次更新尝试。
+- `--hk-update-trace` 仅支持单实例，逐次记录深度、epoch 深度、迭代上限、
+  实际评估数、初末相对 gap、`gap_closed_ratio`，以及第 1/2/4/8/16/32/64
+  轮覆盖率和 `rejected/pruned/installed` 结果。`gap_closed_ratio` 定义为
+  `(best_LB-initial_LB)/(UB-initial_LB)`；`--hk-update-trace-max-depth` 只过滤
+  CSV 输出，不改变求解器实际执行的势更新。不要把 `--hk-update-max-depth`
+  当成加速开关：本轮 `n≈96–120` 上把更新限制在 depth<=8 会把搜索树放大
+  一到三个数量级。
 
 批处理 CSV 和单实例输出还会报告成功安装的 subtree epoch 数及重建时间。
 证书模式实验见
@@ -605,7 +641,9 @@ Polyak；`--hk-node-ascent` 还支持 `helsgaun`、`polyak-smoothed` 和
 持久子树实验见
 [`docs/HKMST-persistent-potential-epoch-experiment-2026-08-06.md`](docs/HKMST-persistent-potential-epoch-experiment-2026-08-06.md)，
 节点 Polyak/Helsgaun 对照见
-[`docs/PHKMST-node-potential-helsgaun-experiment-2026-09-01.md`](docs/PHKMST-node-potential-helsgaun-experiment-2026-09-01.md)。
+[`docs/PHKMST-node-potential-helsgaun-experiment-2026-09-01.md`](docs/PHKMST-node-potential-helsgaun-experiment-2026-09-01.md)，
+浅层预算与 gap 覆盖率扫描见
+[`docs/GAPMST-shallow-node-ascent-budget-experiment-2026-09-17.md`](docs/GAPMST-shallow-node-ascent-budget-experiment-2026-09-17.md)。
 
 从标准输入读取：
 
@@ -653,6 +691,8 @@ search_node_potential_updates_skipped_gap_change_below_minimum,
 potential_updates_improved,potential_updates_pruned,
 potential_updates_rebuilt,potential_updates_stopped_prunable,
 potential_updates_large_gap_tier,
+potential_updates_shallow_depth_tier,
+potential_updates_slow_warm_extended,
 potential_update_gap_change_shallow_bypasses,
 search_node_potential_iterations,potential_update_seconds,
 potential_update_rebuild_seconds,potential_update_total_gain,

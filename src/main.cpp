@@ -76,6 +76,9 @@ struct CliOptions {
     double root_ascent_dynamic_max_current_weight = 0.9;
     // 可选逐轮 CSV。只允许与 root-bound-only 的单实例模式一起使用。
     std::string root_ascent_trace_path;
+    // 可选的搜索节点势上升汇总 CSV；深度上限仅限制记录。
+    std::string node_ascent_trace_path;
+    std::size_t node_ascent_trace_max_depth = 0;
     // 搜索节点一次势更新内部的步长调度；触发和 epoch 语义由下方策略控制。
     tsp::NodeAscentStrategy node_ascent = tsp::NodeAscentStrategy::Polyak;
     // 节点改良 Polyak 的固定/正交基准权重、余弦缩放和动态上下限。
@@ -105,6 +108,12 @@ struct CliOptions {
     // 可选的大 gap 分档起点和迭代上限；iterations=0 表示关闭分档。
     double potential_update_large_gap_ratio = 0.0;
     std::size_t potential_update_large_gap_iterations = 0;
+    // 可选的绝对 DFS 浅层迭代档；两项均为 0 时关闭。
+    std::size_t potential_update_shallow_depth = 0;
+    std::size_t potential_update_shallow_iterations = 0;
+    // 可选浅层慢热延长；两项均为 0 时关闭。
+    std::size_t potential_update_slow_warm_depth = 0;
+    std::size_t potential_update_slow_warm_iterations = 0;
     // 一轮精确搜索允许尝试的节点势更新次数；根重启后重新计数，0 不限。
     std::size_t potential_update_budget = 1000;
     // 两阶段筛选默认关闭；正数表示完整上升前先观察多少次实际势更新。
@@ -446,6 +455,12 @@ RunResult solveInput(std::istream& input,
     solver.setPotentialUpdateLargeGapTier(
         options.potential_update_large_gap_ratio,
         options.potential_update_large_gap_iterations);
+    solver.setPotentialUpdateShallowDepthTier(
+        options.potential_update_shallow_depth,
+        options.potential_update_shallow_iterations);
+    solver.setPotentialUpdateSlowWarmExtend(
+        options.potential_update_slow_warm_depth,
+        options.potential_update_slow_warm_iterations);
     solver.setPotentialUpdateGapChangeThreshold(
         options.potential_update_min_gap_change_ratio);
     solver.setPotentialUpdateGapChangeStartDepth(
@@ -457,6 +472,7 @@ RunResult solveInput(std::istream& input,
     solver.setRootCandidateCompaction(options.root_candidate_compaction);
     solver.setRootBoundOnly(options.root_bound_only);
     std::ofstream root_ascent_trace;
+    std::ofstream node_ascent_trace;
     if (!options.root_ascent_trace_path.empty()) {
         root_ascent_trace.open(options.root_ascent_trace_path);
         if (!root_ascent_trace) {
@@ -468,6 +484,29 @@ RunResult solveInput(std::istream& input,
             << "strategy,iteration,phase,phase_iteration,"
                "lower_bound,best_lower_bound\n";
         solver.setRootAscentTraceOutput(root_ascent_trace);
+    }
+    if (!options.node_ascent_trace_path.empty()) {
+        node_ascent_trace.open(options.node_ascent_trace_path);
+        if (!node_ascent_trace) {
+            throw std::runtime_error(
+                "failed to open node ascent trace: "
+                + options.node_ascent_trace_path);
+        }
+        node_ascent_trace
+            << "attempt,depth,epoch_depth,depth_since_epoch,forced_edges,"
+               "iteration_limit,iterations,ascent_rounds,initial_bound,best_bound,"
+               "upper_bound,initial_relative_gap,final_relative_gap,"
+               "gap_closed_ratio,improved,prunable,stopped_prunable,"
+               "probe_started,probe_continued,probe_rejected,large_gap_tier,"
+               "shallow_depth_tier,slow_warm_extended,gap_closed_at_1,gap_closed_at_2,"
+               "gap_closed_at_4,gap_closed_at_8,gap_closed_at_16,"
+               "gap_closed_at_32,gap_closed_at_64,outcome,"
+               "epoch_subtree_created,epoch_subtree_expanded,"
+               "epoch_subtree_pruned,epoch_descendant_updates,"
+               "epoch_descendant_rebuilds,upper_bound_after_subtree,"
+               "incumbent_gain_in_subtree\n";
+        solver.setNodeAscentTraceOutput(
+            node_ascent_trace, options.node_ascent_trace_max_depth);
     }
     if (options.debug) {
         solver.setDebugOutput(std::cerr, options.debug_interval);
@@ -484,6 +523,14 @@ RunResult solveInput(std::istream& input,
             throw std::runtime_error(
                 "failed to write root ascent trace: "
                 + options.root_ascent_trace_path);
+        }
+    }
+    if (node_ascent_trace.is_open()) {
+        node_ascent_trace.flush();
+        if (!node_ascent_trace) {
+            throw std::runtime_error(
+                "failed to write node ascent trace: "
+                + options.node_ascent_trace_path);
         }
     }
     output.instance_wall_seconds = std::chrono::duration<double>(
@@ -623,6 +670,10 @@ void printHumanResult(const RunResult& run)
               << result.stats.potential_updates_stopped_prunable << '\n';
     std::cout << "Potential updates large-gap tier: "
               << result.stats.potential_updates_large_gap_tier << '\n';
+    std::cout << "Potential updates shallow-depth tier: "
+              << result.stats.potential_updates_shallow_depth_tier << '\n';
+    std::cout << "Potential updates slow-warm extended: "
+              << result.stats.potential_updates_slow_warm_extended << '\n';
     std::cout << "Potential update gap-change shallow bypasses: "
               << result.stats.potential_update_gap_change_shallow_bypasses << '\n';
     std::cout << "Potential update probes started: "
@@ -729,6 +780,8 @@ void printBatchHeader()
         << "potential_updates_pruned,potential_updates_rebuilt,"
         << "potential_updates_stopped_prunable,"
         << "potential_updates_large_gap_tier,"
+        << "potential_updates_shallow_depth_tier,"
+        << "potential_updates_slow_warm_extended,"
         << "potential_update_gap_change_shallow_bypasses,"
         << "search_node_potential_iterations,potential_update_seconds,"
         << "potential_update_rebuild_seconds,potential_update_total_gain,"
@@ -822,6 +875,8 @@ void printBatchRow(const std::string& path,
               << result.stats.potential_updates_rebuilt << ','
               << result.stats.potential_updates_stopped_prunable << ','
               << result.stats.potential_updates_large_gap_tier << ','
+              << result.stats.potential_updates_shallow_depth_tier << ','
+              << result.stats.potential_updates_slow_warm_extended << ','
               << result.stats.potential_update_gap_change_shallow_bypasses << ','
               << result.stats.search_node_potential_iterations << ','
               << formatDouble(result.stats.potential_update_seconds) << ','
@@ -960,10 +1015,16 @@ void printUsage(const char* program)
               << "  --hk-update-gap-change-start-depth <n> (default 2)\n"
               << "  --hk-update-large-gap-ratio <x>\n"
               << "  --hk-update-large-gap-iterations <n>\n"
+              << "  --hk-update-shallow-depth <n>\n"
+              << "  --hk-update-shallow-iterations <n>\n"
+              << "  --hk-update-slow-warm-depth <n>\n"
+              << "  --hk-update-slow-warm-iterations <n>\n"
               << "  --hk-update-budget <n> (0 = unlimited)\n"
               << "  --hk-update-probe-updates <n>\n"
               << "  --hk-update-probe-min-gap-ratio <x>\n"
               << "  --hk-update-probe-min-coverage <x in [0,1]>\n"
+              << "  --hk-update-trace <csv-path> (single instance)\n"
+              << "  --hk-update-trace-max-depth <n> (0 = unlimited)\n"
               << "  --root-candidate-compaction <off|on> (default on)\n"
               << "  --root-bound-only\n"
               << "  --debug\n"
@@ -1176,6 +1237,10 @@ CliOptions parseArgs(int argc, char** argv)
     CliOptions options;
     bool large_gap_ratio_seen = false;
     bool large_gap_iterations_seen = false;
+    bool shallow_depth_seen = false;
+    bool shallow_iterations_seen = false;
+    bool slow_warm_depth_seen = false;
+    bool slow_warm_iterations_seen = false;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         auto require_value = [&](const std::string& option_name) -> std::string {
@@ -1352,6 +1417,38 @@ CliOptions parseArgs(int argc, char** argv)
                     "--hk-update-large-gap-iterations must be greater than zero");
             }
             large_gap_iterations_seen = true;
+        } else if (arg == "--hk-update-shallow-depth") {
+            options.potential_update_shallow_depth =
+                parseSizeOption(require_value(arg), arg);
+            if (options.potential_update_shallow_depth == 0) {
+                throw std::runtime_error(
+                    "--hk-update-shallow-depth must be greater than zero");
+            }
+            shallow_depth_seen = true;
+        } else if (arg == "--hk-update-shallow-iterations") {
+            options.potential_update_shallow_iterations =
+                parseSizeOption(require_value(arg), arg);
+            if (options.potential_update_shallow_iterations == 0) {
+                throw std::runtime_error(
+                    "--hk-update-shallow-iterations must be greater than zero");
+            }
+            shallow_iterations_seen = true;
+        } else if (arg == "--hk-update-slow-warm-depth") {
+            options.potential_update_slow_warm_depth =
+                parseSizeOption(require_value(arg), arg);
+            if (options.potential_update_slow_warm_depth == 0) {
+                throw std::runtime_error(
+                    "--hk-update-slow-warm-depth must be greater than zero");
+            }
+            slow_warm_depth_seen = true;
+        } else if (arg == "--hk-update-slow-warm-iterations") {
+            options.potential_update_slow_warm_iterations =
+                parseSizeOption(require_value(arg), arg);
+            if (options.potential_update_slow_warm_iterations == 0) {
+                throw std::runtime_error(
+                    "--hk-update-slow-warm-iterations must be greater than zero");
+            }
+            slow_warm_iterations_seen = true;
         } else if (arg == "--hk-update-budget") {
             options.potential_update_budget = parseSizeOption(require_value(arg), arg);
         } else if (arg == "--hk-update-probe-updates") {
@@ -1372,6 +1469,11 @@ CliOptions parseArgs(int argc, char** argv)
                 throw std::runtime_error(
                     "--hk-update-probe-min-coverage must be in [0, 1]");
             }
+        } else if (arg == "--hk-update-trace") {
+            options.node_ascent_trace_path = require_value(arg);
+        } else if (arg == "--hk-update-trace-max-depth") {
+            options.node_ascent_trace_max_depth =
+                parseSizeOption(require_value(arg), arg);
         } else if (arg == "--root-candidate-compaction") {
             options.root_candidate_compaction =
                 parseOnOff(require_value(arg), arg);
@@ -1396,6 +1498,23 @@ CliOptions parseArgs(int argc, char** argv)
         throw std::runtime_error(
             "--hk-update-large-gap-ratio and "
             "--hk-update-large-gap-iterations must be used together");
+    }
+    if (shallow_depth_seen != shallow_iterations_seen) {
+        throw std::runtime_error(
+            "--hk-update-shallow-depth and "
+            "--hk-update-shallow-iterations must be used together");
+    }
+    if (slow_warm_depth_seen != slow_warm_iterations_seen) {
+        throw std::runtime_error(
+            "--hk-update-slow-warm-depth and "
+            "--hk-update-slow-warm-iterations must be used together");
+    }
+    if (slow_warm_iterations_seen
+        && options.potential_update_slow_warm_iterations
+            <= options.potential_update_iterations) {
+        throw std::runtime_error(
+            "--hk-update-slow-warm-iterations must exceed "
+            "--hk-update-iterations");
     }
     if (!options.initial_tour_path.empty() && !options.batch_path.empty()) {
         throw std::runtime_error("--initial-tour only supports a single instance");
@@ -1451,6 +1570,10 @@ CliOptions parseArgs(int argc, char** argv)
     if (!options.root_ascent_trace_path.empty() && !options.batch_path.empty()) {
         throw std::runtime_error(
             "--root-ascent-trace only supports a single instance");
+    }
+    if (!options.node_ascent_trace_path.empty() && !options.batch_path.empty()) {
+        throw std::runtime_error(
+            "--hk-update-trace only supports a single instance");
     }
     return options;
 }

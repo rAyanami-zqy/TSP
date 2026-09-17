@@ -1809,6 +1809,45 @@ void testSearchNodePotentialUpdates()
         }
     }
 
+    // 基础轮数为 0 时，浅层档也能独立启用节点势上升。
+    {
+        // 测试实例的 DFS 深度远小于 100，因此每次触发都必须归入浅层档。
+        tsp::BranchBoundSolver solver(matrix);
+        solver.setPotentialUpdateOptions(
+            tsp::PotentialUpdateStrategy::SubtreeAdaptive,
+            1, 0, 100);
+        solver.setPotentialUpdateShallowDepthTier(100, 8);
+        const tsp::SolveResult result = solver.solve();
+        expectCost(result.cost, 699.0,
+                   "shallow-depth iteration tier changed the exact optimum");
+        expectPotentialUpdateDecisionAccounting(
+            result.stats, "shallow-depth iteration tier");
+        if (result.stats.search_node_potential_updates_triggered == 0
+            || result.stats.potential_updates_shallow_depth_tier
+                != result.stats.search_node_potential_updates_triggered) {
+            throw std::runtime_error(
+                "shallow-depth iteration tier did not classify every update");
+        }
+    }
+
+    // 浅层慢热延长默认关闭；启用后不得改变本例最优值。
+    {
+        tsp::BranchBoundSolver solver(matrix);
+        solver.setPotentialUpdateOptions(
+            tsp::PotentialUpdateStrategy::SubtreeAdaptive,
+            1, 8, 100);
+        solver.setPotentialUpdateSlowWarmExtend(4, 16);
+        const tsp::SolveResult result = solver.solve();
+        expectCost(result.cost, 699.0,
+                   "slow-warm extend changed the exact optimum");
+        expectPotentialUpdateDecisionAccounting(
+            result.stats, "slow-warm extend");
+        if (result.stats.search_node_potential_updates_triggered == 0) {
+            throw std::runtime_error(
+                "slow-warm extend regression did not trigger an update");
+        }
+    }
+
     // epoch-relative gap-change 门槛衡量自最近一次成功势上升以来的下界
     // 增量。100% 对本正权实例不可达，应阻止全部更新并保持精确性。
     {

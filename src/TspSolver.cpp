@@ -350,6 +350,19 @@ void BranchBoundSolver::disableRootAscentTraceOutput()
     root_ascent_trace_output_ = nullptr;
 }
 
+void BranchBoundSolver::setNodeAscentTraceOutput(
+    std::ostream& output, std::size_t max_depth)
+{
+    node_ascent_trace_output_ = &output;
+    node_ascent_trace_max_depth_ = max_depth;
+}
+
+void BranchBoundSolver::disableNodeAscentTraceOutput()
+{
+    node_ascent_trace_output_ = nullptr;
+    node_ascent_trace_max_depth_ = 0;
+}
+
 void BranchBoundSolver::setNodeAscentStrategy(NodeAscentStrategy strategy)
 {
     node_ascent_strategy_ = strategy;
@@ -516,6 +529,28 @@ void BranchBoundSolver::setPotentialUpdateLargeGapTier(
     }
     potential_update_large_gap_ratio_ = large_gap_ratio;
     potential_update_large_gap_iterations_ = large_gap_iterations;
+}
+
+void BranchBoundSolver::setPotentialUpdateShallowDepthTier(
+    std::size_t depth, std::size_t iterations)
+{
+    if ((depth == 0) != (iterations == 0)) {
+        throw std::invalid_argument(
+            "potential update shallow depth and iterations must both be zero or positive");
+    }
+    potential_update_shallow_depth_ = depth;
+    potential_update_shallow_iterations_ = iterations;
+}
+
+void BranchBoundSolver::setPotentialUpdateSlowWarmExtend(
+    std::size_t depth, std::size_t iterations)
+{
+    if ((depth == 0) != (iterations == 0)) {
+        throw std::invalid_argument(
+            "potential update slow-warm depth and iterations must both be zero or positive");
+    }
+    potential_update_slow_warm_depth_ = depth;
+    potential_update_slow_warm_extend_iterations_ = iterations;
 }
 
 void BranchBoundSolver::setPotentialUpdateGapChangeThreshold(
@@ -1280,12 +1315,32 @@ bool BranchBoundSolver::usesLargeGapPotentialUpdateTier(
     return relative_gap >= potential_update_large_gap_ratio_;
 }
 
-std::size_t BranchBoundSolver::potentialUpdateIterationLimit(
-    double bound, double upper_bound) const
+std::size_t BranchBoundSolver::basePotentialUpdateIterationLimit(
+    int depth, double bound, double upper_bound) const
 {
-    return usesLargeGapPotentialUpdateTier(bound, upper_bound)
-        ? potential_update_large_gap_iterations_
-        : potential_update_iterations_;
+    if (usesLargeGapPotentialUpdateTier(bound, upper_bound)) {
+        return potential_update_large_gap_iterations_;
+    }
+    if (depth > 0 && potential_update_shallow_iterations_ != 0
+        && static_cast<std::size_t>(depth)
+            <= potential_update_shallow_depth_) {
+        return potential_update_shallow_iterations_;
+    }
+    return potential_update_iterations_;
+}
+
+std::size_t BranchBoundSolver::potentialUpdateIterationLimit(
+    int depth, double bound, double upper_bound) const
+{
+    const std::size_t base =
+        basePotentialUpdateIterationLimit(depth, bound, upper_bound);
+    if (depth > 0 && potential_update_slow_warm_extend_iterations_ != 0
+        && static_cast<std::size_t>(depth)
+            <= potential_update_slow_warm_depth_
+        && potential_update_slow_warm_extend_iterations_ > base) {
+        return potential_update_slow_warm_extend_iterations_;
+    }
+    return base;
 }
 
 BranchBoundSolver::PotentialUpdateDecision
@@ -1347,7 +1402,7 @@ BranchBoundSolver::classifyPotentialUpdate(
         return PotentialUpdateDecision::ZeroViolation;
     }
 
-    if (potentialUpdateIterationLimit(bound, upper_bound) == 0) {
+    if (potentialUpdateIterationLimit(depth, bound, upper_bound) == 0) {
         return PotentialUpdateDecision::ZeroIterationLimit;
     }
 
@@ -1388,7 +1443,8 @@ BranchBoundSolver::classifyPotentialUpdate(
 BranchBoundSolver::NodePotentialUpdateResult
 BranchBoundSolver::updateNodePotentialBound(
     const PartialSol& node, double current_bound,
-    double upper_bound, std::size_t max_iterations) const
+    double upper_bound, std::size_t max_iterations,
+    int depth) const
 {
     struct Evaluation {
         // 单组临时势在当前 forced/forbidden 约束下得到的 1-tree 证书。
@@ -1795,6 +1851,51 @@ BranchBoundSolver::updateNodePotentialBound(
     NodePotentialUpdateResult result;
     result.feasible = true;
     result.bound = current_bound;
+    result.milestone_bounds.fill(current_bound);
+    constexpr std::array<std::size_t, 7> milestone_rounds{
+        1, 2, 4, 8, 16, 32, 64};
+    auto record_milestone = [&](std::size_t round) {
+        for (std::size_t index = 0; index < milestone_rounds.size(); ++index) {
+            if (round != milestone_rounds[index]) continue;
+            result.milestone_bounds[index] = result.bound;
+            result.milestone_reached[index] = 1;
+            break;
+        }
+    };
+    const std::size_t base_iterations = depth > 0
+        ? basePotentialUpdateIterationLimit(depth, current_bound, upper_bound)
+        : max_iterations;
+    const std::size_t observe_rounds =
+        base_iterations > 16 ? 16 : 0;
+    bool had_gain_by_observe = false;
+    auto has_strict_gain = [&] {
+        const double gain_tolerance = scaledRoundoffTolerance(
+            result.bound, current_bound, static_cast<std::size_t>(n_));
+        return result.bound > current_bound + gain_tolerance;
+    };
+    // 浅层慢热：基础上限之后只有“16 轮仍无改善、此刻已经抬升”才继续。
+    auto stop_after_ascent_round = [&](std::size_t round) {
+        if (round == observe_rounds && observe_rounds != 0) {
+            had_gain_by_observe = has_strict_gain();
+        }
+        if (max_iterations <= base_iterations || round != base_iterations) {
+            return false;
+        }
+        if (depth <= 0
+            || potential_update_slow_warm_extend_iterations_ == 0
+            || static_cast<std::size_t>(depth)
+                > potential_update_slow_warm_depth_) {
+            return true;
+        }
+        if (observe_rounds != 0 && had_gain_by_observe) {
+            return true;
+        }
+        if (!has_strict_gain()) {
+            return true;
+        }
+        result.slow_warm_extended = true;
+        return false;
+    };
     std::vector<double> potentials = vertex_potential_;
     if (potentials.size() != static_cast<std::size_t>(n_)) {
         potentials.assign(static_cast<std::size_t>(n_), 0.0);
@@ -1902,6 +2003,7 @@ BranchBoundSolver::updateNodePotentialBound(
              iteration < max_iterations && period > 0
                  && step > 0.0 && isFinite(step);
              ++iteration) {
+            ++result.ascent_rounds;
             Evaluation evaluation;
             if (reuse_guarded_initial_evaluation) {
                 evaluation = std::move(guarded_initial_evaluation);
@@ -1923,6 +2025,7 @@ BranchBoundSolver::updateNodePotentialBound(
                 result.bound = evaluation.bound;
                 result.potentials = potentials;
             }
+            record_milestone(result.ascent_rounds);
 
             std::vector<double> subgradient(
                 static_cast<std::size_t>(n_), 0.0);
@@ -1943,6 +2046,7 @@ BranchBoundSolver::updateNodePotentialBound(
                 break;
             }
             if (reject_probe_if_unpromising(iteration + 1)) break;
+            if (stop_after_ascent_round(result.ascent_rounds)) break;
 
             // 论文式首 period 探索：只要本轮下界继续增长就将步长翻倍；
             // 第一次不增长后，本 period 的剩余迭代保持当前步长。
@@ -2007,6 +2111,7 @@ BranchBoundSolver::updateNodePotentialBound(
     double step_scale = 2.0;
     std::size_t no_improvement = 0;
     for (std::size_t iteration = 0; iteration < max_iterations; ++iteration) {
+        ++result.ascent_rounds;
         Evaluation evaluation;
         if (reuse_guarded_initial_evaluation) {
             evaluation = std::move(guarded_initial_evaluation);
@@ -2030,6 +2135,7 @@ BranchBoundSolver::updateNodePotentialBound(
         } else {
             ++no_improvement;
         }
+        record_milestone(result.ascent_rounds);
 
         double subgradient_norm = 0.0;
         for (int vertex = 0; vertex < n_; ++vertex) {
@@ -2053,6 +2159,7 @@ BranchBoundSolver::updateNodePotentialBound(
             break;
         }
         if (reject_probe_if_unpromising(iteration + 1)) break;
+        if (stop_after_ascent_round(result.ascent_rounds)) break;
 
         // gap 使用当前轮证书而非历史最优 result.bound；step 是标准 Polyak
         // 步长 scale*(UB-LB)/||g||²。
@@ -2253,17 +2360,34 @@ bool BranchBoundSolver::searchSubtreeWithUpdatedPotentials(
 {
     // update_started_at 只统计次梯度上升；后面的 epoch 重建单独计时。
     const auto update_started_at = std::chrono::steady_clock::now();
+    const int parent_epoch_depth = current_potential_epoch_depth_;
     ++result_.stats.search_node_potential_updates_triggered;
     ++potential_updates_in_round_;
-    if (usesLargeGapPotentialUpdateTier(current_tree.cost, best_cost_)) {
+    const double upper_bound_at_update = best_cost_;
+    const bool uses_large_gap_tier = usesLargeGapPotentialUpdateTier(
+        current_tree.cost, upper_bound_at_update);
+    if (uses_large_gap_tier) {
         ++result_.stats.potential_updates_large_gap_tier;
     }
+    const bool uses_shallow_depth_tier =
+        !uses_large_gap_tier
+        && potential_update_shallow_iterations_ != 0
+        && static_cast<std::size_t>(depth)
+            <= potential_update_shallow_depth_;
+    if (uses_shallow_depth_tier) {
+        ++result_.stats.potential_updates_shallow_depth_tier;
+    }
+    const std::size_t iteration_limit = potentialUpdateIterationLimit(
+        depth, current_tree.cost, upper_bound_at_update);
     const NodePotentialUpdateResult update = updateNodePotentialBound(
-        node, current_tree.cost, best_cost_,
-        potentialUpdateIterationLimit(current_tree.cost, best_cost_));
+        node, current_tree.cost, upper_bound_at_update,
+        iteration_limit, depth);
     result_.stats.search_node_potential_iterations += update.iterations;
     if (update.stopped_prunable) {
         ++result_.stats.potential_updates_stopped_prunable;
+    }
+    if (update.slow_warm_extended) {
+        ++result_.stats.potential_updates_slow_warm_extended;
     }
     if (update.probe_started) {
         ++result_.stats.potential_update_probes_started;
@@ -2286,12 +2410,91 @@ bool BranchBoundSolver::searchSubtreeWithUpdatedPotentials(
     result_.stats.potential_update_seconds += std::chrono::duration<double>(
         std::chrono::steady_clock::now() - update_started_at).count();
 
+    const bool trace_update = node_ascent_trace_output_ != nullptr
+        && (node_ascent_trace_max_depth_ == 0
+            || static_cast<std::size_t>(depth)
+                <= node_ascent_trace_max_depth_);
+    auto write_trace = [&](const char* outcome,
+                           std::size_t epoch_subtree_created,
+                           std::size_t epoch_subtree_expanded,
+                           std::size_t epoch_subtree_pruned,
+                           std::size_t epoch_descendant_updates,
+                           std::size_t epoch_descendant_rebuilds,
+                           double upper_bound_after) {
+        if (!trace_update) return;
+        const double scale = std::max(
+            1.0, std::fabs(upper_bound_at_update));
+        const double initial_gap = std::max(
+            0.0, upper_bound_at_update - current_tree.cost);
+        const double final_gap = update.feasible && isFinite(update.bound)
+            ? std::max(0.0, upper_bound_at_update - update.bound)
+            : initial_gap;
+        const double gap_closed_ratio = initial_gap > 0.0
+            ? std::max(0.0, initial_gap - final_gap) / initial_gap
+            : 0.0;
+        const double tolerance = update.feasible && isFinite(update.bound)
+            ? scaledRoundoffTolerance(
+                update.bound, current_tree.cost,
+                static_cast<std::size_t>(n_))
+            : 0.0;
+        const bool improved = update.feasible
+            && update.bound > current_tree.cost + tolerance;
+        const bool prunable = improved
+            && shouldPrune(update.bound, upper_bound_at_update);
+        *node_ascent_trace_output_
+            << result_.stats.search_node_potential_updates_triggered << ','
+            << depth << ','
+            << parent_epoch_depth << ','
+            << depth - parent_epoch_depth << ','
+            << node.forced_edges.size() << ','
+            << iteration_limit << ','
+            << update.iterations << ','
+            << update.ascent_rounds << ','
+            << std::setprecision(17) << current_tree.cost << ','
+            << update.bound << ','
+            << upper_bound_at_update << ','
+            << initial_gap / scale << ','
+            << final_gap / scale << ','
+            << gap_closed_ratio << ','
+            << (improved ? 1 : 0) << ','
+            << (prunable ? 1 : 0) << ','
+            << (update.stopped_prunable ? 1 : 0) << ','
+            << (update.probe_started ? 1 : 0) << ','
+            << (update.probe_continued ? 1 : 0) << ','
+            << (update.probe_rejected ? 1 : 0) << ','
+            << (uses_large_gap_tier ? 1 : 0) << ','
+            << (uses_shallow_depth_tier ? 1 : 0) << ','
+            << (update.slow_warm_extended ? 1 : 0);
+        for (std::size_t index = 0;
+             index < update.milestone_bounds.size(); ++index) {
+            *node_ascent_trace_output_ << ',';
+            if (update.milestone_reached[index] == 0 || initial_gap <= 0.0) {
+                continue;
+            }
+            const double milestone_gain = std::max(
+                0.0, update.milestone_bounds[index] - current_tree.cost);
+            *node_ascent_trace_output_ << milestone_gain / initial_gap;
+        }
+        *node_ascent_trace_output_
+            << ',' << outcome
+            << ',' << epoch_subtree_created
+            << ',' << epoch_subtree_expanded
+            << ',' << epoch_subtree_pruned
+            << ',' << epoch_descendant_updates
+            << ',' << epoch_descendant_rebuilds
+            << ',' << upper_bound_after
+            << ',' << std::max(
+                0.0, upper_bound_at_update - upper_bound_after)
+            << '\n';
+    };
+
     // 只有新证书严格强于当前树下界（超过数值容差）才值得安装昂贵的新 epoch。
     const double tolerance = scaledRoundoffTolerance(
         update.bound, current_tree.cost, static_cast<std::size_t>(n_));
     if (update.probe_rejected || !update.feasible
         || update.potentials.size() != static_cast<std::size_t>(n_)
         || update.bound <= current_tree.cost + tolerance) {
+        write_trace("rejected", 0, 0, 0, 0, 0, upper_bound_at_update);
         return false;
     }
 
@@ -2303,6 +2506,7 @@ bool BranchBoundSolver::searchSubtreeWithUpdatedPotentials(
     if (shouldPrune(update.bound, best_cost_)) {
         ++result_.stats.potential_updates_pruned;
         ++result_.stats.nodes_pruned_by_bound;
+        write_trace("pruned", 0, 0, 1, 0, 0, upper_bound_at_update);
         return true;
     }
 
@@ -2396,6 +2600,8 @@ bool BranchBoundSolver::searchSubtreeWithUpdatedPotentials(
 
     if (!epoch_tree.feasible) {
         restore_epoch();
+        write_trace("rebuild-failed", 0, 0, 0, 0, 0,
+                    upper_bound_at_update);
         return false;
     }
 #ifdef TSP_VERIFY_INCREMENTAL_STATE
@@ -2415,6 +2621,14 @@ bool BranchBoundSolver::searchSubtreeWithUpdatedPotentials(
 #endif
     ++result_.stats.potential_updates_rebuilt;
     current_potential_epoch_anchor_bound_ = epoch_tree.cost;
+    const std::size_t subtree_created_before = result_.stats.nodes_created;
+    const std::size_t subtree_expanded_before = result_.stats.nodes_expanded;
+    const std::size_t subtree_pruned_before =
+        result_.stats.nodes_pruned_by_bound;
+    const std::size_t descendant_updates_before =
+        result_.stats.search_node_potential_updates_triggered;
+    const std::size_t descendant_rebuilds_before =
+        result_.stats.potential_updates_rebuilt;
 
     try {
         // 本锚点已更新，首次进入时禁止再次触发；其后代仍可按间隔创建
@@ -2429,6 +2643,16 @@ bool BranchBoundSolver::searchSubtreeWithUpdatedPotentials(
         restore_epoch();
         throw;
     }
+    write_trace(
+        "installed",
+        result_.stats.nodes_created - subtree_created_before,
+        result_.stats.nodes_expanded - subtree_expanded_before,
+        result_.stats.nodes_pruned_by_bound - subtree_pruned_before,
+        result_.stats.search_node_potential_updates_triggered
+            - descendant_updates_before,
+        result_.stats.potential_updates_rebuilt
+            - descendant_rebuilds_before,
+        best_cost_);
     restore_epoch();
     return true;
 }
@@ -2948,6 +3172,10 @@ SolveResult BranchBoundSolver::solve()
              << result_.stats.potential_updates_stopped_prunable
              << " potential_large_gap_tier="
              << result_.stats.potential_updates_large_gap_tier
+             << " potential_shallow_depth_tier="
+             << result_.stats.potential_updates_shallow_depth_tier
+             << " potential_slow_warm_extended="
+             << result_.stats.potential_updates_slow_warm_extended
              << " potential_gap_change_shallow_bypasses="
              << result_.stats.potential_update_gap_change_shallow_bypasses
              << " potential_probes_started="

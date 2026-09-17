@@ -117,6 +117,10 @@ struct SolveStats {
     std::size_t potential_updates_stopped_prunable = 0;
     // 使用“大 gap”分档迭代上限的更新尝试数。
     std::size_t potential_updates_large_gap_tier = 0;
+    // 使用浅层分档迭代上限的更新尝试数；若同时命中大 gap 档，后者优先。
+    std::size_t potential_updates_shallow_depth_tier = 0;
+    // 浅层慢热：16 轮仍无改善、到基础上限才开始抬升，因而继续跑到延长轮数。
+    std::size_t potential_updates_slow_warm_extended = 0;
     // gap-change 门槛因节点位于配置的浅层保护区而被旁路的更新尝试数。
     std::size_t potential_update_gap_change_shallow_bypasses = 0;
     // 初始相对 gap 落在 probe 区间、实际进入短轮次筛选的更新次数。
@@ -452,6 +456,16 @@ public:
     // 不再阻止任何 gap 范围的节点势更新。
     void setPotentialUpdateLargeGapTier(double large_gap_ratio,
                                         std::size_t large_gap_iterations);
+    // 可选的浅层迭代档。depth>0 且 iterations>0 时，绝对 DFS 深度不超过
+    // depth 的更新使用该轮数；二者均为 0 时关闭。若同时命中大 gap 档，
+    // 大 gap 档优先，保持其“替换基础轮数”的既有语义。
+    void setPotentialUpdateShallowDepthTier(std::size_t depth,
+                                            std::size_t iterations);
+    // 可选的浅层慢热延长。depth>0 且 iterations>0 时，绝对 DFS 深度不超过
+    // depth 的更新可以把上限从基础轮数抬到 iterations；仅当第 16 轮仍无
+    // 改善、且到基础上限已经抬升时才真正继续。二者均为 0 时关闭。
+    void setPotentialUpdateSlowWarmExtend(std::size_t depth,
+                                          std::size_t iterations);
     // SubtreeAdaptive 的可选 epoch-relative 门槛。当前节点下界相对最近一次
     // 成功势上升锚点的增量，除以 max(1, |UB|)，必须至少达到该值才触发。
     // 这等价于相对 gap 至少缩减该幅度；0 保留原有触发行为。
@@ -466,6 +480,13 @@ public:
     void setPotentialUpdateProbeOptions(std::size_t updates,
                                         double min_gap_ratio,
                                         double min_coverage);
+    // 把每次实际触发的搜索节点势上升汇总写到 output。只记录绝对 DFS
+    // 深度不超过 max_depth 的尝试；max_depth=0 表示不限。调用方拥有流并
+    // 须保证其在 solve() 返回前有效；CSV 表头由调用方写入。
+    void setNodeAscentTraceOutput(std::ostream& output,
+                                  std::size_t max_depth = 0);
+    // 关闭搜索节点势上升汇总轨迹。
+    void disableNodeAscentTraceOutput();
     // 只建立启发式上界、根势和根 1-tree，不进入精确 BP 搜索。该模式用于
     // 可复现地下界实验；返回的 cost/tour 只是可行上界，不能视作最优证明。
     void setRootBoundOnly(bool enabled);
@@ -736,6 +757,15 @@ private:
         double bound = -std::numeric_limits<double>::infinity();
         // 实际完成的 1-tree/次梯度评估次数。
         std::size_t iterations = 0;
+        // 实际进入步长调度循环的轮数。guarded sibling warm 会额外执行一次
+        // 1-tree 验证，因此它可能小于 iterations。
+        std::size_t ascent_rounds = 0;
+        // 浅层慢热规则把本次上升从基础上限延长到 slow-warm 轮数。
+        bool slow_warm_extended = false;
+        // 第 1/2/4/8/16/32/64 轮结束时的历史最强下界。仅供显式 trace；
+        // reached=0 表示本次上升在该 milestone 前已经停止。
+        std::array<double, 7> milestone_bounds{};
+        std::array<unsigned char, 7> milestone_reached{};
         // 取得 bound 时对应的顶点势，而不是最后一次工作势。
         std::vector<double> potentials;
     };
@@ -744,7 +774,8 @@ private:
     // 历史最强下界和对应势。函数不安装势，也不修改 node 或全局候选状态。
     NodePotentialUpdateResult updateNodePotentialBound(
         const PartialSol& node, double current_bound,
-        double upper_bound, std::size_t max_iterations) const;
+        double upper_bound, std::size_t max_iterations,
+        int depth = 0) const;
     // 搜索节点势更新的互斥判定结果。枚举顺序不表示优先级；实际优先级由
     // classifyPotentialUpdate 中与历史 shouldUpdatePotentials 相同的检查顺序定义。
     enum class PotentialUpdateDecision {
@@ -768,9 +799,13 @@ private:
         const OneTree& tree, int depth,
         double bound, double upper_bound,
         std::size_t forced_edge_count) const;
-    // 按当前节点相对 gap 选择基础或大 gap 档的最大迭代数。
+    // 按当前节点深度和相对 gap 选择基础迭代上限；大 gap 档优先于浅层档。
+    // 不含浅层慢热延长。
+    std::size_t basePotentialUpdateIterationLimit(
+        int depth, double bound, double upper_bound) const;
+    // 基础上限；浅层慢热命中时抬到延长轮数，由上升循环自行决定是否用满。
     std::size_t potentialUpdateIterationLimit(
-        double bound, double upper_bound) const;
+        int depth, double bound, double upper_bound) const;
     // 当前节点是否命中已启用的大 gap 迭代档。
     bool usesLargeGapPotentialUpdateTier(
         double bound, double upper_bound) const;
@@ -991,6 +1026,10 @@ private:
     double root_ascent_dynamic_max_current_weight_ = 0.9;
     // 非拥有指针；nullptr 表示不记录逐轮根下界。
     std::ostream* root_ascent_trace_output_ = nullptr;
+    // 非拥有指针；nullptr 表示不记录搜索节点势上升汇总。深度上限只控制
+    // 观测输出，不改变势更新触发或迭代预算。
+    std::ostream* node_ascent_trace_output_ = nullptr;
+    std::size_t node_ascent_trace_max_depth_ = 0;
     // 搜索节点一次有限轮势更新内部使用的步长调度；默认保持原 Polyak 行为。
     NodeAscentStrategy node_ascent_strategy_ = NodeAscentStrategy::Polyak;
     // 节点 Polyak 方向平滑参数；与根方向平滑配置相互独立。
@@ -1029,6 +1068,12 @@ private:
     double potential_update_large_gap_ratio_ = 0.0;
     // 大 gap 分档的最大迭代数；0 完全关闭分档。
     std::size_t potential_update_large_gap_iterations_ = 0;
+    // 浅层节点可使用独立的单次最大轮数；任一为 0 时关闭。
+    std::size_t potential_update_shallow_depth_ = 0;
+    std::size_t potential_update_shallow_iterations_ = 0;
+    // 浅层慢热延长：depth 与 iterations 均为 0 时关闭。
+    std::size_t potential_update_slow_warm_depth_ = 0;
+    std::size_t potential_update_slow_warm_extend_iterations_ = 0;
     // 每轮根搜索最多尝试多少次节点势更新；0 表示不限制。
     std::size_t potential_update_budget_ = 1000;
     // 0 关闭两阶段筛选；正数表示 probe 中实际观察多少次势更新。
