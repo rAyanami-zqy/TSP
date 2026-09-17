@@ -1,0 +1,2 @@
+run_id,strategy,kind,category,description,executable,executable_sha256,solver_args,timeout_seconds,workers,repeats,instance_count,command
+Concorde-7c32cb4cd69e,Concorde,concorde,reference,Concorde exact solver with a fixed seed,/home/wj/code/TSP/concorde/TSP/concorde,ff9a290ccfd0a933f25a27cfbcac57062d096489c6aac1791318f5b0adeee3c6,-s 123,1800.0,10,1,50,/home/wj/code/TSP/concorde/TSP/concorde -s 123 -o '<solution-file>' '<instance>'
