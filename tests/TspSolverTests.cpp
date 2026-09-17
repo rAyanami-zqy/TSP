@@ -673,16 +673,68 @@ void testRootAlphaNearness()
              tsp::BranchEdgeOrder::CurrentForbidDeltaAscending,
              tsp::BranchEdgeOrder::CurrentForbidDeltaDegreeAware,
              tsp::BranchEdgeOrder::RootOneTreeFrequencyMiddle,
-             tsp::BranchEdgeOrder::TwoSidedStrongBranchingTop2}) {
+             tsp::BranchEdgeOrder::TwoSidedStrongBranchingTop2,
+             tsp::BranchEdgeOrder::AscentStrongBranchingTop2}) {
         tsp::BranchBoundSolver solver(matrix);
         solver.setRootAscentStrategy(
             order == tsp::BranchEdgeOrder::RootOneTreeFrequencyMiddle
             ? tsp::RootAscentStrategy::Polyak
             : tsp::RootAscentStrategy::None);
         solver.setBranchEdgeOrder(order);
+        if (order == tsp::BranchEdgeOrder::AscentStrongBranchingTop2) {
+            solver.setPotentialUpdateOptions(
+                tsp::PotentialUpdateStrategy::SubtreeAdaptive, 1, 8, 100);
+        }
         const tsp::SolveResult result = solver.solve();
         expectCost(result.cost, optimum,
                    "experimental branch order changed the exact optimum");
+        if (order == tsp::BranchEdgeOrder::AscentStrongBranchingTop2) {
+            Fixture::expect(
+                result.stats.branch_ascent_strong_probes > 0,
+                "ascent strong branching did not probe the root/shallow tree");
+            Fixture::expect(
+                result.stats.branch_ascent_strong_seconds >= 0.0,
+                "ascent strong branching reported a negative duration");
+        }
+    }
+
+    {
+        tsp::BranchBoundSolver solver(matrix);
+        solver.setPotentialUpdateOptions(
+            tsp::PotentialUpdateStrategy::SubtreeAdaptive, 1, 8, 100);
+        solver.setBranchLiftFirstDepth(2);
+        const tsp::SolveResult result = solver.solve();
+        expectCost(result.cost, optimum,
+                   "lift-first branch order changed the exact optimum");
+        expectPotentialUpdateDecisionAccounting(
+            result.stats, "lift-first branch order");
+    }
+
+    {
+        tsp::BranchBoundSolver solver(matrix);
+        solver.setPotentialUpdateOptions(
+            tsp::PotentialUpdateStrategy::SubtreeAdaptive, 1, 8, 100);
+        solver.setBranchSplitZeroGainDepth(2);
+        const tsp::SolveResult result = solver.solve();
+        expectCost(result.cost, optimum,
+                   "zero-gain split changed the exact optimum");
+        expectPotentialUpdateDecisionAccounting(
+            result.stats, "zero-gain split");
+    }
+
+    {
+        tsp::BranchBoundSolver solver(matrix);
+        solver.setPotentialUpdateOptions(
+            tsp::PotentialUpdateStrategy::SubtreeAdaptive, 1, 8, 100);
+        solver.setBranchEdgeOrder(
+            tsp::BranchEdgeOrder::AscentStrongBranchingTop2);
+        solver.setBranchLiftFirstDepth(2);
+        solver.setBranchSplitZeroGainDepth(2);
+        const tsp::SolveResult result = solver.solve();
+        expectCost(result.cost, optimum,
+                   "combined branch experiment changed the exact optimum");
+        expectPotentialUpdateDecisionAccounting(
+            result.stats, "combined branch experiment");
     }
 }
 

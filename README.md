@@ -616,6 +616,16 @@ Polyak；`--hk-node-ascent` 还支持 `helsgaun`、`polyak-smoothed` 和
   时才真正继续；16 轮已有改善、或到基础上限仍无改善，都停在基础轮数。
   该开关默认关闭。15 个分歧实例上 `depth=2` 比 `depth=4` 更稳：能修掉
   `eil76` 的有害延长，并保住 `gr120`/`rd100`/`kroA100` 的收益。
+- `--branch-edge-order ascent-strong-top2` 在根和绝对深度 1--2 对当前最好的
+  两条 1-tree 边先做最多 16 轮节点势上升，再按
+  `min(force, forbid)` 选边。force 试算使用与正式分支相同的度满/子回路
+  候选过滤。额外工作量由 `Branch ascent-strong probes/seconds` 报告。
+  普通 `strong-top2` 在 force 1-tree 边时弱侧增益恒为 0。
+- `--bp-lift-first-depth n` 在深度不超过 n 时先展开会改 1-tree 的 BP 孩子，
+  再展开零增益的 force 第一支。0 关闭。划分仍完备。
+- `--bp-split-zero-gain-depth n` 在深度不超过 n 时，若 force 一条已在
+  1-tree 中的边后下界不变，立即对同一违规点的另一条树边再切 force/forbid。
+  两个孙子都会改 1-tree；原 force 孩子覆盖的 tour 仍被覆盖。0 关闭。
 - `--hk-update-budget` 是每轮精确 DFS 的最大更新尝试次数；设为 `0` 时
   不限制更新次数，同时关闭 diversified-LK 初始探测轮的 1000 次保护。
   正数预算下，探测轮自动封顶 1000，重启或探测结束后使用完整预算。
@@ -693,6 +703,8 @@ potential_updates_rebuilt,potential_updates_stopped_prunable,
 potential_updates_large_gap_tier,
 potential_updates_shallow_depth_tier,
 potential_updates_slow_warm_extended,
+branch_lift_first_reorders,
+branch_zero_gain_splits,
 potential_update_gap_change_shallow_bypasses,
 search_node_potential_iterations,potential_update_seconds,
 potential_update_rebuild_seconds,potential_update_total_gain,

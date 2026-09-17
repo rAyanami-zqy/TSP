@@ -415,6 +415,42 @@ depth<=2 修掉了 `eil76`/`gr48`/`rat99`，并进一步缩小 `kroA100`/`gr120`
 来自 16 轮已经在涨的节点继续跑满，慢热规则按设计吃不到；那是另一条
 “已启动曲线是否再给 32 轮”的问题，不要并进这条规则。
 
+## 超时实例与浅层分支顺序
+
+1800s 超时的 7 个实例上，表里的最终下界等于根下界。这首先是口径
+（未证完就回报根下界），也符合 DFS：第一支 `force` 的是已在 1-tree 上的边，
+当前树不变，depth=1 下界等于根，另一侧 `forbid` 一直压在栈上。
+
+只换 `--branch-edge-order weight|forbid-delta-desc|strong-top2` 不能抬
+depth=1：对 1-tree 边 `force` 增益恒为 0。`--hk-update-depth 1` 能靠节点
+势上升把 `si175` 的 depth=1 从 21343 抬到 21347，离最优 21407 仍远。
+
+新增、默认关闭：
+
+```bash
+# 浅层先展开会改 1-tree 的 BP 孩子，再展开零增益 force 第一支
+--bp-lift-first-depth 2
+
+# 对根/浅层最好两条边先做有限轮势上升，再按 min(force,forbid) 选边
+--branch-edge-order ascent-strong-top2
+```
+
+ascent strong 在根和绝对深度 1--2 生效，每侧最多 16 轮；force
+试算使用与正式分支相同的 forced DSU、度满和子回路候选过滤。
+试算次数和耗时分别记为 `branch_ascent_strong_probes` 与
+`branch_ascent_strong_seconds`。
+
+`si175` 上 `--bp-lift-first-depth 2` 后，第一个被展开的 depth=1 节点下界
+变成 **21418.7**（超过最优 21407）。这是 forbid 前缀孩子；若 incumbent 已是
+21407，该孩子应立即剪枝。零增益的 force 第一支仍在，只是被推迟。
+
+再加 `--bp-split-zero-gain-depth 2`：force 一条已在 1-tree 中的边后若下界
+不变，立刻对同一违规点上 forbid-delta 最大的另一条树边再切 force/forbid。
+`st70` 仍得 675，并报告 22 次切分。`si175` 上 lift+split 的前几层下界为
+21418 → 21428 → 21435，均高于最优；单独 split 时 force 侧第一层仍只抬
+约 +2，真正大的抬升来自先走 forbid。因此推荐实验组合是两者一起开，默认
+仍关闭。
+
 ## 后续建议
 
 1. 不把 `--hk-update-max-depth` 当作加速手段；`--hk-update-trace-max-depth`
@@ -424,4 +460,15 @@ depth<=2 修掉了 `eil76`/`gr48`/`rat99`，并进一步缩小 `kroA100`/`gr120`
    用 `--hk-update-slow-warm-depth 2` 而不是 4。
 4. `kroD100`/`eil101` 的 64 轮收益来自 16 轮已经在涨的节点继续跑满，
    不要并进慢热规则。不要按 `n` 或初始 gap 给全局轮数。
-5. 分层判据必须用整棵树的 created/expanded 和 wall time 验证。
+5. 超时实例用 `--bp-lift-first-depth 2 --bp-split-zero-gain-depth 2`。
+   `si175` 浅层下界已能超过最优；force 侧大子树是否因此剪得掉，要用
+   LKH incumbent 做 300s/1800s 对照。不要先加势迭代。
+6. 分层判据必须用整棵树的 created/expanded 和 wall time 验证。
+
+### 浅层分支第一轮消融配置
+
+`tools/run_phkmst_ablation.py` 已加入完整的
+`ascent-strong x lift x split` 2x2x2，共 8 组 `branch-ablation` 配置。八组都固定
+P32+LKH，显式设 `min-gap-change-ratio=0` 并关闭 candidate compaction；不传
+large-gap、shallow、slow-warm 或 probe 分档参数。可用环境变量
+`TSP_LKH_PROVIDER` 覆盖脚本中的 LKH provider 路径。

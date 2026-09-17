@@ -119,6 +119,14 @@ struct SolveStats {
     std::size_t potential_updates_large_gap_tier = 0;
     // 使用浅层分档迭代上限的更新尝试数；若同时命中大 gap 档，后者优先。
     std::size_t potential_updates_shallow_depth_tier = 0;
+    // 浅层 lift-first：把零增益 force 第一支推迟到其余 BP 孩子之后。
+    std::size_t branch_lift_first_reorders = 0;
+    // 零增益 force 立刻再切一刀（再 force/forbid 另一条同点 1-tree 边）。
+    std::size_t branch_zero_gain_splits = 0;
+    // ascent strong branching 实际执行的单侧 force/forbid 势试算数。
+    std::size_t branch_ascent_strong_probes = 0;
+    // ascent strong branching 势试算的累计墙钟秒数。
+    double branch_ascent_strong_seconds = 0.0;
     // 浅层慢热：16 轮仍无改善、到基础上限才开始抬升，因而继续跑到延长轮数。
     std::size_t potential_updates_slow_warm_extended = 0;
     // gap-change 门槛因节点位于配置的浅层保护区而被旁路的更新尝试数。
@@ -304,6 +312,9 @@ enum class BranchEdgeOrder {
     // 仅对 adjusted-weight 最优的两条当前树边试探 force/forbid 两侧，
     // 按较弱一侧的下界增益降序选择，用于受限 strong-branching 实验。
     TwoSidedStrongBranchingTop2,
+    // 与 strong-top2 相同的两条候选，但两侧先做有限轮节点势上升再比较
+    // min(force, forbid)。用于让第一刀的两个孩子都离开根 1-tree 下界。
+    AscentStrongBranchingTop2,
 };
 
 // TSPLIB 坐标点。二维格式只使用 x/y，三维格式同时使用 z。
@@ -438,6 +449,12 @@ public:
     void clearRootPotentialSeed();
     // 设置 BP 在违规顶点内部选择分支边的比较顺序；不改变下界算法。
     void setBranchEdgeOrder(BranchEdgeOrder order);
+    // 浅层 BP 先展开会改 1-tree 的孩子（forbid 前缀），再展开零增益的
+    // force 第一支。depth=0 关闭。不改变划分的完备性。
+    void setBranchLiftFirstDepth(std::size_t depth);
+    // 若 force 一条已在 1-tree 中的边后下界不变，立即对同一违规点的另一条
+    // 树边再切 force/forbid。depth=0 关闭。仍覆盖原 force 孩子的全部 tour。
+    void setBranchSplitZeroGainDepth(std::size_t depth);
     // 配置搜索节点势更新：depth 是深度/epoch 间隔，iterations 是基础档
     // 的单次最大轮数，budget 是每轮根搜索的最大尝试次数；budget=0 表示
     // 不限制。iterations 可为 0，以便只启用大 gap 档。
@@ -736,6 +753,12 @@ private:
     double currentForceBranchBound(
         const PartialSol& node, const OneTree& current_tree,
         const Edge& tree_edge) const;
+    // 在 force 或 forbid 后做有限轮节点势上升，返回最强证书；不可行时
+    // 为正无穷。只读试算，不安装势、不改 DFS 回滚栈。
+    double trialBranchAscentBound(
+        const PartialSol& node, const OneTree& current_tree,
+        const Edge& tree_edge, bool force_edge,
+        std::size_t ascent_iterations) const;
 
     // 一次搜索节点势更新的最佳证书。
     struct NodePotentialUpdateResult {
@@ -994,7 +1017,8 @@ private:
     // 在 current_tree 上执行 BP 划分：依次选取违规顶点的未决树边并测试
     // forbid 前缀，返回覆盖所有潜在改进 tour 的关键边集合 B。函数内部
     // 临时修改 node/tree，返回前恢复到调用时状态。
-    BranchSet bpPartition(PartialSol& node, OneTree& current_tree);
+    BranchSet bpPartition(PartialSol& node, OneTree& current_tree,
+                          int depth = 0);
     // BP 深度优先搜索：先剪枝/更新势/识别 tour，再枚举“前缀 forbid +
     // 当前 force”子节点。count_node 控制统计，allow_potential_anchor 防止
     // 刚进入新 epoch 时在同一锚点重复更新势。
@@ -1039,6 +1063,10 @@ private:
     double node_ascent_dynamic_max_current_weight_ = 0.9;
     // BP 在最高度违规顶点上比较未决树边的策略。
     BranchEdgeOrder branch_edge_order_ = BranchEdgeOrder::AdjustedWeight;
+    // 不超过该绝对 DFS 深度时，BP 先搜会改 1-tree 的孩子。0 关闭。
+    std::size_t branch_lift_first_depth_ = 0;
+    // 不超过该深度时，把零增益 force 再劈成两个会改 1-tree 的孩子。0 关闭。
+    std::size_t branch_split_zero_gain_depth_ = 0;
     // 大小为 n*n、按 edgeId 索引的根静态 alpha；树边为 0，缺失/未知为
     // infinity。默认 AdjustedWeight 策略下清空以避免预处理和内存开销。
     std::vector<double> root_alpha_by_edge_id_;

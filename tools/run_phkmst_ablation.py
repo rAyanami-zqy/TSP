@@ -442,6 +442,30 @@ OUTPUT_STATISTICS: tuple[OutputStatistic, ...] = (
         kind="int",
         summarize=True,
     ),
+    OutputStatistic(
+        column="branch_lift_first_reorders",
+        tspbb_labels=("Branch lift-first reorders",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="branch_zero_gain_splits",
+        tspbb_labels=("Branch zero-gain splits",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="branch_ascent_strong_probes",
+        tspbb_labels=("Branch ascent-strong probes",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="branch_ascent_strong_seconds",
+        tspbb_labels=("Branch ascent-strong seconds",),
+        kind="float",
+        summarize=True,
+    ),
     # 搜索节点势优化总轮次；第二个标签兼容较早版本的输出名称。
     OutputStatistic(
         column="search_node_potential_iterations",
@@ -530,6 +554,51 @@ def phkmst_args(
             "--hk-update-budget", str(update_budget),
         ])
     return tuple(args)
+
+
+BRANCH_ABLATION_LKH_PROVIDER = Path(os.environ.get(
+    "TSP_LKH_PROVIDER",
+    "/home/wj/code/TSP/build-lkh/tsp_lkh_provider",
+))
+
+
+def gapmst_branch_ablation_args(
+    *,
+    branch_edge_order: str = "weight",
+    lift_depth: int = 0,
+    split_depth: int = 0,
+) -> tuple[str, ...]:
+    """Return the neutral P32+LKH baseline with only branch knobs varied.
+
+    The historical 50-instance comparison found the GAP-aware update gate to
+    enlarge the aggregate search tree.  Keep it, all iteration tiers, and root
+    compaction neutral here so the first-round comparison attributes changes
+    only to branch selection/order/refinement.
+    """
+
+    return (
+        "--hk-node-ascent", "polyak",
+        "--branch-edge-order", branch_edge_order,
+        "--bp-lift-first-depth", str(lift_depth),
+        "--bp-split-zero-gain-depth", str(split_depth),
+        "--hk-potential-update", "subtree-adaptive",
+        "--hk-update-depth", "1",
+        "--hk-update-iterations", "32",
+        "--hk-update-budget", "0",
+        "--hk-update-max-depth", "0",
+        "--hk-update-skip-last-edges", "0",
+        "--hk-update-min-gap-change-ratio", "0",
+        "--hk-update-gap-change-start-depth", "0",
+        "--root-candidate-compaction", "off",
+        "--lkh-provider", str(BRANCH_ABLATION_LKH_PROVIDER),
+        "--lkh-provider-failure", "error",
+        "--lkh-runs", "1",
+        "--lkh-max-trials", "0",
+        "--lkh-seed", "123",
+        "--lkh-pi-mode", "warm-start",
+        "--root-pi-refine-ascent", "polyak",
+        "--root-pi-refine-iterations", "64",
+    )
 
 
 # ============================================================================
@@ -698,6 +767,88 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
         description="GAPMST + compaction on + gap-change 0.0001",
     ),
 
+    # --- 2026-09-17 浅层分支策略第一轮消融。八组都使用当前二进制，
+    # 固定为历史最稳的 P32+LKH 中性势配置：gap-change=0，不设
+    # max-depth/near-leaf 限制，不启用 large-gap、shallow、slow-warm 或 probe
+    # 分档，候选压缩也关闭。完整扫描 ascent strong x lift x split
+    # 的 2x2x2 组合，使主效应和两两交互都能单独归因。
+    Strategy(
+        name="GAPMST-P32-LKH-BP-base",
+        kind="tsp_bb",
+        category="branch-ablation",
+        executable=PROJECT_ROOT / "build" / "tsp_bb",
+        solver_args=gapmst_branch_ablation_args(),
+        description="P32+LKH 中性基线，分支实验开关全关",
+    ),
+    Strategy(
+        name="GAPMST-P32-LKH-BP-lift2",
+        kind="tsp_bb",
+        category="branch-ablation",
+        executable=PROJECT_ROOT / "build" / "tsp_bb",
+        solver_args=gapmst_branch_ablation_args(lift_depth=2),
+        description="仅 depth<=2 lift-first",
+    ),
+    Strategy(
+        name="GAPMST-P32-LKH-BP-split2",
+        kind="tsp_bb",
+        category="branch-ablation",
+        executable=PROJECT_ROOT / "build" / "tsp_bb",
+        solver_args=gapmst_branch_ablation_args(split_depth=2),
+        description="仅 depth<=2 zero-gain split",
+    ),
+    Strategy(
+        name="GAPMST-P32-LKH-BP-lift2-split2",
+        kind="tsp_bb",
+        category="branch-ablation",
+        executable=PROJECT_ROOT / "build" / "tsp_bb",
+        solver_args=gapmst_branch_ablation_args(
+            lift_depth=2, split_depth=2),
+        description="depth<=2 lift-first + zero-gain split",
+    ),
+    Strategy(
+        name="GAPMST-P32-LKH-BP-ascent-strong",
+        kind="tsp_bb",
+        category="branch-ablation",
+        executable=PROJECT_ROOT / "build" / "tsp_bb",
+        solver_args=gapmst_branch_ablation_args(
+            branch_edge_order="ascent-strong-top2"),
+        description="仅根/浅层 ascent strong top-2 选边",
+    ),
+    Strategy(
+        name="GAPMST-P32-LKH-BP-ascent-strong-lift2",
+        kind="tsp_bb",
+        category="branch-ablation",
+        executable=PROJECT_ROOT / "build" / "tsp_bb",
+        solver_args=gapmst_branch_ablation_args(
+            branch_edge_order="ascent-strong-top2",
+            lift_depth=2,
+        ),
+        description="ascent strong top-2 + lift-first",
+    ),
+    Strategy(
+        name="GAPMST-P32-LKH-BP-ascent-strong-split2",
+        kind="tsp_bb",
+        category="branch-ablation",
+        executable=PROJECT_ROOT / "build" / "tsp_bb",
+        solver_args=gapmst_branch_ablation_args(
+            branch_edge_order="ascent-strong-top2",
+            split_depth=2,
+        ),
+        description="ascent strong top-2 + zero-gain split",
+    ),
+    Strategy(
+        name="GAPMST-P32-LKH-BP-ascent-strong-lift2-split2",
+        kind="tsp_bb",
+        category="branch-ablation",
+        executable=PROJECT_ROOT / "build" / "tsp_bb",
+        solver_args=gapmst_branch_ablation_args(
+            branch_edge_order="ascent-strong-top2",
+            lift_depth=2,
+            split_depth=2,
+        ),
+        description="ascent strong top-2 + lift-first + zero-gain split",
+    ),
+
 )
 
 CONFIGURATION_BY_NAME = {
@@ -836,6 +987,8 @@ KNOWN_VALUE_OPTIONS = {
     "--hk-node-dynamic-min-current-weight",
     "--hk-node-dynamic-max-current-weight",
     "--branch-edge-order",
+    "--bp-lift-first-depth",
+    "--bp-split-zero-gain-depth",
     "--root-candidate-compaction",
     "--hk-potential-update",
     "--hk-update-depth",

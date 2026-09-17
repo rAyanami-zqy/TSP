@@ -90,6 +90,10 @@ struct CliOptions {
     // 不改变 1-tree 下界或 Kruskal 候选顺序。
     tsp::BranchEdgeOrder branch_edge_order
         = tsp::BranchEdgeOrder::AdjustedWeight;
+    // 0 关闭；正数表示不超过该 DFS 深度时先搜会改 1-tree 的 BP 孩子。
+    std::size_t branch_lift_first_depth = 0;
+    // 0 关闭；正数表示浅层把零增益 force 再劈成两个会改 1-tree 的孩子。
+    std::size_t branch_split_zero_gain_depth = 0;
     // 搜索节点是否更新势；启用时新势始终安装为子树 epoch。
     tsp::PotentialUpdateStrategy potential_update
         = tsp::PotentialUpdateStrategy::None;
@@ -444,6 +448,8 @@ RunResult solveInput(std::istream& input,
     solver.setRootGuidedLk(false, false);
     // 分支顺序与势更新策略是两个正交开关，便于分别评估搜索树形状和下界质量。
     solver.setBranchEdgeOrder(options.branch_edge_order);
+    solver.setBranchLiftFirstDepth(options.branch_lift_first_depth);
+    solver.setBranchSplitZeroGainDepth(options.branch_split_zero_gain_depth);
     solver.setPotentialUpdateOptions(
         options.potential_update,
         options.potential_update_depth,
@@ -674,6 +680,14 @@ void printHumanResult(const RunResult& run)
               << result.stats.potential_updates_shallow_depth_tier << '\n';
     std::cout << "Potential updates slow-warm extended: "
               << result.stats.potential_updates_slow_warm_extended << '\n';
+    std::cout << "Branch lift-first reorders: "
+              << result.stats.branch_lift_first_reorders << '\n';
+    std::cout << "Branch zero-gain splits: "
+              << result.stats.branch_zero_gain_splits << '\n';
+    std::cout << "Branch ascent-strong probes: "
+              << result.stats.branch_ascent_strong_probes << '\n';
+    std::cout << "Branch ascent-strong seconds: "
+              << result.stats.branch_ascent_strong_seconds << '\n';
     std::cout << "Potential update gap-change shallow bypasses: "
               << result.stats.potential_update_gap_change_shallow_bypasses << '\n';
     std::cout << "Potential update probes started: "
@@ -782,6 +796,10 @@ void printBatchHeader()
         << "potential_updates_large_gap_tier,"
         << "potential_updates_shallow_depth_tier,"
         << "potential_updates_slow_warm_extended,"
+        << "branch_lift_first_reorders,"
+        << "branch_zero_gain_splits,"
+        << "branch_ascent_strong_probes,"
+        << "branch_ascent_strong_seconds,"
         << "potential_update_gap_change_shallow_bypasses,"
         << "search_node_potential_iterations,potential_update_seconds,"
         << "potential_update_rebuild_seconds,potential_update_total_gain,"
@@ -803,9 +821,9 @@ void printBatchRow(const std::string& path,
 
     if (run == nullptr) {
         // 读取失败、解析失败等情况没有求解统计，只保留错误信息。
-        // method 到 tour 共 72 个空字段；最后一个字段保留错误消息。
+        // method 到 tour 共 78 个空字段；最后一个字段保留错误消息。
         // 新增批量列时必须同步此数量，确保错误行也与 CSV 表头严格对齐。
-        for (int field = 0; field < 72; ++field) {
+        for (int field = 0; field < 78; ++field) {
             std::cout << ',';
         }
         std::cout << csvQuote(message) << '\n';
@@ -877,6 +895,10 @@ void printBatchRow(const std::string& path,
               << result.stats.potential_updates_large_gap_tier << ','
               << result.stats.potential_updates_shallow_depth_tier << ','
               << result.stats.potential_updates_slow_warm_extended << ','
+              << result.stats.branch_lift_first_reorders << ','
+              << result.stats.branch_zero_gain_splits << ','
+              << result.stats.branch_ascent_strong_probes << ','
+              << formatDouble(result.stats.branch_ascent_strong_seconds) << ','
               << result.stats.potential_update_gap_change_shallow_bypasses << ','
               << result.stats.search_node_potential_iterations << ','
               << formatDouble(result.stats.potential_update_seconds) << ','
@@ -1001,11 +1023,13 @@ void printUsage(const char* program)
               << "  --branch-edge-order <weight|root-alpha-asc|root-alpha-desc|"
                  "root-alpha-global-asc|root-alpha-global-desc|"
                  "forbid-delta-asc|forbid-delta-desc|forbid-degree-desc|"
-                 "root-frequency-middle|strong-top2|weight-desc|"
+                 "root-frequency-middle|strong-top2|ascent-strong-top2|weight-desc|"
                  "max-degree-all-weight|excess-cover-weight|"
                  "local-excess-cover-weight|max-degree-excess-weight|"
                  "propagation-weight|forced-degree-weight|"
                  "max-degree-min-undecided|max-degree-max-undecided>\n"
+              << "  --bp-lift-first-depth <n> (0 = off)\n"
+              << "  --bp-split-zero-gain-depth <n> (0 = off)\n"
               << "  --hk-potential-update <none|subtree-depth|subtree-adaptive>\n"
               << "  --hk-update-depth <n>\n"
               << "  --hk-update-max-depth <n> (0 = unlimited)\n"
@@ -1184,12 +1208,15 @@ tsp::BranchEdgeOrder parseBranchEdgeOrder(const std::string& value)
     if (value == "strong-top2") {
         return tsp::BranchEdgeOrder::TwoSidedStrongBranchingTop2;
     }
+    if (value == "ascent-strong-top2") {
+        return tsp::BranchEdgeOrder::AscentStrongBranchingTop2;
+    }
     throw std::runtime_error(
         "invalid value for --branch-edge-order: " + value
         + " (expected weight, root-alpha-asc, root-alpha-desc, "
           "root-alpha-global-asc, root-alpha-global-desc, "
           "forbid-delta-asc, forbid-delta-desc, forbid-degree-desc, "
-          "root-frequency-middle, strong-top2, weight-desc, "
+          "root-frequency-middle, strong-top2, ascent-strong-top2, weight-desc, "
           "max-degree-all-weight, excess-cover-weight, "
           "local-excess-cover-weight, max-degree-excess-weight, or "
           "propagation-weight, forced-degree-weight, "
@@ -1375,6 +1402,12 @@ CliOptions parseArgs(int argc, char** argv)
         } else if (arg == "--branch-edge-order") {
             options.branch_edge_order =
                 parseBranchEdgeOrder(require_value(arg));
+        } else if (arg == "--bp-lift-first-depth") {
+            options.branch_lift_first_depth =
+                parseSizeOption(require_value(arg), arg);
+        } else if (arg == "--bp-split-zero-gain-depth") {
+            options.branch_split_zero_gain_depth =
+                parseSizeOption(require_value(arg), arg);
         } else if (arg == "--hk-potential-update") {
             options.potential_update =
                 parsePotentialUpdateStrategy(require_value(arg));

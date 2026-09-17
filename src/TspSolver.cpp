@@ -490,6 +490,16 @@ void BranchBoundSolver::setBranchEdgeOrder(BranchEdgeOrder order)
     branch_edge_order_ = order;
 }
 
+void BranchBoundSolver::setBranchLiftFirstDepth(std::size_t depth)
+{
+    branch_lift_first_depth_ = depth;
+}
+
+void BranchBoundSolver::setBranchSplitZeroGainDepth(std::size_t depth)
+{
+    branch_split_zero_gain_depth_ = depth;
+}
+
 void BranchBoundSolver::setPotentialUpdateOptions(
     PotentialUpdateStrategy strategy, std::size_t depth,
     std::size_t iterations, std::size_t budget)
@@ -3176,6 +3186,15 @@ SolveResult BranchBoundSolver::solve()
              << result_.stats.potential_updates_shallow_depth_tier
              << " potential_slow_warm_extended="
              << result_.stats.potential_updates_slow_warm_extended
+             << " branch_lift_first_reorders="
+             << result_.stats.branch_lift_first_reorders
+             << " branch_zero_gain_splits="
+             << result_.stats.branch_zero_gain_splits
+             << " branch_ascent_strong_probes="
+             << result_.stats.branch_ascent_strong_probes
+             << " branch_ascent_strong_seconds="
+             << formatDebugDouble(
+                    result_.stats.branch_ascent_strong_seconds)
              << " potential_gap_change_shallow_bypasses="
              << result_.stats.potential_update_gap_change_shallow_bypasses
              << " potential_probes_started="
@@ -3375,8 +3394,129 @@ double BranchBoundSolver::currentForceBranchBound(
         : std::numeric_limits<double>::infinity();
 }
 
+double BranchBoundSolver::trialBranchAscentBound(
+    const PartialSol& node, const OneTree& current_tree,
+    const Edge& tree_edge, bool force_edge,
+    std::size_t ascent_iterations) const
+{
+    if (ascent_iterations == 0) {
+        if (force_edge) {
+            return currentForceBranchBound(node, current_tree, tree_edge);
+        }
+        const double delta =
+            currentForbidReplacementDelta(
+                const_cast<PartialSol&>(node), current_tree, tree_edge);
+        return isFinite(delta)
+            ? current_tree.cost + delta
+            : std::numeric_limits<double>::infinity();
+    }
+
+    const std::size_t edge_id = edgeId(tree_edge.u, tree_edge.v);
+    if (node.forced[edge_id] || node.forbidden[edge_id]
+        || !isFinite(dist_[tree_edge.u][tree_edge.v])) {
+        return std::numeric_limits<double>::infinity();
+    }
+
+    PartialSol trial = node;
+    if (force_edge) {
+        if (trial.forced_degree[static_cast<std::size_t>(tree_edge.u)] >= 2
+            || trial.forced_degree[static_cast<std::size_t>(tree_edge.v)] >= 2) {
+            return std::numeric_limits<double>::infinity();
+        }
+
+        auto forced_find = [&](int vertex) {
+            // 与正式可回滚 DSU 一样不做路径压缩。
+            while (trial.forced_parent[static_cast<std::size_t>(vertex)]
+                   != vertex) {
+                vertex = trial.forced_parent[static_cast<std::size_t>(vertex)];
+            }
+            return vertex;
+        };
+        int root_u = forced_find(tree_edge.u);
+        int root_v = forced_find(tree_edge.v);
+        if (root_u == root_v
+            && trial.forced_comp_size[static_cast<std::size_t>(root_u)] < n_) {
+            return std::numeric_limits<double>::infinity();
+        }
+
+        trial.forced[edge_id] = 1;
+        ++trial.forced_degree[static_cast<std::size_t>(tree_edge.u)];
+        ++trial.forced_degree[static_cast<std::size_t>(tree_edge.v)];
+        trial.forced_edges.push_back(tree_edge);
+        if (tree_edge.u != 0 && tree_edge.v != 0) {
+            trial.forced_mst_cost += tree_edge.w;
+            ++trial.forced_mst_count;
+        }
+
+        if (root_u != root_v) {
+            if (trial.forced_rank[static_cast<std::size_t>(root_u)]
+                < trial.forced_rank[static_cast<std::size_t>(root_v)]) {
+                std::swap(root_u, root_v);
+            }
+            if (!trial.forced_member_bits.empty()) {
+                trial.forced_member_bits[static_cast<std::size_t>(root_u)] |=
+                    trial.forced_member_bits[static_cast<std::size_t>(root_v)];
+            } else {
+                auto& members_u =
+                    trial.forced_members[static_cast<std::size_t>(root_u)];
+                const auto& members_v =
+                    trial.forced_members[static_cast<std::size_t>(root_v)];
+                members_u.insert(
+                    members_u.end(), members_v.begin(), members_v.end());
+            }
+            trial.forced_parent[static_cast<std::size_t>(root_v)] = root_u;
+            trial.forced_comp_size[static_cast<std::size_t>(root_u)] +=
+                trial.forced_comp_size[static_cast<std::size_t>(root_v)];
+            if (trial.forced_rank[static_cast<std::size_t>(root_u)]
+                == trial.forced_rank[static_cast<std::size_t>(root_v)]) {
+                ++trial.forced_rank[static_cast<std::size_t>(root_u)];
+            }
+        }
+    } else {
+        trial.forbidden[edge_id] = 1;
+        if (!trial.candidate_mask.empty()) {
+            trial.candidate_mask[edge_id] = 0;
+        }
+    }
+
+    std::vector<Edge> trial_candidates;
+    trial_candidates.reserve(candidates_sorted_.size());
+    for (const Edge& candidate : candidates_sorted_) {
+        const std::size_t id = edgeId(candidate.u, candidate.v);
+        if (trial.forbidden[id]) continue;
+        if (isCandidateActive(node, id)) {
+            trial_candidates.push_back(candidate);
+        }
+    }
+    // 复用正式 force 分支的过滤语义：新 force 导致的度满、
+    // forced 子回路和已决定边都不得留在试算候选图中。
+    if (!buildBranchCandidates(trial, trial_candidates)) {
+        return std::numeric_limits<double>::infinity();
+    }
+
+    trial.candidate_bits.clear();
+    trial.candidate_bit_count = 0;
+    trial.candidate_mask.assign(
+        static_cast<std::size_t>(n_) * static_cast<std::size_t>(n_), 0);
+    for (const Edge& candidate : trial_candidates) {
+        trial.candidate_mask[edgeId(candidate.u, candidate.v)] = 1;
+    }
+
+    const OneTree trial_tree = computeOneTree(trial, trial_candidates);
+    if (!trial_tree.feasible || !isFinite(trial_tree.cost)) {
+        return std::numeric_limits<double>::infinity();
+    }
+
+    const NodePotentialUpdateResult update = updateNodePotentialBound(
+        trial, trial_tree.cost, best_cost_, ascent_iterations, 1);
+    if (!update.feasible || !isFinite(update.bound)) {
+        return std::numeric_limits<double>::infinity();
+    }
+    return update.bound;
+}
+
 BranchBoundSolver::BranchSet BranchBoundSolver::bpPartition(
-    PartialSol& node, OneTree& work_tree)
+    PartialSol& node, OneTree& work_tree, int depth)
 {
     // B_set 保存依次发现的关键边，以及禁止该边后 work_tree 的重放信息。
     BranchSet B_set;
@@ -3454,7 +3594,9 @@ BranchBoundSolver::BranchSet BranchBoundSolver::bpPartition(
         // adjusted-weight 顺序保留两条，再在循环之后执行昂贵的 force 试算。
         auto consider_branch_edge = [&](const Edge& candidate) {
             if (branch_edge_order_
-                == BranchEdgeOrder::TwoSidedStrongBranchingTop2) {
+                    == BranchEdgeOrder::TwoSidedStrongBranchingTop2
+                || branch_edge_order_
+                    == BranchEdgeOrder::AscentStrongBranchingTop2) {
                 if (branch_edge_better(candidate, strong_candidates[0])) {
                     strong_candidates[1] = strong_candidates[0];
                     strong_candidates[0] = &candidate;
@@ -3904,20 +4046,50 @@ BranchBoundSolver::BranchSet BranchBoundSolver::bpPartition(
         }
 
         if (branch_edge_order_
-            == BranchEdgeOrder::TwoSidedStrongBranchingTop2) {
+                == BranchEdgeOrder::TwoSidedStrongBranchingTop2
+            || branch_edge_order_
+                == BranchEdgeOrder::AscentStrongBranchingTop2) {
             double best_weak_gain =
                 -std::numeric_limits<double>::infinity();
             double best_product_score =
                 -std::numeric_limits<double>::infinity();
+            const bool use_ascent_score = branch_edge_order_
+                == BranchEdgeOrder::AscentStrongBranchingTop2
+                && potential_update_strategy_ != PotentialUpdateStrategy::None
+                && potential_update_iterations_ != 0
+                && depth >= 0 && depth <= 2;
+            const std::size_t ascent_score_iterations = use_ascent_score
+                ? std::min<std::size_t>(16, potential_update_iterations_)
+                : 0;
+            const auto ascent_score_started_at =
+                std::chrono::steady_clock::now();
             for (const Edge* candidate : strong_candidates) {
                 if (candidate == nullptr) continue;
-                const double forbid_gain = currentForbidReplacementDelta(
-                    node, work_tree, *candidate);
-                const double force_bound =
-                    currentForceBranchBound(node, work_tree, *candidate);
-                const double force_gain = isFinite(force_bound)
-                    ? std::max(0.0, force_bound - work_tree.cost)
-                    : std::numeric_limits<double>::infinity();
+                double force_gain = 0.0;
+                double forbid_gain = 0.0;
+                if (use_ascent_score) {
+                    result_.stats.branch_ascent_strong_probes += 2;
+                    const double force_bound = trialBranchAscentBound(
+                        node, work_tree, *candidate, true,
+                        ascent_score_iterations);
+                    const double forbid_bound = trialBranchAscentBound(
+                        node, work_tree, *candidate, false,
+                        ascent_score_iterations);
+                    force_gain = isFinite(force_bound)
+                        ? std::max(0.0, force_bound - work_tree.cost)
+                        : std::numeric_limits<double>::infinity();
+                    forbid_gain = isFinite(forbid_bound)
+                        ? std::max(0.0, forbid_bound - work_tree.cost)
+                        : std::numeric_limits<double>::infinity();
+                } else {
+                    forbid_gain = currentForbidReplacementDelta(
+                        node, work_tree, *candidate);
+                    const double force_bound =
+                        currentForceBranchBound(node, work_tree, *candidate);
+                    force_gain = isFinite(force_bound)
+                        ? std::max(0.0, force_bound - work_tree.cost)
+                        : std::numeric_limits<double>::infinity();
+                }
                 const double weak_gain = std::min(force_gain, forbid_gain);
                 // 若任一侧为零，乘积就是零；先处理该情况可避免 0*inf=NaN。
                 const double product_score =
@@ -3935,6 +4107,12 @@ BranchBoundSolver::BranchSet BranchBoundSolver::bpPartition(
                 deg_best = candidate;
                 best_weak_gain = weak_gain;
                 best_product_score = product_score;
+            }
+            if (use_ascent_score) {
+                result_.stats.branch_ascent_strong_seconds +=
+                    std::chrono::duration<double>(
+                        std::chrono::steady_clock::now()
+                        - ascent_score_started_at).count();
             }
         }
 
@@ -4187,7 +4365,7 @@ void BranchBoundSolver::search(
     }
 
     // Step 4: BP 划分 —— 获取 B 集（关键边）。
-    BranchSet B_set = bpPartition(node, current_tree);
+    BranchSet B_set = bpPartition(node, current_tree, depth);
 
     // B 为空：禁止任意 1-tree 边均超上界，等价于 bound 剪枝。
     if (B_set.empty()) {
@@ -4445,9 +4623,10 @@ void BranchBoundSolver::search(
     const std::size_t parent_candidate_checkpoint = candidate_undo_.size();
     const std::size_t parent_tree_checkpoint = tree_undo_.size();
 
-    for (std::size_t idx = 0; idx < B_set.size(); ++idx) {
+    auto search_force_child = [&](std::size_t idx) {
         const BranchChoice& choice = B_set[idx];
         const Edge& branch_edge = choice.edge;
+        const double parent_bound = current_tree.cost;
         ForceChanges force_changes;
         if (apply_force(branch_edge, force_changes)) {
             const std::size_t child_candidate_checkpoint = candidate_undo_.size();
@@ -4499,7 +4678,141 @@ void BranchBoundSolver::search(
 
                 ++result_.stats.nodes_created;
                 if (tree_valid) {
-                    search(node, current_tree, depth + 1);
+                    Edge extra_edge;
+                    bool split = false;
+                    const bool try_split =
+                        branch_split_zero_gain_depth_ != 0
+                        && depth >= 0
+                        && static_cast<std::size_t>(depth)
+                            <= branch_split_zero_gain_depth_
+                        && costsNumericallyEqual(
+                            parent_bound, current_tree.cost,
+                            static_cast<std::size_t>(n_));
+                    if (try_split) {
+                        const std::size_t forced_id =
+                            edgeId(branch_edge.u, branch_edge.v);
+                        double best_forbid_delta =
+                            -std::numeric_limits<double>::infinity();
+                        for (const Edge& edge : current_tree.edges) {
+                            const std::size_t id = edgeId(edge.u, edge.v);
+                            if (id == forced_id) continue;
+                            if (node.forced[id] || node.forbidden[id]) continue;
+                            if (node.forced_degree[static_cast<std::size_t>(edge.u)] >= 2
+                                || node.forced_degree[static_cast<std::size_t>(edge.v)] >= 2) {
+                                continue;
+                            }
+                            const bool share_u = edge.u == branch_edge.u
+                                || edge.v == branch_edge.u;
+                            const bool share_v = edge.u == branch_edge.v
+                                || edge.v == branch_edge.v;
+                            if (!share_u && !share_v) continue;
+                            const int hotspot =
+                                share_u ? branch_edge.u : branch_edge.v;
+                            if (current_tree.degree[
+                                    static_cast<std::size_t>(hotspot)] <= 2) {
+                                continue;
+                            }
+                            const double delta = currentForbidReplacementDelta(
+                                node, current_tree, edge);
+                            if (!split || delta > best_forbid_delta) {
+                                extra_edge = edge;
+                                best_forbid_delta = delta;
+                                split = true;
+                            }
+                        }
+                    }
+                    if (split) {
+                        ++result_.stats.branch_zero_gain_splits;
+                        const std::size_t split_tree_checkpoint =
+                            tree_undo_.size();
+                        const std::size_t split_candidate_checkpoint =
+                            candidate_undo_.size();
+                        const std::size_t extra_id =
+                            edgeId(extra_edge.u, extra_edge.v);
+                        node.forbidden[extra_id] = 1;
+                        deactivateCandidate(node, extra_id);
+                        bool forbid_valid = false;
+#ifndef TSP_DISABLE_INCREMENTAL_ONETREE
+                        forbid_valid = updateOneTreeAfterForbid(
+                            node, candidates_sorted_, current_tree,
+                            extra_edge, true);
+#endif
+                        if (!forbid_valid) {
+                            rollbackOneTree(
+                                current_tree, split_tree_checkpoint);
+                            OneTree rebuilt = computeOneTree(
+                                node, candidates_sorted_);
+                            forbid_valid = rebuilt.feasible;
+                            if (forbid_valid) {
+                                replaceOneTreeWithRebuild(
+                                    current_tree, std::move(rebuilt));
+                            }
+                        }
+                        ++result_.stats.nodes_created;
+                        if (forbid_valid
+                            && !shouldPrune(current_tree.cost, best_cost_)) {
+                            search(node, current_tree, depth + 1);
+                        } else if (!forbid_valid) {
+                            ++result_.stats.nodes_pruned_infeasible;
+                        } else {
+                            ++result_.stats.nodes_pruned_by_bound;
+                        }
+                        rollbackOneTree(current_tree, split_tree_checkpoint);
+                        rollbackCandidates(node, split_candidate_checkpoint);
+                        node.forbidden[extra_id] = 0;
+                        if (restart_search_requested_) {
+                            return;
+                        }
+                        ForceChanges extra_force;
+                        if (apply_force(extra_edge, extra_force)) {
+                            const bool extra_ok = filterActiveCandidates(
+                                node, extra_force.merged_scan_root,
+                                extra_force.merged_scan_count,
+                                extra_force.merged_scan_bits);
+                            if (extra_ok) {
+                                bool extra_tree_valid = true;
+#ifndef TSP_DISABLE_INCREMENTAL_ONETREE
+                                if (candidate_undo_.size()
+                                    != split_candidate_checkpoint) {
+                                    extra_tree_valid =
+                                        updateOneTreeAfterActiveRemoval(
+                                            node, current_tree,
+                                            split_candidate_checkpoint, true);
+                                }
+#else
+                                extra_tree_valid = false;
+#endif
+                                if (!extra_tree_valid) {
+                                    rollbackOneTree(
+                                        current_tree, split_tree_checkpoint);
+                                    OneTree rebuilt = computeOneTree(
+                                        node, candidates_sorted_);
+                                    extra_tree_valid = rebuilt.feasible;
+                                    if (extra_tree_valid) {
+                                        replaceOneTreeWithRebuild(
+                                            current_tree, std::move(rebuilt));
+                                    }
+                                }
+                                ++result_.stats.nodes_created;
+                                if (extra_tree_valid) {
+                                    search(node, current_tree, depth + 1);
+                                } else {
+                                    ++result_.stats.nodes_pruned_infeasible;
+                                }
+                            } else {
+                                ++result_.stats.nodes_pruned_infeasible;
+                            }
+                            rollbackOneTree(
+                                current_tree, split_tree_checkpoint);
+                            rollbackCandidates(
+                                node, split_candidate_checkpoint);
+                            revert_force(extra_force);
+                        } else {
+                            ++result_.stats.nodes_pruned_infeasible;
+                        }
+                    } else {
+                        search(node, current_tree, depth + 1);
+                    }
                 } else {
                     ++result_.stats.nodes_pruned_infeasible;
                 }
@@ -4512,22 +4825,15 @@ void BranchBoundSolver::search(
         } else {
             ++result_.stats.nodes_pruned_infeasible;
         }
+    };
 
-        if (restart_search_requested_) {
-            break;
-        }
-
-        if (idx + 1 == B_set.size()) {
-            break;
-        }
-
-        // 当前 force 子节点完成后，仅把该边加入后续子节点的前缀禁止约束。
+    auto apply_forbid_prefix = [&](std::size_t idx) {
+        const BranchChoice& choice = B_set[idx];
+        const Edge& branch_edge = choice.edge;
         const std::size_t eid = edgeId(branch_edge.u, branch_edge.v);
         node.forbidden[eid] = 1;
         deactivateCandidate(node, eid);
 
-        // 将当前树从“此前 B 边被禁止”的状态推进到“连同当前
-        // branch_edge 也被禁止”的状态，供 B[idx+1] 的 force 子节点使用。
         bool prefix_valid = false;
 #ifndef TSP_DISABLE_INCREMENTAL_ONETREE
         if (!choice.replay_requires_rebuild
@@ -4563,10 +4869,43 @@ void BranchBoundSolver::search(
                 replaceOneTreeWithRebuild(current_tree, std::move(rebuilt));
             }
         }
-
-        // bpPartition 只有在该前缀仍可行时才会生成下一项；若生产校验仍
-        // 失败，下一子节点会通过完整重建判为 infeasible，不使用坏状态。
         (void)prefix_valid;
+    };
+
+    auto clear_forbid_prefix = [&]() {
+        rollbackOneTree(current_tree, parent_tree_checkpoint);
+        rollbackCandidates(node, parent_candidate_checkpoint);
+        for (std::size_t index = 0; index + 1 < B_set.size(); ++index) {
+            const Edge& edge = B_set[index].edge;
+            node.forbidden[edgeId(edge.u, edge.v)] = 0;
+        }
+    };
+
+    const bool lift_first =
+        branch_lift_first_depth_ != 0
+        && depth >= 0
+        && static_cast<std::size_t>(depth) <= branch_lift_first_depth_
+        && B_set.size() >= 2;
+    if (lift_first) {
+        ++result_.stats.branch_lift_first_reorders;
+        apply_forbid_prefix(0);
+        for (std::size_t idx = 1; idx < B_set.size(); ++idx) {
+            search_force_child(idx);
+            if (restart_search_requested_) break;
+            if (idx + 1 == B_set.size()) break;
+            apply_forbid_prefix(idx);
+        }
+        if (!restart_search_requested_) {
+            clear_forbid_prefix();
+            search_force_child(0);
+        }
+    } else {
+        for (std::size_t idx = 0; idx < B_set.size(); ++idx) {
+            search_force_child(idx);
+            if (restart_search_requested_) break;
+            if (idx + 1 == B_set.size()) break;
+            apply_forbid_prefix(idx);
+        }
     }
 
     rollbackOneTree(current_tree, parent_tree_checkpoint);

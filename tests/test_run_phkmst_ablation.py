@@ -43,6 +43,41 @@ Options:
             ("--mode", "current", "--label", "two words"),
         )
 
+    def test_branch_ablation_configurations_keep_p32_baseline_neutral(self) -> None:
+        names = (
+            "GAPMST-P32-LKH-BP-base",
+            "GAPMST-P32-LKH-BP-lift2",
+            "GAPMST-P32-LKH-BP-split2",
+            "GAPMST-P32-LKH-BP-lift2-split2",
+            "GAPMST-P32-LKH-BP-ascent-strong",
+            "GAPMST-P32-LKH-BP-ascent-strong-lift2",
+            "GAPMST-P32-LKH-BP-ascent-strong-split2",
+            "GAPMST-P32-LKH-BP-ascent-strong-lift2-split2",
+        )
+        for name in names:
+            strategy = runner.CONFIGURATION_BY_NAME[name]
+            arguments = list(strategy.solver_args)
+
+            def value(option: str) -> str:
+                return arguments[arguments.index(option) + 1]
+
+            self.assertEqual(strategy.executable, PROJECT_ROOT / "build" / "tsp_bb")
+            self.assertEqual(value("--hk-update-iterations"), "32")
+            self.assertEqual(value("--hk-update-budget"), "0")
+            self.assertEqual(value("--hk-update-max-depth"), "0")
+            self.assertEqual(value("--hk-update-skip-last-edges"), "0")
+            self.assertEqual(value("--hk-update-min-gap-change-ratio"), "0")
+            self.assertEqual(value("--root-candidate-compaction"), "off")
+            self.assertFalse(any(
+                option in arguments
+                for option in (
+                    "--hk-update-large-gap-ratio",
+                    "--hk-update-shallow-depth",
+                    "--hk-update-slow-warm-depth",
+                    "--hk-update-probe-updates",
+                )
+            ))
+
     def test_help_probe_extracts_options_and_enum_values(self) -> None:
         self.assertIsNotNone(self.interface.options)
         assert self.interface.options is not None
@@ -157,6 +192,10 @@ Potential updates skipped near leaf: 12
 Potential updates skipped depth interval: 8
 Potential updates skipped gap change below minimum: 11
 Potential update gap-change shallow bypasses: 13
+Branch lift-first reorders: 14
+Branch zero-gain splits: 15
+Branch ascent-strong probes: 16
+Branch ascent-strong seconds: 0.375
 Search-node potential iterations: 91
 Optimal cost: 2.6e1
 """)
@@ -195,6 +234,10 @@ Optimal cost: 2.6e1
             "search_node_potential_updates_skipped_depth_interval": 8,
             "search_node_potential_updates_skipped_gap_change_below_minimum": 11,
             "potential_update_gap_change_shallow_bypasses": 13,
+            "branch_lift_first_reorders": 14,
+            "branch_zero_gain_splits": 15,
+            "branch_ascent_strong_probes": 16,
+            "branch_ascent_strong_seconds": 0.375,
             "search_node_potential_iterations": 91,
         }
         for field, value in expected.items():
@@ -211,6 +254,8 @@ Optimal cost: 2.6e1
             "lkh_provider_calls", "lkh_provider_failures",
             "lkh_provider_seconds",
             "root_candidate_compaction_seconds",
+            "branch_lift_first_reorders", "branch_zero_gain_splits",
+            "branch_ascent_strong_probes", "branch_ascent_strong_seconds",
             "potential_update_seconds", "potential_update_rebuild_seconds",
             "replacement_seconds",
         ):
