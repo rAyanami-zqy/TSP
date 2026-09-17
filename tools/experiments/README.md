@@ -103,7 +103,7 @@ python3 tools/experiments/export_cphkmst_tour.py /private/tmp/cphkmst-root50.jso
   --instance eil101 --mode clk-multi --seed 1 --output /private/tmp/eil101-seed.tour
 ./build/tsp_bb --initial-tour /private/tmp/eil101-seed.tour \
   --hk-potential-update subtree-adaptive --hk-update-depth 1 \
-  --hk-update-iterations 32 --hk-update-gap-ratio 0.02 --hk-update-budget 0 \
+  --hk-update-iterations 32 --hk-update-budget 0 \
   data/classic/tsplib/eil101.tsp
 ```
 

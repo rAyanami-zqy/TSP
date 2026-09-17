@@ -479,20 +479,15 @@ void BranchBoundSolver::setBranchEdgeOrder(BranchEdgeOrder order)
 
 void BranchBoundSolver::setPotentialUpdateOptions(
     PotentialUpdateStrategy strategy, std::size_t depth,
-    std::size_t iterations, double gap_ratio, std::size_t budget)
+    std::size_t iterations, std::size_t budget)
 {
     if (strategy != PotentialUpdateStrategy::None && depth == 0) {
         throw std::invalid_argument(
             "potential update depth must be positive");
     }
-    if (!isFinite(gap_ratio) || gap_ratio < 0.0) {
-        throw std::invalid_argument(
-            "potential update gap ratio must be finite and non-negative");
-    }
     potential_update_strategy_ = strategy;
     potential_update_depth_ = depth;
     potential_update_iterations_ = iterations;
-    potential_update_gap_ratio_ = gap_ratio;
     potential_update_budget_ = budget;
 }
 
@@ -511,23 +506,14 @@ void BranchBoundSolver::setPotentialUpdateSkipLastEdges(
     potential_update_skip_last_edges_ = skip_last_edges;
 }
 
-void BranchBoundSolver::setPotentialUpdateGapSchedule(
-    double min_gap_ratio, double large_gap_ratio,
+void BranchBoundSolver::setPotentialUpdateLargeGapTier(
+    double large_gap_ratio,
     std::size_t large_gap_iterations)
 {
-    if (!isFinite(min_gap_ratio) || min_gap_ratio < 0.0) {
-        throw std::invalid_argument(
-            "potential update minimum gap ratio must be finite and non-negative");
-    }
-    if (min_gap_ratio > potential_update_gap_ratio_) {
-        throw std::invalid_argument(
-            "potential update minimum gap ratio exceeds its maximum gap ratio");
-    }
     if (!isFinite(large_gap_ratio) || large_gap_ratio < 0.0) {
         throw std::invalid_argument(
             "potential update large-gap ratio must be finite and non-negative");
     }
-    potential_update_min_gap_ratio_ = min_gap_ratio;
     potential_update_large_gap_ratio_ = large_gap_ratio;
     potential_update_large_gap_iterations_ = large_gap_iterations;
 }
@@ -1376,15 +1362,9 @@ BranchBoundSolver::classifyPotentialUpdate(
         return PotentialUpdateDecision::Trigger;
     }
 
-    // scale 避免 UB 接近 0 时除数退化；relative_gap 是无量纲触发指标。
+    // scale 避免 UB 接近 0 时除数退化；只供 epoch-relative gap-change
+    // 门槛归一化。绝对相对 gap 不再负责阻止节点势更新。
     const double scale = std::max(1.0, std::fabs(upper_bound));
-    const double relative_gap = std::max(0.0, upper_bound - bound) / scale;
-    if (relative_gap < potential_update_min_gap_ratio_) {
-        return PotentialUpdateDecision::GapBelowMinimum;
-    }
-    if (relative_gap > potential_update_gap_ratio_) {
-        return PotentialUpdateDecision::GapAboveMaximum;
-    }
     if (potential_update_min_gap_change_ratio_ > 0.0) {
         if (static_cast<std::size_t>(depth)
             <= potential_update_gap_change_start_depth_) {
@@ -2955,10 +2935,6 @@ SolveResult BranchBoundSolver::solve()
              << result_.stats.search_node_potential_updates_skipped_max_depth
              << " potential_skipped_near_leaf="
              << result_.stats.search_node_potential_updates_skipped_near_leaf
-             << " potential_skipped_gap_below_minimum="
-             << result_.stats.search_node_potential_updates_skipped_gap_below_minimum
-             << " potential_skipped_gap_above_maximum="
-             << result_.stats.search_node_potential_updates_skipped_gap_above_maximum
              << " potential_skipped_gap_change_below_minimum="
              << result_.stats
                     .search_node_potential_updates_skipped_gap_change_below_minimum
@@ -3931,12 +3907,6 @@ void BranchBoundSolver::search(
             break;
         case PotentialUpdateDecision::DepthInterval:
             ++result_.stats.search_node_potential_updates_skipped_depth_interval;
-            break;
-        case PotentialUpdateDecision::GapBelowMinimum:
-            ++result_.stats.search_node_potential_updates_skipped_gap_below_minimum;
-            break;
-        case PotentialUpdateDecision::GapAboveMaximum:
-            ++result_.stats.search_node_potential_updates_skipped_gap_above_maximum;
             break;
         case PotentialUpdateDecision::GapChangeBelowMinimum:
             ++result_.stats

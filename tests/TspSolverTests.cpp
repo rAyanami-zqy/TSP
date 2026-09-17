@@ -258,7 +258,7 @@ struct BranchBoundSolverTestAccess {
                 BranchBoundSolver::TourCandidate{});
             solver.setPotentialUpdateOptions(
                 PotentialUpdateStrategy::SubtreeDepth,
-                1, 1, 1.0, 5000);
+                1, 1, 5000);
             solver.potential_updates_in_round_ = 1000;
             const auto limited = solver.classifyPotentialUpdate(
                 tree, 1, tree.cost,
@@ -271,7 +271,7 @@ struct BranchBoundSolverTestAccess {
 
             solver.setPotentialUpdateOptions(
                 PotentialUpdateStrategy::SubtreeDepth,
-                1, 1, 1.0, 0);
+                1, 1, 0);
             const auto unlimited = solver.classifyPotentialUpdate(
                 tree, 1, tree.cost,
                 tree.cost + std::max(1.0, std::fabs(tree.cost)),
@@ -280,6 +280,21 @@ struct BranchBoundSolverTestAccess {
                 unlimited
                     != BranchBoundSolver::PotentialUpdateDecision::BudgetExhausted,
                 "zero node-potential budget did not disable the limit");
+        }
+
+        void verifyLargeAbsoluteGapDoesNotBlockPotentialUpdate()
+        {
+            solver.setPotentialUpdateOptions(
+                PotentialUpdateStrategy::SubtreeAdaptive,
+                1, 1, 0);
+            solver.setPotentialUpdateGapChangeThreshold(0.0);
+            const double scale = std::max(1.0, std::fabs(tree.cost));
+            const auto decision = solver.classifyPotentialUpdate(
+                tree, 1, tree.cost, tree.cost + 100.0 * scale,
+                node.forced_edges.size());
+            expect(
+                decision == BranchBoundSolver::PotentialUpdateDecision::Trigger,
+                "large absolute gap unexpectedly blocked a shallow potential update");
         }
 
         void buildRootAlphaNearness()
@@ -579,8 +594,6 @@ void expectPotentialUpdateDecisionAccounting(
         + stats.search_node_potential_updates_skipped_max_depth
         + stats.search_node_potential_updates_skipped_near_leaf
         + stats.search_node_potential_updates_skipped_depth_interval
-        + stats.search_node_potential_updates_skipped_gap_below_minimum
-        + stats.search_node_potential_updates_skipped_gap_above_maximum
         + stats
             .search_node_potential_updates_skipped_gap_change_below_minimum;
     if (stats.search_node_potential_update_candidates
@@ -1126,7 +1139,7 @@ void testMixedMagnitudeForceRollback()
     tsp::BranchBoundSolver update_solver(matrix);
     update_solver.setRootAscentStrategy(tsp::RootAscentStrategy::None);
     update_solver.setPotentialUpdateOptions(
-        tsp::PotentialUpdateStrategy::SubtreeAdaptive, 1, 16, 1.0, 100);
+        tsp::PotentialUpdateStrategy::SubtreeAdaptive, 1, 16, 100);
     const tsp::SolveResult update_result = update_solver.solve();
     expectCost(update_result.cost, result.cost,
                "mixed-magnitude potential safety changed the optimum");
@@ -1142,6 +1155,12 @@ void testUnlimitedPotentialUpdateBudget()
 {
     Fixture fixture(replacementMatrix());
     fixture.verifyUnlimitedPotentialUpdateBudget();
+}
+
+void testLargeAbsoluteGapDoesNotBlockPotentialUpdate()
+{
+    Fixture fixture(replacementMatrix());
+    fixture.verifyLargeAbsoluteGapDoesNotBlockPotentialUpdate();
 }
 
 void testRandomCompleteSolveAgainstBruteForce()
@@ -1173,7 +1192,7 @@ void testRandomCompleteSolveAgainstBruteForce()
                 case_index % 2 == 0
                     ? tsp::PotentialUpdateStrategy::SubtreeDepth
                     : tsp::PotentialUpdateStrategy::SubtreeAdaptive,
-                1, 16, 1.0, 100);
+                1, 16, 100);
             const tsp::SolveResult update_result = update_solver.solve();
             expectCost(
                 update_result.cost, bruteForceOptimalCost(matrix),
@@ -1229,7 +1248,7 @@ void testRandomSparseSolveAgainstBruteForce()
                 case_index % 2 == 0
                     ? tsp::PotentialUpdateStrategy::SubtreeDepth
                     : tsp::PotentialUpdateStrategy::SubtreeAdaptive,
-                1, 16, 1.0, 100);
+                1, 16, 100);
             const tsp::SolveResult update_result = update_solver.solve();
             expectCost(
                 update_result.cost, bruteForceOptimalCost(matrix),
@@ -1748,7 +1767,7 @@ void testSearchNodePotentialUpdates()
              tsp::PotentialUpdateStrategy::SubtreeDepth,
              tsp::PotentialUpdateStrategy::SubtreeAdaptive}) {
         tsp::BranchBoundSolver solver(matrix);
-        solver.setPotentialUpdateOptions(strategy, 1, 8, 1.0, 100);
+        solver.setPotentialUpdateOptions(strategy, 1, 8, 100);
         const tsp::SolveResult result = solver.solve();
         expectCost(result.cost, 699.0,
                    "node potential update changed the exact optimum");
@@ -1775,8 +1794,8 @@ void testSearchNodePotentialUpdates()
         tsp::BranchBoundSolver solver(matrix);
         solver.setPotentialUpdateOptions(
             tsp::PotentialUpdateStrategy::SubtreeAdaptive,
-            1, 0, 1.0, 100);
-        solver.setPotentialUpdateGapSchedule(0.0, 0.0, 8);
+            1, 0, 100);
+        solver.setPotentialUpdateLargeGapTier(0.0, 8);
         const tsp::SolveResult result = solver.solve();
         expectCost(result.cost, 699.0,
                    "large-gap iteration tier changed the exact optimum");
@@ -1790,37 +1809,13 @@ void testSearchNodePotentialUpdates()
         }
     }
 
-    // dantzig42 搜索中的相对 gap 远小于 100%；把最小门设为 100% 应完全
-    // 阻止 Adaptive 更新，同时不改变精确结果。
-    {
-        tsp::BranchBoundSolver solver(matrix);
-        solver.setPotentialUpdateOptions(
-            tsp::PotentialUpdateStrategy::SubtreeAdaptive,
-            1, 8, 1.0, 100);
-        solver.setPotentialUpdateGapSchedule(1.0, 0.0, 0);
-        const tsp::SolveResult result = solver.solve();
-        expectCost(result.cost, 699.0,
-                   "minimum gap gate changed the exact optimum");
-        expectPotentialUpdateDecisionAccounting(
-            result.stats, "minimum gap gate");
-        if (result.stats.search_node_potential_updates_triggered != 0) {
-            throw std::runtime_error(
-                "minimum gap gate unexpectedly allowed an update");
-        }
-        if (result.stats.search_node_potential_updates_skipped_gap_below_minimum
-            == 0) {
-            throw std::runtime_error(
-                "minimum gap gate did not report its skipped nodes");
-        }
-    }
-
     // epoch-relative gap-change 门槛衡量自最近一次成功势上升以来的下界
     // 增量。100% 对本正权实例不可达，应阻止全部更新并保持精确性。
     {
         tsp::BranchBoundSolver solver(matrix);
         solver.setPotentialUpdateOptions(
             tsp::PotentialUpdateStrategy::SubtreeAdaptive,
-            1, 8, 1.0, 100);
+            1, 8, 100);
         solver.setPotentialUpdateGapChangeThreshold(1.0);
         solver.setPotentialUpdateGapChangeStartDepth(0);
         const tsp::SolveResult result = solver.solve();
@@ -1845,7 +1840,7 @@ void testSearchNodePotentialUpdates()
         tsp::BranchBoundSolver solver(matrix);
         solver.setPotentialUpdateOptions(
             tsp::PotentialUpdateStrategy::SubtreeAdaptive,
-            1, 8, 1.0, 100);
+            1, 8, 100);
         solver.setPotentialUpdateMaxDepth(1);
         const tsp::SolveResult result = solver.solve();
         expectCost(result.cost, 699.0,
@@ -1864,7 +1859,7 @@ void testSearchNodePotentialUpdates()
         tsp::BranchBoundSolver solver(matrix);
         solver.setPotentialUpdateOptions(
             tsp::PotentialUpdateStrategy::SubtreeAdaptive,
-            1, 8, 1.0, 100);
+            1, 8, 100);
         solver.setPotentialUpdateSkipLastEdges(42);
         const tsp::SolveResult result = solver.solve();
         expectCost(result.cost, 699.0,
@@ -1883,7 +1878,7 @@ void testSearchNodePotentialUpdates()
         tsp::BranchBoundSolver solver(matrix);
         solver.setPotentialUpdateOptions(
             tsp::PotentialUpdateStrategy::SubtreeAdaptive,
-            1, 8, 1.0, 100);
+            1, 8, 100);
         solver.setPotentialUpdateGapChangeThreshold(1.0);
         solver.setPotentialUpdateGapChangeStartDepth(1);
         const tsp::SolveResult result = solver.solve();
@@ -1909,7 +1904,7 @@ void testSearchNodePotentialUpdates()
         solver.setNodeAscentStrategy(node_ascent);
         solver.setPotentialUpdateOptions(
             tsp::PotentialUpdateStrategy::SubtreeAdaptive,
-            1, 16, 1.0, 100);
+            1, 16, 100);
         const tsp::SolveResult result = solver.solve();
         expectCost(result.cost, 699.0,
                    "experimental node ascent changed the exact optimum");
@@ -1929,7 +1924,7 @@ void testSearchNodePotentialUpdates()
         solver.setNodeAscentDirectionSmoothing(0.65, 0.15, 0.4, 0.85);
         solver.setPotentialUpdateOptions(
             tsp::PotentialUpdateStrategy::SubtreeAdaptive,
-            1, 16, 1.0, 100);
+            1, 16, 100);
         const tsp::SolveResult result = solver.solve();
         expectCost(result.cost, 699.0,
                    "custom node smoothing changed the exact optimum");
@@ -1976,7 +1971,7 @@ void testSearchNodePotentialUpdates()
         solver.setNodeAscentSiblingWarmWeight(0.0);
         solver.setPotentialUpdateOptions(
             tsp::PotentialUpdateStrategy::SubtreeAdaptive,
-            1, 16, 1.0, 100);
+            1, 16, 100);
         const tsp::SolveResult result = solver.solve();
         expectCost(result.cost, 699.0,
                    "disabling sibling warm start changed the exact optimum");
@@ -1988,7 +1983,7 @@ void testSearchNodePotentialUpdates()
             tsp::SiblingWarmStartStrategy::Guarded);
         solver.setPotentialUpdateOptions(
             tsp::PotentialUpdateStrategy::SubtreeAdaptive,
-            1, 16, 1.0, 100);
+            1, 16, 100);
         const tsp::SolveResult result = solver.solve();
         expectCost(result.cost, 699.0,
                    "guarded sibling warm start changed the exact optimum");
@@ -2023,7 +2018,7 @@ void testSearchNodePotentialUpdates()
             tsp::BranchBoundSolver solver(small);
             solver.setRootAscentStrategy(tsp::RootAscentStrategy::None);
             solver.setNodeAscentStrategy(node_ascent);
-            solver.setPotentialUpdateOptions(strategy, 1, 16, 1.0, 100);
+            solver.setPotentialUpdateOptions(strategy, 1, 16, 100);
             const tsp::SolveResult result = solver.solve();
             expectCost(result.cost, small_optimum,
                        "node potential epoch exceeded brute-force optimum");
@@ -2041,7 +2036,7 @@ void testSearchNodePotentialUpdates()
     tsp::BranchBoundSolver subtree_solver(st70_problem.toDenseMatrix(70));
     subtree_solver.setPotentialUpdateOptions(
         tsp::PotentialUpdateStrategy::SubtreeAdaptive,
-        4, 8, 0.01, 100);
+        4, 8, 100);
     const tsp::SolveResult subtree_result = subtree_solver.solve();
     expectCost(subtree_result.cost, 675.0,
                "persistent potential epoch changed the st70 optimum");
@@ -2061,7 +2056,7 @@ void testSearchNodePotentialUpdates()
     tsp::BranchBoundSolver probe_solver(st70_problem.toDenseMatrix(70));
     probe_solver.setPotentialUpdateOptions(
         tsp::PotentialUpdateStrategy::SubtreeAdaptive,
-        2, 16, 0.05, 5000);
+        2, 16, 5000);
     probe_solver.setPotentialUpdateProbeOptions(2, 0.01, 1.0);
     const tsp::SolveResult probe_result = probe_solver.solve();
     expectCost(probe_result.cost, 675.0,
@@ -2196,7 +2191,7 @@ void testSuppliedInitialTour()
         std::shuffle(tour.begin(), tour.end(), rng);
         tsp::BranchBoundSolver solver(matrix);
         solver.setInitialTour(tour);
-        solver.setPotentialUpdateOptions(tsp::PotentialUpdateStrategy::SubtreeDepth, 1, 8, 1, 0);
+        solver.setPotentialUpdateOptions(tsp::PotentialUpdateStrategy::SubtreeDepth, 1, 8, 0);
         expectCost(solver.solve().cost, bruteForceOptimalCost(matrix), "supplied incumbent changed optimum");
         solver.setInitialTour({});
         expectCost(solver.solve().cost, bruteForceOptimalCost(matrix), "cleared incumbent changed optimum");
@@ -2241,6 +2236,7 @@ int main()
         testScaleSafeExactSearch();
         testMixedMagnitudeForceRollback();
         testUnlimitedPotentialUpdateBudget();
+        testLargeAbsoluteGapDoesNotBlockPotentialUpdate();
         testRandomCompleteSolveAgainstBruteForce();
         testRandomSparseSolveAgainstBruteForce();
         testProblemParsingDoesNotWriteStdout();

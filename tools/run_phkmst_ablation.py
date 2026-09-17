@@ -332,6 +332,24 @@ OUTPUT_STATISTICS: tuple[OutputStatistic, ...] = (
         kind="int",
         summarize=True,
     ),
+    OutputStatistic(
+        column="lkh_provider_calls",
+        tspbb_labels=("LKH provider calls",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="lkh_provider_failures",
+        tspbb_labels=("LKH provider failures",),
+        kind="int",
+        summarize=True,
+    ),
+    OutputStatistic(
+        column="lkh_provider_seconds",
+        tspbb_labels=("LKH provider seconds",),
+        kind="float",
+        summarize=True,
+    ),
     # 实际进入节点势更新判定的非根逻辑搜索节点数，是计算触发率的分母。
     OutputStatistic(
         column="search_node_potential_update_candidates",
@@ -408,18 +426,6 @@ OUTPUT_STATISTICS: tuple[OutputStatistic, ...] = (
     OutputStatistic(
         column="search_node_potential_updates_skipped_depth_interval",
         tspbb_labels=("Potential updates skipped depth interval",),
-        kind="int",
-        summarize=True,
-    ),
-    OutputStatistic(
-        column="search_node_potential_updates_skipped_gap_below_minimum",
-        tspbb_labels=("Potential updates skipped gap below minimum",),
-        kind="int",
-        summarize=True,
-    ),
-    OutputStatistic(
-        column="search_node_potential_updates_skipped_gap_above_maximum",
-        tspbb_labels=("Potential updates skipped gap above maximum",),
         kind="int",
         summarize=True,
     ),
@@ -507,7 +513,6 @@ def phkmst_args(
     node_ascent: str = "polyak",
     potential_update: str = "none",
     update_depth: int = 2,
-    update_gap_ratio: float = 0.02,
     update_iterations: int = 16,
     update_budget: int = 5000,
     branch_edge_order: str = "weight",
@@ -521,7 +526,6 @@ def phkmst_args(
     if potential_update != "none":
         args.extend([
             "--hk-update-depth", str(update_depth),
-            "--hk-update-gap-ratio", str(update_gap_ratio),
             "--hk-update-iterations", str(update_iterations),
             "--hk-update-budget", str(update_budget),
         ])
@@ -591,8 +595,6 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
             --branch-edge-order weight
             --hk-potential-update subtree-adaptive
             --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
             --hk-update-iterations 32
             --hk-update-budget 0
             --lkh-provider /home/wj/code/TSP/build-lkh/tsp_lkh_provider
@@ -616,8 +618,6 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
             --branch-edge-order weight
             --hk-potential-update subtree-adaptive
             --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
             --hk-update-iterations 32
             --hk-update-budget 0
             --hk-update-max-depth 0
@@ -649,8 +649,6 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
             --branch-edge-order weight
             --hk-potential-update subtree-adaptive
             --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
             --hk-update-iterations 32
             --hk-update-budget 0
             --lkh-provider /home/wj/code/TSP/build-lkh/tsp_lkh_provider
@@ -681,8 +679,6 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
             --branch-edge-order weight
             --hk-potential-update subtree-adaptive
             --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
             --hk-update-iterations 32
             --hk-update-budget 0
             --hk-update-max-depth 0
@@ -711,8 +707,6 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
             --branch-edge-order weight
             --hk-potential-update subtree-adaptive
             --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
             --hk-update-iterations 32
             --hk-update-budget 0
             --hk-update-max-depth 0
@@ -741,8 +735,6 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
             --branch-edge-order weight
             --hk-potential-update subtree-adaptive
             --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
             --hk-update-iterations 32
             --hk-update-budget 0
             --hk-update-max-depth 0
@@ -771,8 +763,6 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
             --branch-edge-order weight
             --hk-potential-update subtree-adaptive
             --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
             --hk-update-iterations 32
             --hk-update-budget 0
             --hk-update-max-depth 0
@@ -801,8 +791,6 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
             --branch-edge-order weight
             --hk-potential-update subtree-adaptive
             --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
             --hk-update-iterations 32
             --hk-update-budget 0
             --hk-update-max-depth 0
@@ -831,8 +819,6 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
             --branch-edge-order weight
             --hk-potential-update subtree-adaptive
             --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
             --hk-update-iterations 32
             --hk-update-budget 0
             --hk-update-max-depth 0
@@ -861,8 +847,6 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
             --branch-edge-order weight
             --hk-potential-update subtree-adaptive
             --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
             --hk-update-iterations 32
             --hk-update-budget 0
             --hk-update-max-depth 0
@@ -891,8 +875,6 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
             --branch-edge-order weight
             --hk-potential-update subtree-adaptive
             --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
             --hk-update-iterations 32
             --hk-update-budget 0
             --hk-update-max-depth 0
@@ -921,8 +903,6 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
             --branch-edge-order weight
             --hk-potential-update subtree-adaptive
             --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
             --hk-update-iterations 32
             --hk-update-budget 0
             --hk-update-max-depth 0
@@ -951,8 +931,6 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
             --branch-edge-order weight
             --hk-potential-update subtree-adaptive
             --hk-update-depth 1
-            --hk-update-gap-ratio 0.02
-            --hk-update-min-gap-ratio 0.0
             --hk-update-iterations 32
             --hk-update-budget 0
             --hk-update-max-depth 0
@@ -1114,7 +1092,6 @@ KNOWN_VALUE_OPTIONS = {
     "--hk-update-depth",
     "--hk-update-max-depth",
     "--hk-update-skip-last-edges",
-    "--hk-update-gap-ratio",
     "--hk-update-iterations",
     "--hk-update-min-gap-change-ratio",
     "--hk-update-gap-change-start-depth",
@@ -1689,7 +1666,11 @@ def parse_tspbb_progress(stdout: str, stderr: str = "") -> dict[str, Any]:
             continue
         payload = line[marker_at + len(marker):].strip()
         values = tokens(payload)
-        if payload.startswith("initial incumbent:"):
+        if payload.startswith("LKH provider:"):
+            set_int("lkh_provider_calls", values.get("calls"))
+            set_int("lkh_provider_failures", values.get("failures"))
+            set_float("lkh_provider_seconds", values.get("seconds"))
+        elif payload.startswith("initial incumbent:"):
             set_float("initial_upper_bound", values.get("cost"))
             set_float("final_upper_bound", values.get("cost"))
         elif payload.startswith("initial tour timing:"):
@@ -1809,6 +1790,9 @@ def run_tspbb_once(
         row["wall_seconds"] = time.perf_counter() - started
         row.update(parse_tspbb_statistics(completed.stdout, completed.stderr))
         if completed.returncode != 0:
+            # provider 初始化失败等早退路径没有最终的人类可读统计；仍从已
+            # flush 的 debug 前缀恢复 LKH 调用/失败/耗时等已知状态。
+            row.update(parse_tspbb_progress(completed.stdout, completed.stderr))
             details = completed.stderr.strip() or completed.stdout.strip()
             return row, f"exit {completed.returncode}: {details[-500:]}"
         missing = missing_required_statistics(row, strategy)

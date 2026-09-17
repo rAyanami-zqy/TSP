@@ -50,6 +50,7 @@ SKIPPED_REASON_PREFIX = "search_node_potential_updates_skipped_"
 SKIPPED_TOTAL_FIELD = "search_node_potential_updates_skipped_total"
 PREFERRED_METRICS = (
     "wall_seconds",
+    "root_lower_bound",
     "final_upper_bound",
     "final_lower_bound",
     "final_relative_gap",
@@ -57,6 +58,9 @@ PREFERRED_METRICS = (
     "nodes_expanded",
     "initial_tour_seconds",
     "root_ascent_seconds",
+    "lkh_provider_calls",
+    "lkh_provider_failures",
+    "lkh_provider_seconds",
     "pruned_by_bound",
     "pruned_infeasible",
     "root_fixing_calls",
@@ -77,9 +81,13 @@ PREFERRED_METRICS = (
 )
 DEFAULT_HTML_METRICS = (
     "wall_seconds",
+    "root_lower_bound",
     "branches",
     "initial_tour_seconds",
     "root_ascent_seconds",
+    "lkh_provider_calls",
+    "lkh_provider_failures",
+    "lkh_provider_seconds",
     "root_fixing_seconds",
     "potential_update_seconds",
     "potential_update_rebuild_seconds",
@@ -110,6 +118,9 @@ METRIC_LABELS = {
     "adaptive_clk_improvements": "自适应 CLK 改善数",
     "root_potential_iterations": "根势迭代数",
     "root_ascent_seconds": "根势上升耗时",
+    "lkh_provider_calls": "LKH provider 调用数",
+    "lkh_provider_failures": "LKH provider 失败数",
+    "lkh_provider_seconds": "LKH provider 耗时",
     "search_node_potential_update_candidates": "节点势更新候选数",
     "search_node_potential_updates_triggered": "节点势更新触发数",
     SKIPPED_TOTAL_FIELD: "节点势更新跳过总数",
@@ -142,6 +153,43 @@ COLLAPSIBLE_SKIP_REASON_FIELDS = frozenset({
     "search_node_potential_updates_skipped_update_depth_zero",
     "search_node_potential_updates_skipped_zero_iteration_limit",
     "search_node_potential_updates_skipped_zero_violation",
+})
+ROOT_FIXING_FIELDS = frozenset({
+    "root_fixing_calls",
+    "root_fixing_tested",
+    "root_fixing_fixed_zero",
+    "root_fixing_tree_tested",
+    "root_fixing_fixed_one",
+    "root_fixing_active_after",
+    "root_fixing_seconds",
+})
+COLLAPSIBLE_DETAIL_FIELDS = ROOT_FIXING_FIELDS | COLLAPSIBLE_SKIP_REASON_FIELDS
+
+# These diagnostics remain available in instance_details.csv and the per-pair CSV
+# files, but are omitted from the human-facing reports to keep them readable.
+HIDDEN_REPORT_METRICS = frozenset({
+    "adaptive_clk_improvements",
+    "adaptive_clk_triggers",
+    "initial_clk_starts",
+    "initial_upper_bound",
+    "potential_update_gap_change_shallow_bypasses",
+    "root_candidate_compaction_calls",
+    "root_candidate_compaction_seconds",
+    "root_candidate_edges_after",
+    "root_candidate_edges_before",
+    "root_external_potential_replacements",
+    "root_external_potential_warm_starts",
+    "root_guided_lk_calls",
+    "root_guided_lk_improvements",
+    "root_guided_lk_reascents",
+    "root_guided_lk_seconds",
+    "root_guided_lk_total_gain",
+    "search_node_potential_updates_skipped_gap_change_below_minimum",
+    "search_node_potential_updates_skipped_max_depth",
+    "search_node_potential_updates_skipped_near_leaf",
+    "sibling_warm_accepted",
+    "sibling_warm_probes",
+    "sibling_warm_rejected",
 })
 MISSING_FACTOR = "<未设置>"
 HK_NODE_ASCENT_OPTION = "--hk-node-ascent"
@@ -1457,7 +1505,6 @@ def markdown_report(
         "- **节点势更新触发数**：候选节点通过策略、预算、数值安全、深度和 gap 等条件后，实际启动节点势优化的次数。",
         "- **节点势迭代数**：所有已触发更新内部执行的次梯度迭代轮数之和；一次触发最多可执行 `--hk-update-iterations` 轮。",
         "- **节点势更新跳过总数**：所有互斥跳过原因之和。求解器按第一个命中的原因计数，因此应满足 `候选数 = 触发数 + 跳过总数`。",
-        "- **guarded warm**：混合兄弟势先做一次当前约束图 1-tree 验证；接受时该评估复用为上升首轮，拒绝时它是配置迭代上限之外的一次额外评估。探测、接受和拒绝分别有独立计数。",
         "- `--hk-update-budget` 限制的是**每轮根搜索的触发次数**，不是迭代总数；设为 `0` 表示不限。正数预算下，初始探测轮最多使用 `min(budget, 1000)` 次；若 incumbent 改善并重启根搜索，计数器会清零，下一轮可再使用完整预算。因此整个求解的触发数可能超过配置预算，迭代数还会再乘上每次更新的迭代轮数。预算耗尽后访问的候选节点仍会逐个计入“跳过：预算耗尽”，所以跳过数也可能远大于预算。",
         "- 阶段耗时中 `replacement_seconds` 是根 fixing、BP 分支和候选删除过程中 fundamental-cut replacement 查询的子阶段，可能与其他阶段重叠，不能直接把所有耗时列相加当作总时间。",
         "",
@@ -1609,6 +1656,7 @@ def html_report(
             for metric in metric_order(
                 set(comparison.left.numeric_fields) | set(comparison.right.numeric_fields))
             if metric not in {"wall_seconds", "branches"}
+            and metric not in HIDDEN_REPORT_METRICS
         ]
         for metric in summary_metrics:
             if metric not in available:
@@ -1633,7 +1681,7 @@ def html_report(
                 (label, False) for label in ("运行时间", "求解结果", "分支数"))
         collapsible_metrics = [
             metric for metric in raw_metrics
-            if metric in COLLAPSIBLE_SKIP_REASON_FIELDS
+            if metric in COLLAPSIBLE_DETAIL_FIELDS
         ]
         side_columns = (4 if reference else 3) + len(raw_metrics)
         collapsed_side_columns = side_columns - len(collapsible_metrics)
@@ -1653,7 +1701,7 @@ def html_report(
             second_header.append((f"时间相对 {reference.label}", False))
         second_header.extend(
             [("求解结果", False), ("分支数", False), *(
-                (metric_label(metric), metric in COLLAPSIBLE_SKIP_REASON_FIELDS)
+                (metric_label(metric), metric in COLLAPSIBLE_DETAIL_FIELDS)
                 for metric in raw_metrics
             )])
         second_header.append(("运行时间", False))
@@ -1661,7 +1709,7 @@ def html_report(
             second_header.append((f"时间相对 {reference.label}", False))
         second_header.extend(
             [("求解结果", False), ("分支数", False), *(
-                (metric_label(metric), metric in COLLAPSIBLE_SKIP_REASON_FIELDS)
+                (metric_label(metric), metric in COLLAPSIBLE_DETAIL_FIELDS)
                 for metric in raw_metrics
             )])
         second_header.extend(
@@ -1699,8 +1747,8 @@ def html_report(
             cells.extend(
                 html_cell(
                     format_metric(metric, instance_metric(left, metric)),
-                    "num skip-reason-column"
-                    if metric in COLLAPSIBLE_SKIP_REASON_FIELDS else "num")
+                    "num collapsed-metric-column"
+                    if metric in COLLAPSIBLE_DETAIL_FIELDS else "num")
                 for metric in raw_metrics
             )
             cells.append(html_cell(runtime_text(right), "num"))
@@ -1715,8 +1763,8 @@ def html_report(
             cells.extend(
                 html_cell(
                     format_metric(metric, instance_metric(right, metric)),
-                    "num skip-reason-column"
-                    if metric in COLLAPSIBLE_SKIP_REASON_FIELDS else "num")
+                    "num collapsed-metric-column"
+                    if metric in COLLAPSIBLE_DETAIL_FIELDS else "num")
                 for metric in raw_metrics
             )
             cells.extend([
@@ -1742,12 +1790,12 @@ def html_report(
             for title, run in (("左侧", comparison.left), ("右侧", comparison.right))
         )
         detail_table_id = f"detail-table-{index}"
-        skip_columns_toggle = (
+        collapsed_columns_toggle = (
             '<div class="detail-toolbar">'
-            f'<button type="button" class="skip-columns-toggle" '
+            f'<button type="button" class="collapsed-columns-toggle" '
             f'aria-expanded="false" aria-controls="{detail_table_id}" '
             f'data-column-count="{len(collapsible_metrics)}">'
-            f'展开跳过原因（{len(collapsible_metrics)} 列/侧）</button></div>'
+            f'展开根 fixing 与跳过原因（{len(collapsible_metrics)} 列/侧）</button></div>'
             if collapsible_metrics else ""
         )
         verdict = iteration_comparison_verdict(comparison)
@@ -1769,12 +1817,12 @@ def html_report(
     <th>指标</th><th>配对数</th><th>左侧总量</th><th>右侧总量</th>
     <th>右侧相对变化</th><th>右侧下降/持平/上升</th>
   </tr></thead><tbody>{''.join(metric_rows)}</tbody></table></div>
-  <details open><summary>逐实例明细（A/B 原始统计全部展示，变化列为右侧相对左侧）</summary>
-  {skip_columns_toggle}
+  <details open><summary>逐实例明细（A/B 核心统计，变化列为右侧相对左侧）</summary>
+  {collapsed_columns_toggle}
   <div class="table-wrap detail"><table id="{detail_table_id}" class="detail-table"><thead>
   <tr>{''.join(first_header)}</tr>
   <tr>{''.join(
-      f'<th class="skip-reason-column">{html.escape(value)}</th>'
+      f'<th class="collapsed-metric-column">{html.escape(value)}</th>'
       if collapsible else f'<th>{html.escape(value)}</th>'
       for value, collapsible in second_header)}</tr></thead>
   <tbody>{''.join(detail_rows)}</tbody></table></div></details>
@@ -1805,9 +1853,9 @@ th{{position:sticky;top:0;background:var(--navy);color:white;z-index:1}} thead t
 .timeout-row td:first-child{{color:#9a5b00;font-weight:700}}
 details summary{{cursor:pointer;font-weight:700;margin:10px 0}} .detail table{{min-width:1200px}} section{{scroll-margin-top:8px}}
 .detail-toolbar{{display:flex;justify-content:flex-end;margin:8px 0}}
-.skip-columns-toggle{{border:1px solid #8ca0b8;border-radius:6px;background:white;color:#245b9e;padding:5px 10px;cursor:pointer;font:inherit;font-weight:700}}
-.skip-columns-toggle:hover{{background:#eef4fb}} .skip-columns-toggle:focus-visible{{outline:2px solid #245b9e;outline-offset:2px}}
-.detail-table .skip-reason-column{{display:none}} .detail-table.show-skip-reasons .skip-reason-column{{display:table-cell}}
+.collapsed-columns-toggle{{border:1px solid #8ca0b8;border-radius:6px;background:white;color:#245b9e;padding:5px 10px;cursor:pointer;font:inherit;font-weight:700}}
+.collapsed-columns-toggle:hover{{background:#eef4fb}} .collapsed-columns-toggle:focus-visible{{outline:2px solid #245b9e;outline-offset:2px}}
+.detail-table .collapsed-metric-column{{display:none}} .detail-table.show-collapsed-metrics .collapsed-metric-column{{display:table-cell}}
 .profile-card{{background:white;border:1px solid var(--line);border-radius:8px;padding:10px;margin:8px 0 18px;overflow:auto}}
 .performance-profile{{display:block;min-width:760px;width:100%;height:auto}} .performance-profile text{{fill:#465366;font-size:11px}}
 .performance-profile .axis{{stroke:#465366;stroke-width:1.3}} .performance-profile .grid{{stroke:#e1e6ed;stroke-width:1}}
@@ -1832,7 +1880,6 @@ details summary{{cursor:pointer;font-weight:700;margin:10px 0}} .detail table{{m
 <li><strong>节点势更新触发数：</strong>通过策略、预算、数值安全、深度和 gap 等条件后，实际启动节点势优化的次数。</li>
 <li><strong>节点势迭代数：</strong>所有已触发更新内部执行的次梯度迭代轮数之和；一次触发可执行多轮。</li>
 <li><strong>节点势更新跳过总数：</strong>所有互斥跳过原因之和；应满足“候选数 = 触发数 + 跳过总数”。</li>
-<li><strong>guarded warm：</strong>先验证混合兄弟势；接受时复用为上升首轮，拒绝时验证是迭代上限之外的一次额外评估。</li>
 <li><strong>预算口径：</strong><code>--hk-update-budget</code> 限制每轮根搜索的触发次数，不限制迭代总数；设为 <code>0</code> 表示不限。正数预算下，初始探测轮最多使用 <code>min(budget, 1000)</code> 次；incumbent 改善并重启后预算计数清零，下一轮可再使用完整预算。预算耗尽后的候选仍计入跳过数。</li>
 <li><strong>阶段耗时：</strong><code>replacement_seconds</code> 是 root fixing、BP 和候选删除内部的 replacement 查询子阶段，可能与其他阶段重叠，不能把所有阶段列直接相加。</li>
 </ul>
@@ -1840,19 +1887,19 @@ details summary{{cursor:pointer;font-weight:700;margin:10px 0}} .detail table{{m
 {''.join(sections)}
 </main><script>
 document.addEventListener("click", function (event) {{
-  const button = event.target.closest(".skip-columns-toggle");
+  const button = event.target.closest(".collapsed-columns-toggle");
   if (!button) return;
   const table = document.getElementById(button.getAttribute("aria-controls"));
   if (!table) return;
   const expanded = button.getAttribute("aria-expanded") !== "true";
   button.setAttribute("aria-expanded", String(expanded));
-  table.classList.toggle("show-skip-reasons", expanded);
+  table.classList.toggle("show-collapsed-metrics", expanded);
   table.querySelectorAll("[data-collapsed-colspan]").forEach(function (header) {{
     header.colSpan = Number(header.dataset[
       expanded ? "expandedColspan" : "collapsedColspan"
     ]);
   }});
-  button.textContent = (expanded ? "折叠" : "展开") + "跳过原因（" +
+  button.textContent = (expanded ? "折叠" : "展开") + "根 fixing 与跳过原因（" +
     button.dataset.columnCount + " 列/侧）";
 }});
 </script></body></html>"""
@@ -1876,9 +1923,15 @@ def write_outputs(
     metrics = all_metrics(runs)
     text_fields = sorted({field for run in runs for field in run.text_fields})
     report_metrics = (
-        [metric for metric in requested_report_metrics if metric in metrics]
+        [
+            metric for metric in requested_report_metrics
+            if metric in metrics and metric not in HIDDEN_REPORT_METRICS
+        ]
         if requested_report_metrics
-        else [metric for metric in DEFAULT_HTML_METRICS if metric in metrics]
+        else [
+            metric for metric in DEFAULT_HTML_METRICS
+            if metric in metrics and metric not in HIDDEN_REPORT_METRICS
+        ]
     )
     if not report_metrics and metrics:
         report_metrics = metrics[:2]

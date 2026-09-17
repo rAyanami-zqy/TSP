@@ -250,7 +250,7 @@ struct BranchBoundSolverTestAccess {
         if (!input) throw std::runtime_error("cannot open instance");
         auto problem=readTspProblem(input);
         Solver s(problem.toDenseMatrix(2000));
-        s.setPotentialUpdateOptions(PotentialUpdateStrategy::SubtreeAdaptive,1,32,0.02,0);
+        s.setPotentialUpdateOptions(PotentialUpdateStrategy::SubtreeAdaptive,1,32,0);
         s.setRootBoundOnly(rootonly);
         CCdatagroup dat;
         CCutil_init_datagroup(&dat);

@@ -104,10 +104,6 @@ struct SolveStats {
     std::size_t search_node_potential_updates_skipped_max_depth = 0;
     // 距离凑满 n 条 tour 边只剩不超过 --hk-update-skip-last-edges 条。
     std::size_t search_node_potential_updates_skipped_near_leaf = 0;
-    // 相对 gap 小于 --hk-update-min-gap-ratio。
-    std::size_t search_node_potential_updates_skipped_gap_below_minimum = 0;
-    // 相对 gap 大于 --hk-update-gap-ratio。
-    std::size_t search_node_potential_updates_skipped_gap_above_maximum = 0;
     // 自最近一次成功安装势 epoch 后，相对 gap 的缩减量小于
     // --hk-update-min-gap-change-ratio。
     std::size_t search_node_potential_updates_skipped_gap_change_below_minimum = 0;
@@ -243,7 +239,8 @@ enum class PotentialUpdateStrategy {
     None,
     // 每隔固定 epoch 深度安装一组在整棵子树内持续生效的新势。
     SubtreeDepth,
-    // 同时满足 epoch 深度间隔和相对 gap 时安装子树势。
+    // 满足 epoch 深度间隔后，再应用可选的 gap-change/probe 自适应规则；
+    // 当前绝对 gap 不再决定是否安装子树势。
     SubtreeAdaptive,
 };
 
@@ -437,14 +434,12 @@ public:
     void clearRootPotentialSeed();
     // 设置 BP 在违规顶点内部选择分支边的比较顺序；不改变下界算法。
     void setBranchEdgeOrder(BranchEdgeOrder order);
-    // 配置搜索节点势更新：depth 是深度/epoch 间隔，iterations 是小 gap
-    // 档的单次最大轮数，gap_ratio 是 Adaptive 的最大相对 gap，budget 是
-    // 每轮根搜索的最大尝试次数；budget=0 表示不限制。iterations 可为 0，
-    // 以便只启用大 gap 档。
+    // 配置搜索节点势更新：depth 是深度/epoch 间隔，iterations 是基础档
+    // 的单次最大轮数，budget 是每轮根搜索的最大尝试次数；budget=0 表示
+    // 不限制。iterations 可为 0，以便只启用大 gap 档。
     void setPotentialUpdateOptions(PotentialUpdateStrategy strategy,
                                    std::size_t depth,
                                    std::size_t iterations,
-                                   double gap_ratio,
                                    std::size_t budget);
     // 节点势上升允许的最大绝对 DFS 深度；0 表示不设上限。该门槛独立于
     // depth（两次成功 epoch 的最小层距），用于让深层节点直接展开。
@@ -452,13 +447,11 @@ public:
     // 基于当前 forced 边数的倒置深度门槛。若完成 tour 还需的边数
     // n-forced_edges.size() 不超过 skip_last_edges，则不再做势上升；0 关闭。
     void setPotentialUpdateSkipLastEdges(std::size_t skip_last_edges);
-    // SubtreeAdaptive 的最小 gap 及可选分档上限。相对 gap 小于
-    // min_gap_ratio 时不触发；large_gap_iterations>0 且 gap 不小于
-    // large_gap_ratio 时，用该轮数替换基础 iterations。默认 (0,0,0)
-    // 保留原有“只设 gap 上限、固定轮数”的行为。
-    void setPotentialUpdateGapSchedule(double min_gap_ratio,
-                                       double large_gap_ratio,
-                                       std::size_t large_gap_iterations);
+    // 可选的大 gap 迭代档。large_gap_iterations>0 且相对 gap 不小于
+    // large_gap_ratio 时，用该轮数替换基础 iterations；它只调整计算预算，
+    // 不再阻止任何 gap 范围的节点势更新。
+    void setPotentialUpdateLargeGapTier(double large_gap_ratio,
+                                        std::size_t large_gap_iterations);
     // SubtreeAdaptive 的可选 epoch-relative 门槛。当前节点下界相对最近一次
     // 成功势上升锚点的增量，除以 max(1, |UB|)，必须至少达到该值才触发。
     // 这等价于相对 gap 至少缩减该幅度；0 保留原有触发行为。
@@ -767,11 +760,9 @@ private:
         MaxDepth,
         NearLeaf,
         DepthInterval,
-        GapBelowMinimum,
-        GapAboveMaximum,
         GapChangeBelowMinimum,
     };
-    // 根据策略、深度、相对 gap、次梯度是否非零和本轮预算分类当前节点。
+    // 根据策略、深度、次梯度是否非零和本轮预算分类当前节点。
     // 仅作判断，不消耗预算也不修改搜索状态；调用方负责累计互斥统计。
     PotentialUpdateDecision classifyPotentialUpdate(
         const OneTree& tree, int depth,
@@ -1029,10 +1020,6 @@ private:
     std::size_t potential_update_skip_last_edges_ = 0;
     // 每次 updateNodePotentialBound 最多执行的次梯度轮数。
     std::size_t potential_update_iterations_ = 8;
-    // SubtreeAdaptive 允许更新的最大相对 gap。
-    double potential_update_gap_ratio_ = 0.05;
-    // SubtreeAdaptive 允许更新的最小相对 gap；默认不设下限。
-    double potential_update_min_gap_ratio_ = 0.0;
     // 相对最近一次成功安装势 epoch 的最小 gap 缩减量；GAPMST 默认
     // 0.0001，显式设为 0 可复现 CPHKMST 的原触发行为。
     double potential_update_min_gap_change_ratio_ = 0.0001;

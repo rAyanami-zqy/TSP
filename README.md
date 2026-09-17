@@ -463,10 +463,10 @@ Polyak；`--hk-node-ascent` 还支持 `helsgaun`、`polyak-smoothed` 和
 混合势，仅当其下界严格强于父势已有证书时采用。
 
 ```bash
-# 推荐配置：距上次更新至少 2 层，且节点 gap 不超过 2%
+# 推荐配置：距上次更新至少 2 层，不再按绝对 gap 跳过浅层节点
 ./build/tsp_bb --hk-node-ascent polyak \
   --hk-potential-update subtree-adaptive \
-  --hk-update-depth 2 --hk-update-gap-ratio 0.02 \
+  --hk-update-depth 2 \
   --hk-update-iterations 16 --hk-update-budget 5000 input.tsp
 
 # 外部 LKH tour 作为 incumbent；NN+2-opt 仍作可行性兜底
@@ -497,14 +497,14 @@ Polyak；`--hk-node-ascent` 还支持 `helsgaun`、`polyak-smoothed` 和
 # 同一触发配置下对照节点 Helsgaun 调度
 ./build/tsp_bb --hk-node-ascent helsgaun \
   --hk-potential-update subtree-adaptive \
-  --hk-update-depth 2 --hk-update-gap-ratio 0.02 \
+  --hk-update-depth 2 \
   --hk-update-iterations 16 --hk-update-budget 5000 input.tsp
 
 # 固定方向融合：0.65 当前次梯度 + 0.35 上一次次梯度
 ./build/tsp_bb --hk-node-ascent polyak-smoothed \
   --hk-node-smoothing-current-weight 0.65 \
   --hk-potential-update subtree-adaptive \
-  --hk-update-depth 2 --hk-update-gap-ratio 0.02 \
+  --hk-update-depth 2 \
   --hk-update-iterations 16 --hk-update-budget 5000 input.tsp
 
 # 动态方向融合：clamp(0.65 + 0.15*cosine, 0.4, 0.85)
@@ -514,14 +514,14 @@ Polyak；`--hk-node-ascent` 还支持 `helsgaun`、`polyak-smoothed` 和
   --hk-node-dynamic-min-current-weight 0.4 \
   --hk-node-dynamic-max-current-weight 0.85 \
   --hk-potential-update subtree-adaptive \
-  --hk-update-depth 2 --hk-update-gap-ratio 0.02 \
+  --hk-update-depth 2 \
   --hk-update-iterations 16 --hk-update-budget 5000 input.tsp
 
-# 实验性两阶段门：gap<=2% 直接跑满；2%<gap<=5% 先移动势一次，
+# 实验性两阶段门：gap<=2% 直接跑满；gap>2% 先移动势一次，
 # 若已覆盖原 UB-LB gap 的至少 5%，再继续到 16 轮
 ./build/tsp_bb --hk-node-ascent polyak \
   --hk-potential-update subtree-adaptive \
-  --hk-update-depth 2 --hk-update-gap-ratio 0.05 \
+  --hk-update-depth 2 \
   --hk-update-iterations 16 --hk-update-budget 5000 \
   --hk-update-probe-updates 1 \
   --hk-update-probe-min-gap-ratio 0.02 \
@@ -530,21 +530,22 @@ Polyak；`--hk-node-ascent` 还支持 `helsgaun`、`polyak-smoothed` 和
 # gap 分档：所有 gap 至少 16 轮，gap>=2% 时最多 32 轮
 ./build/tsp_bb --hk-node-ascent polyak \
   --hk-potential-update subtree-adaptive \
-  --hk-update-depth 2 --hk-update-gap-ratio 1 \
+  --hk-update-depth 2 \
   --hk-update-iterations 16 --hk-update-budget 5000 \
   --hk-update-large-gap-ratio 0.02 \
   --hk-update-large-gap-iterations 32 input.tsp
 
-# 只在 2%<=gap<=100% 时更新；基础轮数也可设为 0，并用上面的
-# large-gap 两个参数只开启大 gap 档
+# 基础轮数设为 0，仅在 gap>=2% 时启用大 gap 迭代档
 ./build/tsp_bb --hk-potential-update subtree-adaptive \
-  --hk-update-depth 2 --hk-update-min-gap-ratio 0.02 \
-  --hk-update-gap-ratio 1 --hk-update-iterations 16 input.tsp
+  --hk-update-depth 2 --hk-update-iterations 0 \
+  --hk-update-large-gap-ratio 0.02 \
+  --hk-update-large-gap-iterations 16 input.tsp
 ```
 
 - `none`：默认值，不在搜索节点更新势；
 - `subtree-depth`：距当前势 epoch 至少指定层数时更新并重建子树状态；
-- `subtree-adaptive`：在 `subtree-depth` 条件上再加相对 gap 门槛；
+- `subtree-adaptive`：在 `subtree-depth` 条件上增加可选的 gap-change、probe
+  和大 gap 迭代分档；绝对 gap 不再作为是否触发势上升的门槛；
 - 节点平滑参数与根平滑参数相互独立。默认基准权重为 `0.7`、动态余弦缩放
   为 `0.2`、动态范围为 `0.5--0.9`；三个权重必须满足
   `0 <= 最小值 <= 基准值 <= 最大值 <= 1`，余弦缩放必须非负；
@@ -565,10 +566,9 @@ Polyak；`--hk-node-ascent` 还支持 `helsgaun`、`polyak-smoothed` 和
 - 外部势精修会在 1-tree 已经满足所有度约束、下界达到 UB（计入浮点容差）、
   或步长非有限/非正时安全早停。Polyak 的停滞会逐段缩小步长；不使用短
   patience 强制退出，因为 50 实例扫描中主要增益出现在第 32--64 轮；
-- `--hk-update-min-gap-ratio` 与 `--hk-update-gap-ratio` 分别是
-  `subtree-adaptive` 触发区间的下限和上限，默认下限为 0。`subtree-*` 中
-  `--hk-update-depth` 是两次成功安装 epoch 的最小层距；达到层距后，后续
-  子节点仍会检查 gap，并非只在深度的整数倍检查；
+- `subtree-*` 中 `--hk-update-depth` 是两次成功安装 epoch 的最小层距；
+  达到层距后，节点不会再因为当前绝对 gap 较大而被跳过。后续子节点仍会
+  检查 gap-change、预算与数值安全条件，并非只在深度的整数倍检查；
 - `--hk-update-max-depth` 是允许执行节点势上升的最大绝对 DFS 深度；超过
   该深度后直接展开节点。默认 0 表示不限制，与 `--hk-update-depth` 的
   “两次成功 epoch 最小层距”含义不同；
@@ -635,6 +635,8 @@ root_fixing_seconds,
 root_candidate_compaction_calls,root_candidate_edges_before,
 root_candidate_edges_after,root_candidate_compaction_seconds,
 root_potential_iterations,root_ascent_seconds,
+root_external_potential_replacements,root_external_potential_warm_starts,
+lkh_provider_calls,lkh_provider_failures,lkh_provider_seconds,
 instance_wall_seconds,nodes_created,nodes_expanded,pruned_by_bound,pruned_infeasible,
 search_node_potential_update_candidates,search_node_potential_updates_triggered,
 search_node_potential_updates_skipped_strategy_none,
@@ -647,8 +649,6 @@ search_node_potential_updates_skipped_zero_iteration_limit,
 search_node_potential_updates_skipped_max_depth,
 search_node_potential_updates_skipped_near_leaf,
 search_node_potential_updates_skipped_depth_interval,
-search_node_potential_updates_skipped_gap_below_minimum,
-search_node_potential_updates_skipped_gap_above_maximum,
 search_node_potential_updates_skipped_gap_change_below_minimum,
 potential_updates_improved,potential_updates_pruned,
 potential_updates_rebuilt,potential_updates_stopped_prunable,

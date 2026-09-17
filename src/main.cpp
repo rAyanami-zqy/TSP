@@ -98,10 +98,6 @@ struct CliOptions {
     std::size_t potential_update_skip_last_edges = 0;
     // 每次节点势更新最多执行的次梯度迭代轮数。
     std::size_t potential_update_iterations = 8;
-    // SubtreeAdaptive 允许触发更新的最大相对 gap：(UB-LB)/max(1,|UB|)。
-    double potential_update_gap_ratio = 0.05;
-    // SubtreeAdaptive 的最小相对 gap；默认 0 表示不设下限。
-    double potential_update_min_gap_ratio = 0.0;
     // GAPMST 默认要求 0.0001；显式设为 0 可复现 CPHKMST 触发行为。
     double potential_update_min_gap_change_ratio = 0.0001;
     // GAPMST 默认保护前 2 个绝对 DFS 层；0 表示从深度 1 起应用。
@@ -245,6 +241,15 @@ RunResult solveInput(std::istream& input,
     bool lkh_tour_supplied = false;
     if (lkh_provider != nullptr) {
         ++output.lkh_provider_calls;
+        if (options.debug) {
+            // 先记录已开始的调用；若外层超时恰好发生在 provider 内部，
+            // 实验驱动仍能恢复“确实调用过 LKH”，而不是把它误记为未调用。
+            std::cerr << "[tsp-debug] LKH provider: calls="
+                      << output.lkh_provider_calls
+                      << " failures=" << output.lkh_provider_failures
+                      << " seconds=" << output.lkh_provider_seconds << '\n';
+        }
+        const auto provider_started_at = std::chrono::steady_clock::now();
         try {
             tsp::LkhProviderOptions provider_options;
             provider_options.runs = options.lkh_provider_runs;
@@ -264,6 +269,14 @@ RunResult solveInput(std::istream& input,
             output.lkh_provider_seconds = provider_result.provider_seconds;
         } catch (const std::exception& ex) {
             ++output.lkh_provider_failures;
+            output.lkh_provider_seconds = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - provider_started_at).count();
+            if (options.debug) {
+                std::cerr << "[tsp-debug] LKH provider: calls="
+                          << output.lkh_provider_calls
+                          << " failures=" << output.lkh_provider_failures
+                          << " seconds=" << output.lkh_provider_seconds << '\n';
+            }
             if (options.lkh_provider_failure_mode
                 == LkhProviderFailureMode::Error) {
                 throw;
@@ -272,6 +285,12 @@ RunResult solveInput(std::istream& input,
                 std::cerr << "[tsp-debug] LKH provider failed; using internal "
                              "initialization: " << ex.what() << '\n';
             }
+        }
+        if (options.debug) {
+            std::cerr << "[tsp-debug] LKH provider: calls="
+                      << output.lkh_provider_calls
+                      << " failures=" << output.lkh_provider_failures
+                      << " seconds=" << output.lkh_provider_seconds << '\n';
         }
     }
     if (!options.initial_tour_path.empty()) {
@@ -420,13 +439,11 @@ RunResult solveInput(std::istream& input,
         options.potential_update,
         options.potential_update_depth,
         options.potential_update_iterations,
-        options.potential_update_gap_ratio,
         options.potential_update_budget);
     solver.setPotentialUpdateMaxDepth(options.potential_update_max_depth);
     solver.setPotentialUpdateSkipLastEdges(
         options.potential_update_skip_last_edges);
-    solver.setPotentialUpdateGapSchedule(
-        options.potential_update_min_gap_ratio,
+    solver.setPotentialUpdateLargeGapTier(
         options.potential_update_large_gap_ratio,
         options.potential_update_large_gap_iterations);
     solver.setPotentialUpdateGapChangeThreshold(
@@ -592,10 +609,6 @@ void printHumanResult(const RunResult& run)
               << result.stats.search_node_potential_updates_skipped_max_depth << '\n';
     std::cout << "Potential updates skipped near leaf: "
               << result.stats.search_node_potential_updates_skipped_near_leaf << '\n';
-    std::cout << "Potential updates skipped gap below minimum: "
-              << result.stats.search_node_potential_updates_skipped_gap_below_minimum << '\n';
-    std::cout << "Potential updates skipped gap above maximum: "
-              << result.stats.search_node_potential_updates_skipped_gap_above_maximum << '\n';
     std::cout << "Potential updates skipped gap change below minimum: "
               << result.stats
                      .search_node_potential_updates_skipped_gap_change_below_minimum
@@ -711,8 +724,6 @@ void printBatchHeader()
         << "search_node_potential_updates_skipped_max_depth,"
         << "search_node_potential_updates_skipped_near_leaf,"
         << "search_node_potential_updates_skipped_depth_interval,"
-        << "search_node_potential_updates_skipped_gap_below_minimum,"
-        << "search_node_potential_updates_skipped_gap_above_maximum,"
         << "search_node_potential_updates_skipped_gap_change_below_minimum,"
         << "potential_updates_improved,"
         << "potential_updates_pruned,potential_updates_rebuilt,"
@@ -739,9 +750,9 @@ void printBatchRow(const std::string& path,
 
     if (run == nullptr) {
         // 读取失败、解析失败等情况没有求解统计，只保留错误信息。
-        // method 到 tour 共 74 个空字段；最后一个字段保留错误消息。
+        // method 到 tour 共 72 个空字段；最后一个字段保留错误消息。
         // 新增批量列时必须同步此数量，确保错误行也与 CSV 表头严格对齐。
-        for (int field = 0; field < 74; ++field) {
+        for (int field = 0; field < 72; ++field) {
             std::cout << ',';
         }
         std::cout << csvQuote(message) << '\n';
@@ -803,8 +814,6 @@ void printBatchRow(const std::string& path,
               << result.stats.search_node_potential_updates_skipped_max_depth << ','
               << result.stats.search_node_potential_updates_skipped_near_leaf << ','
               << result.stats.search_node_potential_updates_skipped_depth_interval << ','
-              << result.stats.search_node_potential_updates_skipped_gap_below_minimum << ','
-              << result.stats.search_node_potential_updates_skipped_gap_above_maximum << ','
               << result.stats
                      .search_node_potential_updates_skipped_gap_change_below_minimum
               << ','
@@ -947,8 +956,6 @@ void printUsage(const char* program)
               << "  --hk-update-max-depth <n> (0 = unlimited)\n"
               << "  --hk-update-skip-last-edges <n> (0 = disabled)\n"
               << "  --hk-update-iterations <n>\n"
-              << "  --hk-update-gap-ratio <x>\n"
-              << "  --hk-update-min-gap-ratio <x>\n"
               << "  --hk-update-min-gap-change-ratio <x> (default 0.0001)\n"
               << "  --hk-update-gap-change-start-depth <n> (default 2)\n"
               << "  --hk-update-large-gap-ratio <x>\n"
@@ -1319,18 +1326,6 @@ CliOptions parseArgs(int argc, char** argv)
                 parseSizeOption(require_value(arg), arg);
         } else if (arg == "--hk-update-iterations") {
             options.potential_update_iterations = parseSizeOption(require_value(arg), arg);
-        } else if (arg == "--hk-update-gap-ratio") {
-            options.potential_update_gap_ratio = parseDoubleOption(require_value(arg), arg);
-            if (options.potential_update_gap_ratio < 0.0) {
-                throw std::runtime_error("--hk-update-gap-ratio must be non-negative");
-            }
-        } else if (arg == "--hk-update-min-gap-ratio") {
-            options.potential_update_min_gap_ratio =
-                parseDoubleOption(require_value(arg), arg);
-            if (options.potential_update_min_gap_ratio < 0.0) {
-                throw std::runtime_error(
-                    "--hk-update-min-gap-ratio must be non-negative");
-            }
         } else if (arg == "--hk-update-min-gap-change-ratio") {
             options.potential_update_min_gap_change_ratio =
                 parseDoubleOption(require_value(arg), arg);

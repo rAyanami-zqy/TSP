@@ -79,7 +79,6 @@ NEWHKMST_DEFAULT_ARGS = (
     "--hk-ascent polyak "
     "--hk-potential-update subtree-adaptive "
     "--hk-update-depth 2 "
-    "--hk-update-gap-ratio 0.02 "
     "--hk-update-iterations 16 "
     "--hk-update-budget 5000"
 )

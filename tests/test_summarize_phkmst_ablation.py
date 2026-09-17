@@ -18,9 +18,15 @@ class AblationHtmlReportTests(unittest.TestCase):
         numeric = {
             "wall_seconds": value,
             "branches": value,
+            "root_lower_bound": value,
+            "initial_upper_bound": value,
             **{
                 field: value
                 for field in summarizer.COLLAPSIBLE_SKIP_REASON_FIELDS
+            },
+            **{
+                field: value
+                for field in summarizer.ROOT_FIXING_FIELDS
             },
         }
         instance = summarizer.InstanceResult(
@@ -75,7 +81,7 @@ class AblationHtmlReportTests(unittest.TestCase):
         })
         return run
 
-    def test_skip_reason_columns_are_collapsed_and_expandable(self) -> None:
+    def test_root_fixing_and_skip_reason_columns_are_collapsed(self) -> None:
         left = self.make_run("A", 1.0)
         right = self.make_run("B", 2.0)
         comparison = summarizer.Comparison(left, right, "test", "A", "B")
@@ -84,22 +90,25 @@ class AblationHtmlReportTests(unittest.TestCase):
             Path("input"), [left, right], [comparison], [], None, [])
 
         self.assertIn(
-            'class="skip-columns-toggle" aria-expanded="false"', report)
-        self.assertIn("展开跳过原因（10 列/侧）", report)
-        self.assertEqual(report.count('data-collapsed-colspan="3"'), 2)
-        self.assertEqual(report.count('data-expanded-colspan="13"'), 2)
-        self.assertEqual(report.count('class="num skip-reason-column"'), 20)
-        for field in summarizer.COLLAPSIBLE_SKIP_REASON_FIELDS:
+            'class="collapsed-columns-toggle" aria-expanded="false"', report)
+        self.assertIn("展开根 fixing 与跳过原因（17 列/侧）", report)
+        self.assertEqual(report.count('data-collapsed-colspan="4"'), 2)
+        self.assertEqual(report.count('data-expanded-colspan="21"'), 2)
+        self.assertEqual(
+            report.count('class="num collapsed-metric-column"'), 34)
+        for field in summarizer.COLLAPSIBLE_DETAIL_FIELDS:
             self.assertEqual(
                 report.count(
-                    f'class="skip-reason-column">'
+                    f'class="collapsed-metric-column">'
                     f'{summarizer.metric_label(field)}</th>'),
                 2,
             )
         self.assertIn(
-            ".detail-table .skip-reason-column{display:none}", report)
+            ".detail-table .collapsed-metric-column{display:none}", report)
         self.assertIn(
-            'table.classList.toggle("show-skip-reasons", expanded)', report)
+            'table.classList.toggle("show-collapsed-metrics", expanded)', report)
+        self.assertEqual(report.count(">根下界</th>"), 2)
+        self.assertNotIn(">初始上界</th>", report)
 
     def test_comparisons_follow_requested_group_order(self) -> None:
         iteration = summarizer.Comparison(
