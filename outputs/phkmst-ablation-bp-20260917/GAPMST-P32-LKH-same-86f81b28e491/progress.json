@@ -1,0 +1,619 @@
+{
+  "run_id": "GAPMST-P32-LKH-same-86f81b28e491",
+  "run": {
+    "format_version": 2,
+    "strategy": "GAPMST-P32-LKH-same",
+    "kind": "tsp_bb",
+    "executable": "/home/wj/code/TSP/build/tsp_bb_26_09_16_gapmst",
+    "executable_sha256": "89fc4d89dd0297d188cf93673ad42a449167d2cd7de47931a584f0feb57208ae",
+    "solver_args": [
+      "--hk-node-ascent",
+      "polyak",
+      "--branch-edge-order",
+      "weight",
+      "--hk-potential-update",
+      "subtree-adaptive",
+      "--hk-update-depth",
+      "1",
+      "--hk-update-iterations",
+      "32",
+      "--hk-update-budget",
+      "0",
+      "--hk-update-max-depth",
+      "0",
+      "--hk-update-skip-last-edges",
+      "0",
+      "--hk-update-min-gap-change-ratio",
+      "0",
+      "--hk-update-gap-change-start-depth",
+      "0",
+      "--root-candidate-compaction",
+      "off",
+      "--lkh-provider",
+      "/home/wj/code/TSP/build-lkh/tsp_lkh_provider",
+      "--lkh-provider-failure",
+      "error",
+      "--lkh-runs",
+      "1",
+      "--lkh-max-trials",
+      "0",
+      "--lkh-seed",
+      "123",
+      "--lkh-pi-mode",
+      "warm-start",
+      "--root-pi-refine-ascent",
+      "polyak",
+      "--root-pi-refine-iterations",
+      "64",
+      "--exact-max-n",
+      "199",
+      "--debug",
+      "--debug-interval",
+      "10000"
+    ],
+    "timeout_seconds": 1800.0,
+    "workers": 10,
+    "repeats": 1,
+    "instances": [
+      "/home/wj/code/TSP/data/classic/tsplib/att48.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/bayg29.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/bays29.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/berlin52.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/bier127.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/brazil58.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/brg180.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/burma14.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/ch130.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/ch150.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/d198.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/dantzig42.tsp",
+      "/home/wj/code/TSP/data/classic/national/dj38.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/eil101.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/eil51.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/eil76.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/fri26.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/gr120.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/gr137.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/gr17.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/gr21.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/gr24.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/gr48.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/gr96.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/hk48.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/kroA100.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/kroA150.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/kroB100.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/kroB150.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/kroC100.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/kroD100.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/kroE100.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/lin105.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/pr107.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/pr124.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/pr136.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/pr144.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/pr152.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/pr76.tsp",
+      "/home/wj/code/TSP/data/classic/national/qa194.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/rat195.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/rat99.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/rd100.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/si175.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/st70.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/swiss42.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/u159.tsp",
+      "/home/wj/code/TSP/data/classic/tsplib/ulysses16.tsp",
+      "/home/wj/code/TSP/data/classic/national/wi29.tsp",
+      "/home/wj/code/TSP/data/classic/vlsi/vlsi/xqf131.tsp"
+    ],
+    "output_statistics": [
+      {
+        "column": "result",
+        "tspbb_labels": [
+          "Optimal cost",
+          "Optimal tour cost",
+          "Optimum cost"
+        ],
+        "kind": "float",
+        "concorde_key": "cost"
+      },
+      {
+        "column": "root_lower_bound",
+        "tspbb_labels": [
+          "Root lower bound"
+        ],
+        "kind": "float",
+        "concorde_key": null
+      },
+      {
+        "column": "initial_upper_bound",
+        "tspbb_labels": [
+          "Initial upper bound"
+        ],
+        "kind": "float",
+        "concorde_key": null
+      },
+      {
+        "column": "final_upper_bound",
+        "tspbb_labels": [
+          "Final upper bound"
+        ],
+        "kind": "float",
+        "concorde_key": null
+      },
+      {
+        "column": "final_lower_bound",
+        "tspbb_labels": [
+          "Final lower bound"
+        ],
+        "kind": "float",
+        "concorde_key": null
+      },
+      {
+        "column": "final_relative_gap",
+        "tspbb_labels": [
+          "Final relative gap"
+        ],
+        "kind": "float",
+        "concorde_key": null
+      },
+      {
+        "column": "branches",
+        "tspbb_labels": [
+          "Nodes created",
+          "B&B nodes",
+          "BB nodes",
+          "Branch-and-bound nodes"
+        ],
+        "kind": "int",
+        "concorde_key": "bbnodes"
+      },
+      {
+        "column": "nodes_expanded",
+        "tspbb_labels": [
+          "Nodes expanded"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "pruned_by_bound",
+        "tspbb_labels": [
+          "Pruned by bound"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "pruned_infeasible",
+        "tspbb_labels": [
+          "Pruned infeasible",
+          "Pruned by infeasibility"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "root_fixing_calls",
+        "tspbb_labels": [
+          "Root fixing calls"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "root_fixing_tested",
+        "tspbb_labels": [
+          "Root fixing tested"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "root_fixing_fixed_zero",
+        "tspbb_labels": [
+          "Root fixing fixed zero"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "root_fixing_tree_tested",
+        "tspbb_labels": [
+          "Root fixing tree tested"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "root_fixing_fixed_one",
+        "tspbb_labels": [
+          "Root fixing fixed one"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "root_fixing_active_after",
+        "tspbb_labels": [
+          "Root fixing active after"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "root_fixing_seconds",
+        "tspbb_labels": [
+          "Root fixing seconds"
+        ],
+        "kind": "float",
+        "concorde_key": null
+      },
+      {
+        "column": "root_candidate_compaction_calls",
+        "tspbb_labels": [
+          "Root candidate compaction calls"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "root_candidate_edges_before",
+        "tspbb_labels": [
+          "Root candidate edges before"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "root_candidate_edges_after",
+        "tspbb_labels": [
+          "Root candidate edges after"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "root_candidate_compaction_seconds",
+        "tspbb_labels": [
+          "Root candidate compaction seconds"
+        ],
+        "kind": "float",
+        "concorde_key": null
+      },
+      {
+        "column": "initial_tour_seconds",
+        "tspbb_labels": [
+          "Initial tour seconds"
+        ],
+        "kind": "float",
+        "concorde_key": null
+      },
+      {
+        "column": "initial_clk_starts",
+        "tspbb_labels": [
+          "Initial CLK starts"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "adaptive_clk_triggers",
+        "tspbb_labels": [
+          "Adaptive CLK triggers"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "adaptive_clk_improvements",
+        "tspbb_labels": [
+          "Adaptive CLK improvements"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "root_guided_lk_calls",
+        "tspbb_labels": [
+          "Root-guided LK calls"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "root_guided_lk_improvements",
+        "tspbb_labels": [
+          "Root-guided LK improvements"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "root_guided_lk_reascents",
+        "tspbb_labels": [
+          "Root-guided LK reascents"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "root_guided_lk_seconds",
+        "tspbb_labels": [
+          "Root-guided LK seconds"
+        ],
+        "kind": "float",
+        "concorde_key": null
+      },
+      {
+        "column": "root_guided_lk_total_gain",
+        "tspbb_labels": [
+          "Root-guided LK total gain"
+        ],
+        "kind": "float",
+        "concorde_key": null
+      },
+      {
+        "column": "root_potential_iterations",
+        "tspbb_labels": [
+          "Root potential iterations"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "root_ascent_seconds",
+        "tspbb_labels": [
+          "Root ascent seconds"
+        ],
+        "kind": "float",
+        "concorde_key": null
+      },
+      {
+        "column": "root_external_potential_replacements",
+        "tspbb_labels": [
+          "Root external potential replacements"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "root_external_potential_warm_starts",
+        "tspbb_labels": [
+          "Root external potential warm starts"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "lkh_provider_calls",
+        "tspbb_labels": [
+          "LKH provider calls"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "lkh_provider_failures",
+        "tspbb_labels": [
+          "LKH provider failures"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "lkh_provider_seconds",
+        "tspbb_labels": [
+          "LKH provider seconds"
+        ],
+        "kind": "float",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_update_candidates",
+        "tspbb_labels": [
+          "Search-node potential update candidates"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_updates_triggered",
+        "tspbb_labels": [
+          "Search-node potential updates triggered",
+          "Potential updates attempted"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_updates_skipped_strategy_none",
+        "tspbb_labels": [
+          "Potential updates skipped strategy none"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_updates_skipped_update_depth_zero",
+        "tspbb_labels": [
+          "Potential updates skipped update depth zero"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_updates_skipped_budget_exhausted",
+        "tspbb_labels": [
+          "Potential updates skipped budget exhausted"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_updates_skipped_numerically_unsafe",
+        "tspbb_labels": [
+          "Potential updates skipped numerically unsafe"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_updates_skipped_invalid_state",
+        "tspbb_labels": [
+          "Potential updates skipped invalid state"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_updates_skipped_zero_violation",
+        "tspbb_labels": [
+          "Potential updates skipped zero violation"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_updates_skipped_zero_iteration_limit",
+        "tspbb_labels": [
+          "Potential updates skipped zero iteration limit"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_updates_skipped_max_depth",
+        "tspbb_labels": [
+          "Potential updates skipped max depth"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_updates_skipped_near_leaf",
+        "tspbb_labels": [
+          "Potential updates skipped near leaf"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_updates_skipped_depth_interval",
+        "tspbb_labels": [
+          "Potential updates skipped depth interval"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_updates_skipped_gap_change_below_minimum",
+        "tspbb_labels": [
+          "Potential updates skipped gap change below minimum"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "potential_update_gap_change_shallow_bypasses",
+        "tspbb_labels": [
+          "Potential update gap-change shallow bypasses"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "branch_lift_first_reorders",
+        "tspbb_labels": [
+          "Branch lift-first reorders"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "branch_zero_gain_splits",
+        "tspbb_labels": [
+          "Branch zero-gain splits"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "branch_ascent_strong_probes",
+        "tspbb_labels": [
+          "Branch ascent-strong probes"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "branch_ascent_strong_seconds",
+        "tspbb_labels": [
+          "Branch ascent-strong seconds"
+        ],
+        "kind": "float",
+        "concorde_key": null
+      },
+      {
+        "column": "search_node_potential_iterations",
+        "tspbb_labels": [
+          "Search-node potential iterations",
+          "Potential update iterations"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "potential_update_seconds",
+        "tspbb_labels": [
+          "Potential update seconds"
+        ],
+        "kind": "float",
+        "concorde_key": null
+      },
+      {
+        "column": "potential_update_rebuild_seconds",
+        "tspbb_labels": [
+          "Potential update rebuild seconds"
+        ],
+        "kind": "float",
+        "concorde_key": null
+      },
+      {
+        "column": "sibling_warm_probes",
+        "tspbb_labels": [
+          "Sibling warm probes"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "sibling_warm_accepted",
+        "tspbb_labels": [
+          "Sibling warm accepted"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "sibling_warm_rejected",
+        "tspbb_labels": [
+          "Sibling warm rejected"
+        ],
+        "kind": "int",
+        "concorde_key": null
+      },
+      {
+        "column": "replacement_seconds",
+        "tspbb_labels": [
+          "Replacement seconds"
+        ],
+        "kind": "float",
+        "concorde_key": null
+      }
+    ]
+  },
+  "status": "complete",
+  "completed_rows": 50,
+  "total_rows": 50
+}

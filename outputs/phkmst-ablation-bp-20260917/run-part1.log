@@ -1,0 +1,43 @@
+
+=== Configuration 1/8: GAPMST-P32-LKH-BP-base ===
+Cached 0/50; running 50 call(s) with workers=10
+[1/50] repeat 1 burma14.tsp: ok time=0.011565s result=3323.0 branches=1
+[2/50] repeat 1 bays29.tsp: ok time=0.027017s result=2020.0 branches=6
+[3/50] repeat 1 berlin52.tsp: ok time=0.028855s result=7542.0 branches=1
+[4/50] repeat 1 bayg29.tsp: ok time=0.032715s result=1610.0 branches=3
+[5/50] repeat 1 att48.tsp: ok time=0.047814s result=10628.0 branches=10
+[6/50] repeat 1 dj38.tsp: ok time=0.020464s result=6656.0 branches=1
+[7/50] repeat 1 brazil58.tsp: ok time=0.062339s result=25395.0 branches=9
+[8/50] repeat 1 dantzig42.tsp: ok time=0.046285s result=699.0 branches=9
+[9/50] repeat 1 fri26.tsp: ok time=0.015945s result=937.0 branches=1
+[10/50] repeat 1 eil76.tsp: ok time=0.052437s result=538.0 branches=5
+[11/50] repeat 1 gr17.tsp: ok time=0.011404s result=2085.0 branches=1
+[12/50] repeat 1 eil51.tsp: ok time=0.074491s result=426.0 branches=155
+[13/50] repeat 1 gr21.tsp: ok time=0.015273s result=2707.0 branches=1
+[14/50] repeat 1 gr24.tsp: ok time=0.018217s result=1272.0 branches=1
+[15/50] repeat 1 eil101.tsp: ok time=0.138694s result=629.0 branches=78
+[16/50] repeat 1 hk48.tsp: ok time=0.039453s result=11461.0 branches=8
+[17/50] repeat 1 brg180.tsp: ok time=0.293454s result=1950.0 branches=1
+[18/50] repeat 1 gr48.tsp: ok time=0.194278s result=5046.0 branches=1449
+[19/50] repeat 1 gr96.tsp: ok time=0.538889s result=55209.0 branches=1267
+[20/50] repeat 1 gr120.tsp: ok time=1.295276s result=6942.0 branches=2312
+[21/50] repeat 1 kroB100.tsp: ok time=2.831130s result=22141.0 branches=5505
+[22/50] repeat 1 kroC100.tsp: ok time=1.801091s result=20749.0 branches=4011
+[23/50] repeat 1 kroD100.tsp: ok time=0.295886s result=21294.0 branches=502
+[24/50] repeat 1 lin105.tsp: ok time=0.139331s result=14379.0 branches=4
+[25/50] repeat 1 gr137.tsp: ok time=3.834018s result=69853.0 branches=5882
+[26/50] repeat 1 pr124.tsp: ok time=1.508994s result=59030.0 branches=2156
+[27/50] repeat 1 kroA100.tsp: ok time=5.953437s result=21282.0 branches=12975
+[28/50] repeat 1 pr144.tsp: ok time=3.987615s result=58537.0 branches=4521
+[29/50] repeat 1 ch130.tsp: ok time=10.671153s result=6110.0 branches=18038
+[30/50] repeat 1 ch150.tsp: ok time=11.462321s result=6528.0 branches=13209
+[31/50] repeat 1 kroE100.tsp: ok time=12.091247s result=22068.0 branches=32765
+[32/50] repeat 1 kroA150.tsp: ok time=19.928234s result=26524.0 branches=21155
+[33/50] repeat 1 rat99.tsp: ok time=0.115690s result=1211.0 branches=39
+[34/50] repeat 1 rd100.tsp: ok time=0.172031s result=7910.0 branches=21
+[35/50] repeat 1 pr76.tsp: ok time=180.791716s result=108159.0 branches=731879
+[36/50] repeat 1 st70.tsp: ok time=0.090350s result=675.0 branches=23
+[37/50] repeat 1 swiss42.tsp: ok time=0.026486s result=1273.0 branches=3
+[38/50] repeat 1 u159.tsp: ok time=1.028898s result=42080.0 branches=1259
+[39/50] repeat 1 ulysses16.tsp: ok time=0.013581s result=6859.0 branches=1
+[40/50] repeat 1 wi29.tsp: ok time=0.016719s result=27603.0 branches=1

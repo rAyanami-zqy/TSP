@@ -705,32 +705,7 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
         """),
         description="GAPMST 二进制 + gap-aware 门槛全部中性化（对齐 CPHKMST 语义）",
     ),
-    Strategy(
-        name="GAPMST-P32-LKH",
-        kind="tsp_bb",
-        category="core",
-        executable=PROJECT_ROOT / "build" / "tsp_bb_26_09_16_gapmst",
-        # 不传任何 gap-aware 选项，即 GAPMST 的默认行为：
-        # min-gap-change-ratio 0.0001 / gap-change-start-depth 2 /
-        # root-candidate-compaction on / max-depth 0 / skip-last-edges 0。
-        solver_args=solver_arguments("""
-            --hk-node-ascent polyak
-            --branch-edge-order weight
-            --hk-potential-update subtree-adaptive
-            --hk-update-depth 1
-            --hk-update-iterations 32
-            --hk-update-budget 0
-            --lkh-provider /home/wj/code/TSP/build-lkh/tsp_lkh_provider
-            --lkh-provider-failure error
-            --lkh-runs 1
-            --lkh-max-trials 0
-            --lkh-seed 123
-            --lkh-pi-mode warm-start
-            --root-pi-refine-ascent polyak
-            --root-pi-refine-iterations 64
-        """),
-        description="GAPMST 二进制默认（gap-change 0.0001 + compaction on）",
-    ),
+
     # --- 2026-09-16 GAPMST gap-change 门槛扫描。基线为上面的
     # GAPMST-P32-LKH-same（新旋钮全部中性化），本节把
     # --root-candidate-compaction 打开，并扫描 --hk-update-min-gap-change-ratio。
@@ -738,34 +713,6 @@ SOLVER_CONFIGURATIONS: tuple[Strategy, ...] = (
     # gap-change-start-depth 0。注意 start-depth 0 表示门槛对所有非根候选
     # 节点生效，与 GAPMST 默认的 2（浅层旁路）不同；要对齐默认行为把它
     # 改成 2 即可。首个配置不设 ratio（保持 0），只隔离 compaction 的影响。
-    Strategy(
-        name="GAPMST-P32-LKH-gc0.0001",
-        kind="tsp_bb",
-        category="core",
-        executable=PROJECT_ROOT / "build" / "tsp_bb_26_09_16_gapmst",
-        solver_args=solver_arguments("""
-            --hk-node-ascent polyak
-            --branch-edge-order weight
-            --hk-potential-update subtree-adaptive
-            --hk-update-depth 1
-            --hk-update-iterations 32
-            --hk-update-budget 0
-            --hk-update-max-depth 0
-            --hk-update-skip-last-edges 0
-            --hk-update-min-gap-change-ratio 0.0001
-            --hk-update-gap-change-start-depth 0
-            --root-candidate-compaction on
-            --lkh-provider /home/wj/code/TSP/build-lkh/tsp_lkh_provider
-            --lkh-provider-failure error
-            --lkh-runs 1
-            --lkh-max-trials 0
-            --lkh-seed 123
-            --lkh-pi-mode warm-start
-            --root-pi-refine-ascent polyak
-            --root-pi-refine-iterations 64
-        """),
-        description="GAPMST + compaction on + gap-change 0.0001",
-    ),
 
     # --- 2026-09-17 浅层分支策略第一轮消融。八组都使用当前二进制，
     # 固定为历史最稳的 P32+LKH 中性势配置：gap-change=0，不设
